@@ -307,21 +307,22 @@ elif menu == "📦 Gestão de Produtos":
         salvar_dados()
 
 # ==============================================================================
-# 5. CLIENTES (COM CORREÇÃO DO ERRO DE EDIÇÃO)
+# 5. CLIENTES (CORREÇÃO DE TIPO DE DADOS)
 # ==============================================================================
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
     
-    # 1. Inicializa variáveis de memória
+    # 1. Garante que as variáveis de memória existam e sejam TEXTO
     if 'form_nome' not in st.session_state: st.session_state['form_nome'] = ""
     if 'form_tel' not in st.session_state: st.session_state['form_tel'] = ""
     if 'form_end' not in st.session_state: st.session_state['form_end'] = ""
 
-    # 2. Funções de Gatilho (Callbacks) - O SEGREDO DO SUCESSO
+    # 2. Funções de Gatilho (Callbacks)
     def preparar_edicao(nome, tel, end):
-        st.session_state['form_nome'] = nome
-        st.session_state['form_tel'] = tel
-        st.session_state['form_end'] = end
+        # Força converter para string para evitar erro de NoneType
+        st.session_state['form_nome'] = str(nome) if nome else ""
+        st.session_state['form_tel'] = str(tel) if tel else ""
+        st.session_state['form_end'] = str(end) if end else ""
 
     def limpar_campos():
         st.session_state['form_nome'] = ""
@@ -333,22 +334,23 @@ elif menu == "👥 Clientes":
             del st.session_state['clientes_db'][nome]
             salvar_dados()
 
-    # 3. Formulário
+    # 3. Formulário (Blindado)
     with st.form("form_cliente"):
         st.write("📝 **Dados do Cliente**")
         c1, c2 = st.columns([3,1])
         
-        # Os campos estão ligados à memória (session_state)
+        # Aqui estava o erro. Agora usamos as variáveis garantidas.
         nome = c1.text_input("Nome do Cliente (Empresa)", key="form_nome")
         tel = c2.text_input("Telefone", key="form_tel")
         end = st.text_input("Endereço Completo", key="form_end")
         
-        if st.form_submit_button("💾 SALVAR CLIENTE"):
+        # Botão de Salvar (Dentro do form)
+        if st.form_submit_button("💾 SALVAR DADOS"):
             if nome:
                 st.session_state['clientes_db'][nome] = {'End': end, 'Tel': tel}
                 salvar_dados()
                 st.success(f"Cliente {nome} salvo com sucesso!")
-                # Limpa forçando a reinicialização das variáveis
+                # Limpa após salvar
                 st.session_state['form_nome'] = ""
                 st.session_state['form_tel'] = ""
                 st.session_state['form_end'] = ""
@@ -357,29 +359,36 @@ elif menu == "👥 Clientes":
                 st.error("O nome é obrigatório.")
 
     # Botão de Limpar (Fora do form)
-    st.button("🧹 Limpar Campos", on_click=limpar_campos)
+    st.button("🧹 Cancelar Edição", on_click=limpar_campos)
 
     st.markdown("---")
-    st.subheader("📇 Lista de Contatos")
+    st.subheader("📇 Carteira de Clientes")
     
     # 4. Listagem Segura
-    lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
-    
-    for k in lista_clientes:
-        col_info, col_edit, col_del = st.columns([4, 0.5, 0.5])
+    if st.session_state['clientes_db']:
+        lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
         
-        dados = st.session_state['clientes_db'][k]
-        col_info.markdown(f"**{k}** \n📍 {dados.get('End', '---')} | 📞 {dados.get('Tel', '---')}")
-        
-        # Botão EDITAR (Usa callback para evitar o erro)
-        col_edit.button("✏️", key=f"btn_edit_{k}", help="Editar", 
-                        on_click=preparar_edicao, 
-                        args=(k, dados.get('Tel', ''), dados.get('End', '')))
+        for k in lista_clientes:
+            col_info, col_edit, col_del = st.columns([4, 0.5, 0.5])
             
-        # Botão EXCLUIR (Usa callback para evitar erro de refresh)
-        col_del.button("🗑️", key=f"btn_del_{k}", help="Excluir", 
-                       on_click=excluir_cliente, 
-                       args=(k,))
+            dados = st.session_state['clientes_db'][k]
+            # Proteção extra ao ler os dados
+            end_visual = str(dados.get('End', ''))
+            tel_visual = str(dados.get('Tel', ''))
+            
+            col_info.markdown(f"**{k}** \n📍 {end_visual} | 📞 {tel_visual}")
+            
+            # Botão EDITAR (Lápis) - Passando dados protegidos
+            col_edit.button("✏️", key=f"btn_edit_{k}", help="Editar", 
+                            on_click=preparar_edicao, 
+                            args=(k, tel_visual, end_visual))
+                
+            # Botão EXCLUIR (Lixeira)
+            col_del.button("🗑️", key=f"btn_del_{k}", help="Excluir", 
+                           on_click=excluir_cliente, 
+                           args=(k,))
+    else:
+        st.info("Nenhum cliente cadastrado.")
 
 # ==============================================================================
 # 6. DASHBOARD (COM ALERTAS DE LAUDOS)
@@ -471,6 +480,7 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
 
 
 
