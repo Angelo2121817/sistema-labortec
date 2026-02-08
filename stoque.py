@@ -856,3 +856,4 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
