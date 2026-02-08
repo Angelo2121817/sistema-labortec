@@ -3,9 +3,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 import re
 import os
+import html
 from pypdf import PdfReader
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
+import streamlit.components.v1 as components
 
 # ==============================================================================
 # 0. FUNÇÕES DE EXTRAÇÃO PDF (CETESB & PADRÃO)
@@ -121,12 +123,12 @@ def ler_pdf_antigo(f):
 # ==============================================================================
 # 1. CONFIGURAÇÃO E CONEXÃO
 # ==============================================================================
-st.set_page_config(page_title="Sistema Integrado v61", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v61 (Corrigido)", layout="wide", page_icon="🧪")
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
-    st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud.")
+    st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud (credenciais do gsheets).")
     st.stop()
 
 
@@ -181,11 +183,90 @@ if not verificar_senha():
 
 
 # ==============================================================================
-# 3. MOTOR DE DADOS
+# 3. MOTOR DE DADOS (BLINDADO)
 # ==============================================================================
 def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+def _garantir_colunas_estoque(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col, default in [
+        ("Cod", ""),
+        ("Produto", ""),
+        ("Marca", ""),
+        ("NCM", ""),
+        ("Unidade", "KG"),
+        ("Preco_Base", 0.0),
+        ("Saldo", 0.0),
+        ("Estoque_Inicial", 0.0),
+        ("Estoque_Minimo", 0.0),
+    ]:
+        if col not in df.columns:
+            df[col] = default
+    # tipos básicos
+    for col in ["Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+    df["Produto"] = df["Produto"].fillna("").astype(str)
+    df["Cod"] = df["Cod"].fillna("").astype(str)
+    df["Unidade"] = df["Unidade"].fillna("KG").astype(str)
+    return df
+
+
+def _garantir_colunas_clientes(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "Nome" not in df.columns:
+        df["Nome"] = ""
+    for col, default in [
+        ("CNPJ", ""),
+        ("Tel", ""),
+        ("Email", ""),
+        ("End", ""),
+        ("Cidade", ""),
+        ("UF", "SP"),
+        ("CEP", ""),
+    ]:
+        if col not in df.columns:
+            df[col] = default
+    # normaliza strings
+    for col in ["Nome", "CNPJ", "Tel", "Email", "End", "Cidade", "UF", "CEP"]:
+        df[col] = df[col].fillna("").astype(str)
+    return df
+
+
+def _garantir_colunas_laudos(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # mapeamento de nomes comuns
+    if "Cliente" not in df.columns:
+        df["Cliente"] = ""
+
+    if "Data_Coleta" not in df.columns:
+        if "Data Coleta" in df.columns:
+            df["Data_Coleta"] = df["Data Coleta"]
+        else:
+            df["Data_Coleta"] = ""
+
+    if "Data_Resultado" not in df.columns:
+        if "Data Resultado" in df.columns:
+            df["Data_Resultado"] = df["Data Resultado"]
+        else:
+            df["Data_Resultado"] = "Não definida"
+
+    if "Status" not in df.columns:
+        df["Status"] = "Pendente"
+
+    # normaliza NaN e tipos
+    df["Cliente"] = df["Cliente"].fillna("").astype(str)
+    df["Data_Coleta"] = df["Data_Coleta"].fillna("").astype(str)
+    df["Data_Resultado"] = df["Data_Resultado"].fillna("Não definida").astype(str)
+    df["Status"] = df["Status"].fillna("Pendente").astype(str)
+
+    # remove linhas “vazias” comuns (cliente vazio e datas vazias)
+    df = df[~((df["Cliente"].str.strip() == "") & (df["Data_Coleta"].str.strip() == "") & (df["Data_Resultado"].str.strip() == ""))].copy()
+
     return df
 
 
@@ -195,55 +276,38 @@ def carregar_dados():
         df_est = conn.read(worksheet="Estoque", ttl=0)
         if isinstance(df_est, pd.DataFrame) and not df_est.empty:
             df_est = _normalizar_colunas(df_est)
+            df_est = _garantir_colunas_estoque(df_est)
             st.session_state["estoque"] = df_est
+        else:
+            st.session_state["estoque"] = _garantir_colunas_estoque(
+                pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
+            )
 
         # Clientes
         df_cli = conn.read(worksheet="Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
             df_cli = _normalizar_colunas(df_cli)
-            if "Email" not in df_cli.columns:
-                df_cli["Email"] = ""
-            # evita crash se não tiver Nome
-            if "Nome" in df_cli.columns:
-                st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
-            else:
-                st.session_state["clientes_db"] = {}
+            df_cli = _garantir_colunas_clientes(df_cli)
+            df_cli = df_cli[df_cli["Nome"].str.strip() != ""].copy()
+            st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
+        else:
+            st.session_state["clientes_db"] = {}
 
         # Logs
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
             df = conn.read(worksheet=aba, ttl=0)
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
-
                 if aba == "Log_Laudos":
-                    # mapeia colunas comuns
-                    if "Cliente" not in df.columns:
-                        df["Cliente"] = ""
-
-                    if "Data_Coleta" not in df.columns:
-                        if "Data Coleta" in df.columns:
-                            df["Data_Coleta"] = df["Data Coleta"]
-                        else:
-                            df["Data_Coleta"] = ""
-
-                    if "Data_Resultado" not in df.columns:
-                        if "Data Resultado" in df.columns:
-                            df["Data_Resultado"] = df["Data Resultado"]
-                        else:
-                            df["Data_Resultado"] = "Não definida"
-
-                    if "Status" not in df.columns:
-                        df["Status"] = "Pendente"
-
-                    # limpa NaN
-                    df["Cliente"] = df["Cliente"].fillna("").astype(str)
-                    df["Data_Coleta"] = df["Data_Coleta"].fillna("").astype(str)
-                    df["Data_Resultado"] = df["Data_Resultado"].fillna("Não definida").astype(str)
-                    df["Status"] = df["Status"].fillna("Pendente").astype(str)
-
+                    df = _garantir_colunas_laudos(df)
                 st.session_state[aba.lower()] = df.to_dict("records")
             else:
                 st.session_state[aba.lower()] = []
+
+        # Garante chaves session_state
+        for key in ["log_vendas", "log_entradas", "log_laudos"]:
+            if key not in st.session_state:
+                st.session_state[key] = []
 
         return True
     except Exception:
@@ -256,39 +320,36 @@ def salvar_dados():
         conn.update(worksheet="Estoque", data=st.session_state["estoque"])
 
         # Clientes
-        if st.session_state.get("clientes_db"):
-            df_clis = (
-                pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index")
-                .reset_index()
-                .rename(columns={"index": "Nome"})
-            )
-            conn.update(worksheet="Clientes", data=df_clis)
+        df_clis = (
+            pd.DataFrame.from_dict(st.session_state.get("clientes_db", {}), orient="index")
+            .reset_index()
+            .rename(columns={"index": "Nome"})
+        )
+        df_clis = _garantir_colunas_clientes(df_clis)
+        df_clis = df_clis[df_clis["Nome"].str.strip() != ""].copy()
+        conn.update(worksheet="Clientes", data=df_clis)
 
         # Logs
-        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state["log_vendas"]))
-        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state["log_entradas"]))
-        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state["log_laudos"]))
+        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
+        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
+
+        df_laudos = pd.DataFrame(st.session_state.get("log_laudos", []))
+        if not df_laudos.empty:
+            df_laudos = _normalizar_colunas(df_laudos)
+            df_laudos = _garantir_colunas_laudos(df_laudos)
+        conn.update(worksheet="Log_Laudos", data=df_laudos)
 
         st.toast("✅ Sincronizado!")
     except Exception:
-        st.error("Erro ao salvar")
+        st.error("Erro ao salvar (verifique permissões e colunas no Google Sheets).")
 
 
 if "dados_carregados" not in st.session_state:
-    carregar_dados()
+    ok = carregar_dados()
     st.session_state["dados_carregados"] = True
-
-for key in ["log_vendas", "log_entradas", "log_laudos"]:
-    if key not in st.session_state:
-        st.session_state[key] = []
-
-if "estoque" not in st.session_state:
-    st.session_state["estoque"] = pd.DataFrame(
-        columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"]
-    )
-
-if "clientes_db" not in st.session_state:
-    st.session_state["clientes_db"] = {}
+    if not ok:
+        st.error("Falha ao carregar dados do Google Sheets.")
+        st.stop()
 
 
 # ==============================================================================
@@ -459,6 +520,7 @@ menu = st.sidebar.radio(
     ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Produtos", "📋 Conferência Geral", "👥 Clientes"],
 )
 
+
 # ==============================================================================
 # PÁGINAS
 # ==============================================================================
@@ -475,9 +537,9 @@ if menu == "📊 Dashboard":
     else:
         cards_html = ""
         for l in ativos:
-            cliente = str(l.get("Cliente", "") or "Cliente não informado")
-            data_coleta = str(l.get("Data_Coleta", "") or "Data não informada")
-            data_resultado = str(l.get("Data_Resultado", "") or "---")
+            cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
+            data_coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
+            data_resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
 
             cards_html += f"""
             <div class="coleta-card">
@@ -491,7 +553,11 @@ if menu == "📊 Dashboard":
             </div>
             """
 
-        st.markdown(f'<div class="radar-container">{cards_html}</div>', unsafe_allow_html=True)
+        components.html(
+            f"<div class='radar-container'>{cards_html}</div>",
+            height=230,
+            scrolling=True,
+        )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
@@ -504,6 +570,11 @@ if menu == "📊 Dashboard":
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
+
+    if not st.session_state.get("clientes_db"):
+        st.warning("Cadastre clientes primeiro.")
+        st.stop()
+
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state["clientes_db"].keys()))
@@ -512,7 +583,7 @@ elif menu == "🧪 Laudos":
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
             if st.form_submit_button("Agendar"):
                 novo = {
-                    "Cliente": cli_l,
+                    "Cliente": str(cli_l),
                     "Data_Coleta": data_l.strftime("%d/%m/%Y"),
                     "Data_Resultado": data_r.strftime("%d/%m/%Y"),
                     "Status": "Pendente",
@@ -529,7 +600,9 @@ elif menu == "🧪 Laudos":
         st.info("Sem laudos.")
     else:
         df_p = pd.DataFrame(laudos)
-        df_p["ID"] = range(len(laudos))
+        df_p = _normalizar_colunas(df_p)
+        df_p = _garantir_colunas_laudos(df_p)
+        df_p["ID"] = range(len(df_p))
 
         ed_p = st.data_editor(
             df_p[["ID", "Cliente", "Data_Coleta", "Data_Resultado", "Status"]],
@@ -539,10 +612,12 @@ elif menu == "🧪 Laudos":
         )
 
         if st.button("💾 SALVAR ALTERAÇÕES"):
+            ed_p = ed_p.copy()
             for _, row in ed_p.iterrows():
                 idx = int(row["ID"])
-                st.session_state["log_laudos"][idx]["Data_Resultado"] = row["Data_Resultado"]
-                st.session_state["log_laudos"][idx]["Status"] = row["Status"]
+                if idx < len(st.session_state["log_laudos"]):
+                    st.session_state["log_laudos"][idx]["Data_Resultado"] = str(row["Data_Resultado"])
+                    st.session_state["log_laudos"][idx]["Status"] = str(row["Status"])
             salvar_dados()
             st.success("Atualizado!")
             st.rerun()
@@ -550,8 +625,12 @@ elif menu == "🧪 Laudos":
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
 
-    if not st.session_state["clientes_db"]:
+    if not st.session_state.get("clientes_db"):
         st.warning("Cadastre clientes!")
+        st.stop()
+
+    if st.session_state.get("estoque", pd.DataFrame()).empty:
+        st.warning("Cadastre produtos no estoque!")
         st.stop()
 
     c1, c2 = st.columns([2, 1])
@@ -565,19 +644,20 @@ elif menu == "💰 Vendas & Orçamentos":
     venc = col3.text_input("Vencimento", "A COMBINAR")
 
     df_v = st.session_state["estoque"].copy()
+    df_v = _garantir_colunas_estoque(df_v)
+
     if "Qtd" not in df_v.columns:
         df_v.insert(0, "Qtd", 0.0)
-
-    # garante colunas mínimas
-    for col in ["Produto", "Cod", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo"]:
-        if col not in df_v.columns:
-            df_v[col] = "" if col in ["Produto", "Cod", "Marca", "NCM", "Unidade"] else 0.0
+    df_v["Qtd"] = pd.to_numeric(df_v["Qtd"], errors="coerce").fillna(0.0)
 
     ed_v = st.data_editor(
         df_v[["Qtd", "Produto", "Cod", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo"]],
         use_container_width=True,
         hide_index=True,
     )
+
+    ed_v["Qtd"] = pd.to_numeric(ed_v["Qtd"], errors="coerce").fillna(0.0)
+    ed_v["Preco_Base"] = pd.to_numeric(ed_v["Preco_Base"], errors="coerce").fillna(0.0)
 
     itens_sel = ed_v[ed_v["Qtd"] > 0].copy()
     itens_sel["Total"] = itens_sel["Qtd"] * itens_sel["Preco_Base"]
@@ -607,8 +687,7 @@ elif menu == "💰 Vendas & Orçamentos":
 
                 if "METAL" in origem:
                     for _, row in itens_sel.iterrows():
-                        # tenta achar o código no estoque
-                        mask = (st.session_state["estoque"]["Cod"] == row["Cod"])
+                        mask = (st.session_state["estoque"]["Cod"].astype(str) == str(row["Cod"]))
                         if mask.any():
                             idx = st.session_state["estoque"][mask].index[0]
                             try:
@@ -621,11 +700,10 @@ elif menu == "💰 Vendas & Orçamentos":
                                 "Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"),
                                 "Cliente": cli,
                                 "Produto": row["Produto"],
-                                "Qtd": row["Qtd"],
+                                "Qtd": float(row["Qtd"]),
                                 "Vendedor": vend,
                             }
                         )
-
                     salvar_dados()
                     st.success("Venda Registrada!")
                 else:
@@ -667,13 +745,13 @@ elif menu == "👥 Clientes":
                     st.error("Informe o nome do cliente.")
                 else:
                     st.session_state["clientes_db"][nome] = {
-                        "CNPJ": cnpj,
-                        "Tel": tel,
-                        "Email": email,
-                        "End": end,
-                        "Cidade": cid,
-                        "UF": uf,
-                        "CEP": cep,
+                        "CNPJ": str(cnpj),
+                        "Tel": str(tel),
+                        "Email": str(email),
+                        "End": str(end),
+                        "Cidade": str(cid),
+                        "UF": str(uf),
+                        "CEP": str(cep),
                     }
                     salvar_dados()
                     st.success(f"Cliente {nome} cadastrado!")
@@ -682,7 +760,7 @@ elif menu == "👥 Clientes":
     st.markdown("---")
     st.subheader("📋 Lista de Clientes Cadastrados")
 
-    if not st.session_state["clientes_db"]:
+    if not st.session_state.get("clientes_db"):
         st.info("Nenhum cliente cadastrado ainda.")
     else:
         df_cli_list = (
@@ -690,6 +768,7 @@ elif menu == "👥 Clientes":
             .reset_index()
             .rename(columns={"index": "Nome"})
         )
+        df_cli_list = _garantir_colunas_clientes(_normalizar_colunas(df_cli_list))
 
         ed_cli = st.data_editor(
             df_cli_list,
@@ -700,21 +779,20 @@ elif menu == "👥 Clientes":
         )
 
         if st.button("💾 SALVAR ALTERAÇÕES NA LISTA"):
-            if "Nome" not in ed_cli.columns:
-                st.error("Coluna 'Nome' não encontrada.")
-            else:
-                ed_cli["Nome"] = ed_cli["Nome"].fillna("").astype(str)
-                ed_cli = ed_cli[ed_cli["Nome"].str.strip() != ""]
-                st.session_state["clientes_db"] = ed_cli.set_index("Nome").to_dict("index")
-                salvar_dados()
-                st.success("Lista atualizada!")
-                st.rerun()
+            ed_cli = _garantir_colunas_clientes(_normalizar_colunas(ed_cli))
+            ed_cli["Nome"] = ed_cli["Nome"].fillna("").astype(str)
+            ed_cli = ed_cli[ed_cli["Nome"].str.strip() != ""].copy()
+            st.session_state["clientes_db"] = ed_cli.set_index("Nome").to_dict("index")
+            salvar_dados()
+            st.success("Lista atualizada!")
+            st.rerun()
 
 elif menu == "📦 Produtos":
     st.title("📦 Produtos")
+    st.session_state["estoque"] = _garantir_colunas_estoque(st.session_state.get("estoque", pd.DataFrame()))
     ed = st.data_editor(st.session_state["estoque"], use_container_width=True, num_rows="dynamic")
     if not ed.equals(st.session_state["estoque"]):
-        st.session_state["estoque"] = ed
+        st.session_state["estoque"] = _garantir_colunas_estoque(ed)
         salvar_dados()
 
 elif menu == "📋 Conferência Geral":
@@ -722,27 +800,31 @@ elif menu == "📋 Conferência Geral":
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
 
     with tab1:
-        if st.session_state["log_vendas"]:
+        if st.session_state.get("log_vendas"):
             st.dataframe(pd.DataFrame(st.session_state["log_vendas"]).iloc[::-1], use_container_width=True)
 
     with tab2:
-        if st.session_state["log_entradas"]:
+        if st.session_state.get("log_entradas"):
             st.dataframe(pd.DataFrame(st.session_state["log_entradas"]).iloc[::-1], use_container_width=True)
 
     with tab3:
-        if st.session_state["log_laudos"]:
-            st.dataframe(pd.DataFrame(st.session_state["log_laudos"]).iloc[::-1], use_container_width=True)
+        if st.session_state.get("log_laudos"):
+            df_l = pd.DataFrame(st.session_state["log_laudos"])
+            if not df_l.empty:
+                df_l = _garantir_colunas_laudos(_normalizar_colunas(df_l))
+            st.dataframe(df_l.iloc[::-1] if not df_l.empty else df_l, use_container_width=True)
 
 elif menu == "📥 Entrada":
     st.title("📥 Entrada")
 
-    # evita crash se estoque estiver vazio
-    if st.session_state["estoque"].empty or "Produto" not in st.session_state["estoque"].columns:
+    st.session_state["estoque"] = _garantir_colunas_estoque(st.session_state.get("estoque", pd.DataFrame()))
+    if st.session_state["estoque"].empty:
         st.warning("Cadastre produtos no estoque antes de lançar entradas.")
         st.stop()
 
     with st.form("f_ent"):
-        p_ent = st.selectbox("Produto", st.session_state["estoque"]["Produto"].fillna("").astype(str).tolist())
+        produtos = st.session_state["estoque"]["Produto"].fillna("").astype(str).tolist()
+        p_ent = st.selectbox("Produto", produtos)
         q_ent = st.number_input("Qtd", min_value=0.0)
         if st.form_submit_button("Confirmar"):
             mask = (st.session_state["estoque"]["Produto"].astype(str) == str(p_ent))
@@ -756,7 +838,7 @@ elif menu == "📥 Entrada":
                     st.session_state["estoque"].at[idx, "Saldo"] = q_ent
 
                 st.session_state["log_entradas"].append(
-                    {"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent}
+                    {"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": float(q_ent)}
                 )
                 salvar_dados()
                 st.rerun()
