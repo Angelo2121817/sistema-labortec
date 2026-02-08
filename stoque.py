@@ -7,6 +7,29 @@ from pypdf import PdfReader
 from fpdf import FPDF
 import os
 import json
+# --- SISTEMA DE SEGURANÇA ---
+def verificar_senha():
+    """Retorna True se a senha estiver correta."""
+    if "autenticado" not in st.session_state:
+        st.session_state["autenticado"] = False
+
+    if not st.session_state["autenticado"]:
+        st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito - Labortec</h2>", unsafe_allow_html=True)
+        senha = st.text_input("Digite a Senha de Acesso:", type="password")
+        if st.button("Entrar"):
+            # DEFINA SUA SENHA AQUI: Troque 'labormetal22' pela senha que quiser
+            if senha == "labortec2026":
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta! Acesso negado.")
+        return False
+    return True
+
+# --- EXECUÇÃO DO LOGIN ---
+if not verificar_senha():
+    st.stop() # Trava o sistema aqui se não estiver logado
+# ----------------------------
 
 # --- CONFIGURAÇÃO INICIAL (ÍCONE DE QUÍMICA 🧪) ---
 st.set_page_config(page_title="Sistema Integrado v55", layout="wide", page_icon="🧪")
@@ -856,4 +879,5 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
