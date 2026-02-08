@@ -7,6 +7,7 @@ from pypdf import PdfReader
 from fpdf import FPDF
 import os
 import json
+from streamlit_gsheets import GSheetsConnection
 # --- SISTEMA DE SEGURANÇA ---
 def verificar_senha():
     """Retorna True se a senha estiver correta."""
@@ -35,26 +36,79 @@ if not verificar_senha():
 st.set_page_config(page_title="Sistema Integrado v55", layout="wide", page_icon="🧪")
 
 # --- ARQUIVO DE BANCO DE DADOS ---
-DB_FILE = "dados_sistema.json"
+# --- CONEXÃO COM O GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- FUNÇÕES DE PERSISTÊNCIA ---
+# --- CONEXÃO COM O GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 def carregar_dados():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                dados = json.load(f)
-            if "estoque" in dados: st.session_state['estoque'] = pd.DataFrame(dados["estoque"])
-            if "log_vendas" in dados: st.session_state['log_vendas'] = dados["log_vendas"]
-            if "log_entradas" in dados: st.session_state['log_entradas'] = dados["log_entradas"]
-            if "log_laudos" in dados: st.session_state['log_laudos'] = dados["log_laudos"]
-            if "clientes_db" in dados: st.session_state['clientes_db'] = dados["clientes_db"]
-            if "tabelas_precos" in dados: st.session_state['tabelas_precos'] = dados["tabelas_precos"]
-            if "tema_atual" in dados: st.session_state['tema_atual'] = dados["tema_atual"]
-            return True
-        except: return False
-    return False
+    try:
+        # 1. Estoque
+        df_est = conn.read(worksheet="estoque", ttl="0")
+        if not df_est.empty: st.session_state['estoque'] = df_est
+            
+        # 2. Clientes
+        df_cli = conn.read(worksheet="clientes", ttl="0")
+        if not df_cli.empty: 
+            st.session_state['clientes_db'] = df_cli.set_index('Nome').to_dict('index')
+            
+        # 3. Logs de Vendas e Entradas
+        df_v = conn.read(worksheet="log_vendas", ttl="0")
+        if not df_v.empty: st.session_state['log_vendas'] = df_v.to_dict('records')
+        
+        df_e = conn.read(worksheet="log_entradas", ttl="0")
+        if not df_e.empty: st.session_state['log_entradas'] = df_e.to_dict('records')
+
+        # 4. Laudos
+        df_l = conn.read(worksheet="log_laudos", ttl="0")
+        if not df_l.empty: st.session_state['log_laudos'] = df_l.to_dict('records')
+
+        st.toast("✅ Tudo carregado da nuvem!", icon="☁️")
+        return True
+    except:
+        return False
 
 def salvar_dados():
+    try:
+        # Sincroniza Estoque
+        conn.update(worksheet="estoque", data=st.session_state['estoque'])
+        
+        # Sincroniza Clientes
+        df_clis = pd.DataFrame.from_dict(st.session_state['clientes_db'], orient='index').reset_index()
+        df_clis.rename(columns={'index': 'Nome'}, inplace=True)
+        conn.update(worksheet="clientes", data=df_clis)
+        
+        # Sincroniza Logs (Vendas, Entradas e Laudos)
+        if st.session_state.get('log_vendas'):
+            conn.update(worksheet="log_vendas", data=pd.DataFrame(st.session_state['log_vendas']))
+        
+        if st.session_state.get('log_entradas'):
+            conn.update(worksheet="log_entradas", data=pd.DataFrame(st.session_state['log_entradas']))
+
+        if st.session_state.get('log_laudos'):
+            conn.update(worksheet="log_laudos", data=pd.DataFrame(st.session_state['log_laudos']))
+            
+        st.toast("💾 Planilha Atualizada!", icon="🚀")
+    except Exception as e:
+        st.error(f"Erro de conexão: {e}")
+    try:
+        # Salva o estoque na aba 'estoque'
+        conn.update(worksheet="estoque", data=st.session_state['estoque'])
+        
+        # Salva os clientes na aba 'clientes'
+        df_clis = pd.DataFrame.from_dict(st.session_state['clientes_db'], orient='index').reset_index()
+        df_clis.rename(columns={'index': 'Nome'}, inplace=True)
+        conn.update(worksheet="clientes", data=df_clis)
+        
+        # Salva o histórico de vendas na aba 'vendas'
+        if st.session_state.get('log_vendas'):
+            df_vendas = pd.DataFrame(st.session_state['log_vendas'])
+            conn.update(worksheet="vendas", data=df_vendas)
+            
+        st.toast("💾 Sincronizado com a Planilha!", icon="🚀")
+    except Exception as e:
+        st.error(f"Erro ao salvar na nuvem: {e}")
     dados = {
         "estoque": st.session_state['estoque'].to_dict('records'),
         "log_vendas": st.session_state.get('log_vendas', []),
@@ -974,5 +1028,6 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
 
