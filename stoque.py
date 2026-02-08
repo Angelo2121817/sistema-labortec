@@ -167,7 +167,7 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF (FIX: CONTEÚDO DESLOCADO 1 POLEGADA PARA BAIXO)
+# 5. GERADOR DE PDF (FIX: DADOS LABORTEC AUMENTADOS EM 20%)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
@@ -178,48 +178,45 @@ class PDF(FPDF):
         # Deslocamento de ~1 polegada (25mm) para o restante do cabeçalho
         offset_y = 25 
         
-        # 2. Textos da Labortec (Totalmente à direita da logo)
-        self.set_font('Arial', 'B', 16)
+        # 2. Textos da Labortec (Aumentados em 20%)
+        # Original B 16 -> Novo B 19.2 (usando 19)
+        # Original 8 -> Novo 9.6 (usando 10)
+        
+        self.set_font('Arial', 'B', 19)
         self.set_xy(65, 10 + offset_y)
         self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
         
-        # 3. Título do Documento (Canto Superior Direito)
-        self.set_font('Arial', 'B', 16)
+        # Título do Documento
+        self.set_font('Arial', 'B', 19)
         self.set_xy(110, 10 + offset_y)
         titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO')
         self.cell(90, 10, titulo_doc, 0, 1, 'R')
         
-        # 4. Detalhes da Labortec
-        self.set_font('Arial', '', 8)
+        # Detalhes da Labortec
+        self.set_font('Arial', '', 10)
         self.set_xy(65, 20 + offset_y)
-        self.cell(100, 4, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
+        self.cell(100, 5, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
         
         # Data
         self.set_xy(110, 20 + offset_y)
-        self.cell(90, 4, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
+        self.cell(90, 5, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
         
         # Contatos
-        self.set_xy(65, 24 + offset_y)
-        self.cell(100, 4, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
+        self.set_xy(65, 25 + offset_y)
+        self.cell(100, 5, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
         
         # Vendedor
-        self.set_xy(110, 24 + offset_y)
+        self.set_xy(110, 25 + offset_y)
         vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema')
-        self.cell(90, 4, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
+        self.cell(90, 5, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
         
         # CNPJ
-        self.set_xy(65, 28 + offset_y)
-        self.cell(100, 4, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
+        self.set_xy(65, 30 + offset_y)
+        self.cell(100, 5, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
         
-        # 5. Linha Divisória (Deslocada)
-        self.line(10, 38 + offset_y, 200, 38 + offset_y)
-        self.set_y(45 + offset_y) # Espaço seguro para o conteúdo começar
-
-    def footer(self):
-        self.set_y(-25)
-        self.set_font('Arial', 'I', 7)
-        self.cell(0, 4, 'Obs.: FRETE NÃO INCLUSO. PROPOSTA VÁLIDA POR 5 DIAS.', 0, 1, 'C')
-        self.cell(0, 4, 'PRAZO DE RETIRADA: 3 A 5 DIAS ÚTEIS APÓS CONFIRMAÇÃO.', 0, 0, 'C')
+        # 5. Linha Divisória
+        self.line(10, 40 + offset_y, 200, 40 + offset_y)
+        self.set_y(48 + offset_y)
 
 def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
     pdf = PDF(); pdf.vendedor_nome = vendedor; pdf.titulo_doc = titulo; pdf.add_page()
