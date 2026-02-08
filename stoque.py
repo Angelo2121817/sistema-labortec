@@ -198,17 +198,14 @@ if not verificar_senha():
 
 def salvar_dados():
     try:
-        # =========================
         # ESTOQUE
-        # =========================
         conn.update(
             worksheet="Estoque",
-            data=st.session_state["estoque"]
+            data=st.session_state["estoque"],
+            reload=True
         )
 
-        # =========================
         # CLIENTES
-        # =========================
         df_cli = pd.DataFrame.from_dict(
             st.session_state["clientes_db"],
             orient="index"
@@ -218,27 +215,42 @@ def salvar_dados():
 
         conn.update(
             worksheet="Clientes",
-            data=df_cli
+            data=df_cli,
+            reload=True
         )
 
-        # =========================
         # LOG VENDAS
-        # =========================
         df_v = pd.DataFrame(st.session_state["log_vendas"])
         conn.update(
             worksheet="Log_Vendas",
-            data=df_v
+            data=df_v,
+            reload=True
         )
 
-        # =========================
         # LOG ENTRADAS
-        # =========================
         df_e = pd.DataFrame(st.session_state["log_entradas"])
         conn.update(
             worksheet="Log_Entradas",
-            data=df_e
+            data=df_e,
+            reload=True
         )
 
+        # LOG LAUDOS
+        df_l = pd.DataFrame(st.session_state["log_laudos"])
+        if not df_l.empty:
+            df_l["Data_Coleta"] = df_l["Data_Coleta"].apply(to_br_date)
+            df_l["Data_Resultado"] = df_l["Data_Resultado"].apply(to_br_date)
+
+        conn.update(
+            worksheet="Log_Laudos",
+            data=df_l,
+            reload=True
+        )
+
+        st.toast("💾 Dados sincronizados!")
+
+    except Exception as e:
+        st.error(f"Erro salvar: {e}")
         # =========================
         # LOG LAUDOS
         # =========================
@@ -866,4 +878,5 @@ elif menu == "📥 Entrada":
                 salvar_dados()
                 st.success("Entrada registrada!")
                 st.rerun()
+
 
