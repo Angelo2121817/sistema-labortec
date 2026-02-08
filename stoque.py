@@ -224,24 +224,29 @@ def carregar_dados():
 
 def salvar_dados():
     try:
-        # Tenta salvar todas as abas
         conn.update(worksheet="Estoque", data=st.session_state["estoque"])
-        
         if st.session_state.get("clientes_db"):
             df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
             conn.update(worksheet="Clientes", data=df_clis)
-            
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        
-        st.toast("✅ Sincronizado!", icon="☁️")
-        
-    except Exception as e:
-        # AQUI ESTÁ A MUDANÇA:
-        # Em vez de mostrar st.error, apenas imprimimos no console (invisível pro usuário) e seguimos.
-        print(f"Alerta silencioso ao salvar: {e}")
-        pass
+        st.toast("✅ Sincronizado!")
+    except Exception:
+        st.error("Erro ao salvar")
+
+
+if "dados_carregados" not in st.session_state:
+    carregar_dados()
+    st.session_state["dados_carregados"] = True
+
+for key in ["log_vendas", "log_entradas", "log_laudos"]:
+    if key not in st.session_state:
+        st.session_state[key] = []
+if "estoque" not in st.session_state:
+    st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
+if "clientes_db" not in st.session_state:
+    st.session_state["clientes_db"] = {}
 
 
 # ==============================================================================
@@ -510,108 +515,44 @@ elif menu == "🧪 Laudos":
             st.success("Dados atualizados!")
             st.rerun()
 
-# ==============================================================================
-# 5. VENDAS (COM BAIXA DE ESTOQUE CORRIGIDA E BLINDADA)
-# ==============================================================================
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
+    if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
     
-    # Verifica se tem clientes
-    if not st.session_state['clientes_db']: 
-        st.warning("Cadastre clientes antes de vender!"); st.stop()
-    
-    # Seleção de Cliente e Vendedor
     c1, c2 = st.columns([2,1])
     cli = c1.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
     vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
     d_cli = st.session_state['clientes_db'][cli]
     
-    # Dados do Pagamento
     col1, col2, col3 = st.columns(3)
-    p_pag = col1.text_input("Plano", "28/42 DIAS")
-    f_pag = col2.text_input("Forma", "BOLETO ITAU")
-    venc = col3.text_input("Vencimento", "A COMBINAR")
+    p_pag = col1.text_input("Plano", "28/42 DIAS"); f_pag = col2.text_input("Forma", "BOLETO ITAU"); venc = col3.text_input("Vencimento", "A COMBINAR")
     
-    # Prepara Tabela de Vendas
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
     
-    # Editor de Vendas
-    ed_v = st.data_editor(
-        df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo']], 
-        use_container_width=True, 
-        hide_index=True
-    )
-    
-    # Filtra o que foi selecionado (Qtd > 0)
-    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
-    itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Base']
-    total = itens_sel['Total'].sum()
+    ed_v = st.data_editor(df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo']], use_container_width=True, hide_index=True)
+    itens_sel = ed_v[ed_v['Qtd'] > 0].copy(); itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Base']; total = itens_sel['Total'].sum()
     
     if not itens_sel.empty:
-        st.metric("Total do Pedido", f"R$ {total:,.2f}")
-        
+        st.metric("Total", f"R$ {total:,.2f}")
         c_orc, c_ped = st.columns(2)
-        
-        # Botão Orçamento
         with c_orc:
-            if st.button("📄 GERAR ORÇAMENTO", use_container_width=True):
+            if st.button("📄 ORÇAMENTO", use_container_width=True):
                 pdf = criar_doc_pdf(vend, cli, d_cli, itens_sel.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
-                st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
-        
-        # Botão Pedido (Com Baixa)
+                st.download_button("📥 Baixar", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
         with c_ped:
-            st.write("---")
-            origem = st.radio("Quem fará a entrega?", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
-            
-            if st.button("✅ CONFIRMAR VENDA", type="primary", use_container_width=True):
-                # Gera o PDF
+            origem = st.radio("Origem?", ["METAL QUÍMICA", "INDEPENDENTE"], horizontal=True)
+            if st.button("✅ CONFIRMAR", type="primary", use_container_width=True):
                 pdf = criar_doc_pdf(vend, cli, d_cli, itens_sel.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
-                
-                # --- LÓGICA DE BAIXA DE ESTOQUE (CORRIGIDA) ---
                 if "METAL" in origem:
                     for _, row in itens_sel.iterrows():
-                        # Busca o índice do produto no estoque pelo CÓDIGO (mais seguro)
-                        cod_prod = str(row['Cod'])
-                        # Cria uma máscara para achar a linha certa
-                        mask = st.session_state['estoque']['Cod'].astype(str) == cod_prod
-                        
-                        if not st.session_state['estoque'][mask].empty:
-                            idx = st.session_state['estoque'][mask].index[0]
-                            
-                            # BLINDAGEM MATEMÁTICA: Converte tudo para float antes de subtrair
-                            saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0.0)
-                            qtd_vendida = float(row['Qtd'])
-                            
-                            # Atualiza o saldo
-                            st.session_state['estoque'].at[idx, 'Saldo'] = saldo_atual - qtd_vendida
-                    
-                    # Registra no Log
-                    st.session_state['log_vendas'].append({
-                        'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
-                        'Cliente': cli, 
-                        'Produto': 'Vários', 
-                        'Qtd': itens_sel['Qtd'].sum(), 
-                        'Vendedor': vend
-                    })
-                    
-                    salvar_dados() # Agora salva sem erro de tipo
-                    st.success("Venda Confirmada e Estoque Baixado!")
-                
-                else:
-                    # Se for Independente, só salva o log, não mexe no saldo
-                    st.session_state['log_vendas'].append({
-                        'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
-                        'Cliente': cli, 
-                        'Produto': 'Vários (Sem Baixa)', 
-                        'Qtd': itens_sel['Qtd'].sum(), 
-                        'Vendedor': vend
-                    })
-                    salvar_dados()
-                    st.success("Venda Confirmada (Sem mexer no estoque)!")
-                
-                # Botão de download aparece após confirmar
-                st.download_button("📥 Baixar Pedido Final", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+                        idxs = st.session_state['estoque'][st.session_state['estoque']['Cod'] == row['Cod']].index
+                        if len(idxs) > 0: st.session_state['estoque'].at[idxs[0], 'Saldo'] -= row['Qtd']
+                    st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
+                    salvar_dados(); st.success("Venda Registrada!")
+                else: st.success("Venda Registrada!")
+                st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
     
@@ -750,5 +691,3 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
-
-
