@@ -410,23 +410,40 @@ if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     
     # --- ALERTA GERAL (O ALTO-FALANTE) ---
+   # --- ALERTA GERAL (VERSÃO COMPACTA E PISCANTE) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
-        <div style="
-            background-color: #fff3cd; 
-            border-left: 6px solid #ffc107; 
-            padding: 20px; 
-            border-radius: 8px; 
-            margin-bottom: 30px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            animation: fadeIn 1s;
-        ">
-            <h3 style="color: #856404; margin: 0; display: flex; align-items: center; font-size: 1.2rem;">
-                📢 COMUNICADO DO COMANDO
-            </h3>
-            <p style="font-size: 1.3em; font-weight: 600; color: #533f03; margin-top: 10px; line-height: 1.4;">
-                {st.session_state['aviso_geral']}
-            </p>
+        <style>
+            @keyframes pulse-red {{
+                0% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); transform: scale(1); }}
+                50% {{ box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); transform: scale(1.01); }}
+                100% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); transform: scale(1); }}
+            }}
+            
+            .alert-blink {{
+                background-color: #ffebee; 
+                border: 2px solid #ff1744; 
+                color: #b71c1c;
+                padding: 8px 15px; 
+                border-radius: 30px; /* Bordas arredondadas (estilo pílula) */
+                text-align: center;
+                font-weight: bold;
+                font-size: 1.1rem;
+                margin-bottom: 25px;
+                width: fit-content; /* Ocupa só o espaço do texto */
+                margin-left: auto;
+                margin-right: auto;
+                animation: pulse-red 2s infinite; /* Faz piscar eternamente */
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+            }}
+        </style>
+        
+        <div class="alert-blink">
+            <span>📢</span>
+            <span>{st.session_state['aviso_geral']}</span>
         </div>
         """, unsafe_allow_html=True)
 
@@ -823,4 +840,5 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
