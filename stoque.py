@@ -11,7 +11,7 @@ from streamlit_gsheets import GSheetsConnection
 # ==============================================================================
 # 1. CONFIGURAÇÃO E CONEXÃO
 # ==============================================================================
-st.set_page_config(page_title="Sistema Labortec v60", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v61", layout="wide", page_icon="🧪")
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -48,8 +48,8 @@ def verificar_senha():
                 .metal-txt { color: #d35400; font-weight: bold; }
             </style>
             <div class="login-box">
-                <h1>🔐 ACESSO INTEGRADO</h1>
-                <h3><span class="labortec-txt">LABORTEC</span> | <span class="metal-txt">METAL QUÍMICA</span></h3>
+                <h1>🔐 SISTEMA INTEGRADO</h1>
+                <h3><span class="labortec-txt">LABORTEC CONSULTORIA</span> | <span class="metal-txt">METAL QUÍMICA</span></h3>
             </div>
         """, unsafe_allow_html=True)
         
@@ -100,7 +100,6 @@ def salvar_dados():
         st.toast("✅ Nuvem Atualizada!", icon="☁️")
     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
-# Inicialização
 if 'dados_carregados' not in st.session_state:
     carregar_dados()
     st.session_state['dados_carregados'] = True
@@ -114,21 +113,43 @@ if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'pdf_gerado' not in st.session_state: st.session_state['pdf_gerado'] = None
 
 # ==============================================================================
-# 4. GERADOR DE PDF PROFISSIONAL
+# 4. GERENCIADOR DE TEMAS (CSS)
+# ==============================================================================
+def aplicar_tema(escolha):
+    css = """<style>
+        [data-testid="stSidebar"] .block-container { text-align: center; }
+        .blink-text { animation: blinker 1.5s linear infinite; color: #FF4B4B; font-weight: bold; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>"""
+    
+    if escolha == "⚪ Padrão (Clean)":
+        css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
+    elif escolha == "🔵 Azul Labortec":
+        css += "<style>.stApp { background-color: #F0F8FF !important; color: #002B4E !important; } h1,h2,h3 { color: #004aad !important; }</style>"
+    elif escolha == "🌿 Verde Natureza":
+        css += "<style>.stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }</style>"
+    elif escolha == "⚫ Dark Mode (Noturno)":
+        css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } div[data-baseweb='input'] { background-color: #1c1e24 !important; }</style>"
+    elif escolha == "🟠 Metal Industrial":
+        css += "<style>.stApp { background-color: #2C2C2C !important; color: #FF8C00 !important; } h1,h2,h3 { font-family: 'Courier New'; }</style>"
+    elif escolha == "🌃 Cyber Dark":
+        css += "<style>.stApp { background-color: #000000 !important; color: #00FFFF !important; } .stButton button { border: 1px solid #00FFFF !important; }</style>"
+    
+    st.markdown(css, unsafe_allow_html=True)
+
+# ==============================================================================
+# 5. GERADOR DE PDF
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        if os.path.exists("labortec.jpg"): self.image("labortec.jpg", x=10, y=8, w=50)
-        self.set_font('Arial', 'B', 12)
-        self.set_xy(70, 15)
+        if os.path.exists("labortec.jpg"): self.image("labortec.jpg", x=10, y=8, w=45)
+        self.set_font('Arial', 'B', 11)
+        self.set_xy(60, 12)
         self.cell(0, 5, 'LABORTEC CONSULTORIA & METAL QUÍMICA', 0, 1, 'L')
-        self.set_font('Arial', '', 8)
-        self.set_x(70)
-        self.cell(0, 4, 'Rua Alfredo Bruno, 22 - Campinas/SP | CNPJ: 03.763.197/0001-09', 0, 1, 'L')
-        self.line(10, 35, 200, 35)
-        self.ln(20)
+        self.line(10, 30, 200, 30)
+        self.ln(15)
 
-def criar_documento(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
+def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, titulo):
     pdf = PDF()
     pdf.add_page()
     pdf.set_font('Arial', 'B', 14)
@@ -136,182 +157,149 @@ def criar_documento(vendedor, cliente, dados_cli, itens, total, condicoes, titul
     pdf.set_font('Arial', '', 9)
     pdf.cell(0, 5, f"Data: {datetime.now().strftime('%d/%m/%Y')} | Vendedor: {vendedor}", 0, 1, 'R')
     pdf.ln(5)
-    
-    # Bloco Cliente
-    pdf.set_fill_color(240, 240, 240)
     pdf.set_font('Arial', 'B', 10)
-    pdf.cell(0, 6, f" CLIENTE: {cliente}", 1, 1, 'L', True)
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(0, 5, f" Endereço: {dados_cli.get('End', '')} | Tel: {dados_cli.get('Tel', '')}", 1, 1, 'L')
+    pdf.cell(0, 6, f" CLIENTE: {cliente}", 1, 1, 'L')
     pdf.ln(5)
-
-    # Tabela Itens
+    
+    # Tabela
     pdf.set_font('Arial', 'B', 8)
-    w = [15, 80, 25, 30, 40]
-    cols = ['Qtd', 'Produto', 'Cod', 'Unitário', 'Total']
-    for i, c in enumerate(cols): pdf.cell(w[i], 7, c, 1, 0, 'C', True)
+    w = [15, 90, 20, 30, 30]
+    cols = ['Qtd', 'Produto', 'Cod', 'Preço Unit.', 'Total']
+    for i, c in enumerate(cols): pdf.cell(w[i], 7, c, 1, 0, 'C')
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
     for r in itens:
         pdf.cell(w[0], 6, str(r['Qtd']), 1, 0, 'C')
-        pdf.cell(w[1], 6, str(r['Produto'])[:45], 1, 0, 'L')
+        pdf.cell(w[1], 6, str(r['Produto'])[:50], 1, 0, 'L')
         pdf.cell(w[2], 6, str(r['Cod']), 1, 0, 'C')
         pdf.cell(w[3], 6, f"R$ {float(r['Preco_Base']):.2f}", 1, 0, 'R')
         pdf.cell(w[4], 6, f"R$ {float(r['Total']):.2f}", 1, 0, 'R')
         pdf.ln()
 
-    pdf.set_font('Arial', 'B', 11)
-    pdf.cell(sum(w)-40, 10, "TOTAL GERAL:", 0, 0, 'R')
-    pdf.cell(40, 10, f"R$ {total:,.2f}", 1, 1, 'R')
-    
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(sum(w)-30, 10, "TOTAL GERAL:", 0, 0, 'R')
+    pdf.cell(30, 10, f"R$ {total:,.2f}", 1, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
 # ==============================================================================
-# 5. INTERFACE E NAVEGAÇÃO
+# 6. MENU LATERAL E TEMAS
 # ==============================================================================
-st.sidebar.title("🎮 PAINEL DE CONTROLE")
-st.sidebar.info(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
+st.sidebar.title("🛠️ MENU GERAL")
+st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎨 Personalizar Tela")
+opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)", "🟠 Metal Industrial", "🌃 Cyber Dark"]
+tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
+aplicar_tema(tema_sel)
 
 menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", "📦 Gestão de Produtos", "📋 Conferência Geral", "👥 Clientes"])
 
-# --- VENDAS (A PARTE QUE VOCÊ PRECISAVA) ---
+# ==============================================================================
+# 7. PÁGINAS DO SISTEMA
+# ==============================================================================
+
 if menu == "💰 Vendas & Orçamentos":
-    st.title("💰 Vendas & Orçamentos")
-    
+    st.title("💰 Vendas e Orçamentos")
     if not st.session_state['clientes_db']:
         st.warning("Cadastre clientes primeiro!")
     else:
         c1, c2 = st.columns([2,1])
-        cli_sel = c1.selectbox("Selecione o Cliente", list(st.session_state['clientes_db'].keys()))
-        vendedor = c2.text_input("Vendedor", st.session_state['usuario_nome'])
+        cli = c1.selectbox("Selecione o Cliente", list(st.session_state['clientes_db'].keys()))
+        vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
         
-        # Tabela de Venda
         df_v = st.session_state['estoque'].copy()
         df_v['Qtd'] = 0.0
-        edited = st.data_editor(df_v[['Cod', 'Produto', 'Saldo', 'Preco_Base', 'Qtd']], use_container_width=True, key="venda_editor")
+        ed = st.data_editor(df_v[['Cod', 'Produto', 'Saldo', 'Preco_Base', 'Qtd']], use_container_width=True)
         
-        itens_venda = edited[edited['Qtd'] > 0].copy()
-        itens_venda['Total'] = itens_venda['Qtd'] * itens_venda['Preco_Base']
-        total = itens_venda['Total'].sum()
-        
-        if total > 0:
+        itens = ed[ed['Qtd'] > 0].copy()
+        if not itens.empty:
+            itens['Total'] = itens['Qtd'] * itens['Preco_Base']
+            total = itens['Total'].sum()
             st.subheader(f"Total: R$ {total:,.2f}")
             
-            # OPÇÃO DE ENTREGA (SISTEMA DE BAIXA)
-            origem = st.radio("🚛 Origem da Mercadoria:", ["METAL QUÍMICA (Dar baixa no estoque)", "INDEPENDENTE (Apenas registrar venda)"], horizontal=True)
+            origem = st.radio("🚛 Origem da Entrega:", ["METAL QUÍMICA (Baixa no Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
             
-            col_b1, col_b2 = st.columns(2)
-            
-            with col_b1:
-                if st.button("📄 GERAR ORÇAMENTO (Apenas PDF)", use_container_width=True):
-                    pdf = criar_documento(vendedor, cli_sel, st.session_state['clientes_db'][cli_sel], itens_venda.to_dict('records'), total, {}, "ORÇAMENTO")
+            cb1, cb2 = st.columns(2)
+            with cb1:
+                if st.button("📄 GERAR ORÇAMENTO", use_container_width=True):
+                    pdf = criar_doc_pdf(vend, cli, st.session_state['clientes_db'][cli], itens.to_dict('records'), total, "ORÇAMENTO")
                     st.session_state['pdf_gerado'] = pdf
-                    st.session_state['pdf_nome'] = "Orcamento_Labortec.pdf"
-
-            with col_b2:
-                if st.button("✅ CONFIRMAR VENDA (Registrar e PDF)", use_container_width=True, type="primary"):
-                    # Registrar no Log
-                    for _, row in itens_venda.iterrows():
-                        # Dar baixa se for Metal Química
-                        if "METAL" in origem:
-                            mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
-                            if not st.session_state['estoque'][mask].empty:
-                                idx = st.session_state['estoque'][mask].index[0]
-                                st.session_state['estoque'].at[idx, 'Saldo'] -= row['Qtd']
-                        
-                        # Logar a venda sempre
-                        st.session_state['log_vendas'].append({
-                            'Data': datetime.now().strftime("%d/%m/%Y %H:%M"),
-                            'Cliente': cli_sel, 'Produto': row['Produto'], 'Qtd': row['Qtd'], 'Vendedor': vendedor, 'Origem': origem
-                        })
+                    st.session_state['pdf_nome'] = "Orcamento.pdf"
+            with cb2:
+                if st.button("✅ CONFIRMAR VENDA", use_container_width=True, type="primary"):
+                    if "METAL" in origem:
+                        for _, r in itens.iterrows():
+                            mask = st.session_state['estoque']['Cod'].astype(str) == str(r['Cod'])
+                            idx = st.session_state['estoque'][mask].index[0]
+                            st.session_state['estoque'].at[idx, 'Saldo'] -= r['Qtd']
                     
+                    st.session_state['log_vendas'].append({
+                        'Data': datetime.now().strftime("%d/%m/%Y %H:%M"),
+                        'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens['Qtd'].sum(), 'Vendedor': vend, 'Origem': origem
+                    })
                     salvar_dados()
-                    pdf = criar_documento(vendedor, cli_sel, st.session_state['clientes_db'][cli_sel], itens_venda.to_dict('records'), total, {}, "PEDIDO DE VENDA")
+                    pdf = criar_doc_pdf(vend, cli, st.session_state['clientes_db'][cli], itens.to_dict('records'), total, "PEDIDO DE VENDA")
                     st.session_state['pdf_gerado'] = pdf
-                    st.session_state['pdf_nome'] = "Pedido_Venda.pdf"
-                    st.success("Venda registrada com sucesso!")
+                    st.session_state['pdf_nome'] = "Pedido.pdf"
+                    st.success("Venda processada!")
 
             if st.session_state.get('pdf_gerado'):
-                st.download_button("📥 BAIXAR DOCUMENTO PDF", st.session_state['pdf_gerado'], st.session_state['pdf_nome'], "application/pdf", use_container_width=True)
+                st.download_button("📥 BAIXAR PDF", st.session_state['pdf_gerado'], st.session_state['pdf_nome'], "application/pdf")
 
-# --- ENTRADA DE ESTOQUE (CONFERÊNCIA) ---
 elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Registro de Entrada")
-    c1, c2 = st.columns([3,1])
+    st.title("📥 Entrada de Mercadoria")
     opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
-    prod = c1.selectbox("Selecione o Produto", opcoes)
-    qtd = c2.number_input("Quantidade (KG)", min_value=0.0)
-    
-    if st.button("📥 Confirmar Entrada", type="primary"):
+    prod = st.selectbox("Selecione o Produto", opcoes)
+    qtd = st.number_input("Quantidade (KG)", min_value=0.0)
+    if st.button("Confirmar Entrada"):
         cod = prod.split(" - ")[0]
         mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-        if not st.session_state['estoque'][mask].empty:
-            idx = st.session_state['estoque'][mask].index[0]
-            st.session_state['estoque'].at[idx, 'Saldo'] += qtd
-            st.session_state['log_entradas'].append({
-                'Data': datetime.now().strftime("%d/%m/%Y %H:%M"),
-                'Produto': st.session_state['estoque'].at[idx, 'Produto'],
-                'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']
-            })
-            salvar_dados()
-            st.success("Estoque atualizado!")
-            st.rerun()
+        idx = st.session_state['estoque'][mask].index[0]
+        st.session_state['estoque'].at[idx, 'Saldo'] += qtd
+        st.session_state['log_entradas'].append({
+            'Data': datetime.now().strftime("%d/%m/%Y %H:%M"),
+            'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']
+        })
+        salvar_dados()
+        st.success("Estoque Atualizado!")
 
-# --- CONFERÊNCIA (ESTAVA FALTANDO) ---
 elif menu == "📋 Conferência Geral":
-    st.title("📋 Auditoria e Histórico")
-    t1, t2, t3 = st.tabs(["📦 Estoque Real", "📈 Histórico de Vendas", "📉 Histórico de Entradas"])
-    with t1: st.dataframe(st.session_state['estoque'], use_container_width=True)
-    with t2: st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True)
-    with t3: st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True)
+    st.title("📋 Conferência")
+    t1, t2, t3 = st.tabs(["📦 Estoque", "📈 Vendas", "📉 Entradas"])
+    t1.dataframe(st.session_state['estoque'], use_container_width=True)
+    t2.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True)
+    t3.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True)
 
-# --- GESTÃO DE PRODUTOS ---
 elif menu == "📦 Gestão de Produtos":
-    st.title("📦 Cadastro e Preços")
-    with st.expander("➕ CADASTRAR NOVO PRODUTO"):
-        with st.form("novo_p"):
-            c1,c2,c3,c4 = st.columns(4)
-            ncod = c1.text_input("Código")
-            nnom = c2.text_input("Nome")
-            npre = c3.number_input("Preço Base", min_value=0.0)
-            nsal = c4.number_input("Saldo Inicial", min_value=0.0)
-            if st.form_submit_button("Salvar Produto"):
-                novo = pd.DataFrame([{'Cod': ncod, 'Produto': nnom, 'Preco_Base': npre, 'Saldo': nsal, 'Marca': 'LABORTEC', 'Unidade': 'KG', 'Estoque_Minimo': 0.0}])
-                st.session_state['estoque'] = pd.concat([st.session_state['estoque'], novo], ignore_index=True)
-                salvar_dados()
-                st.rerun()
-    
-    ed_est = st.data_editor(st.session_state['estoque'], num_rows="dynamic", use_container_width=True)
-    if st.button("💾 Salvar Alterações na Tabela"):
-        st.session_state['estoque'] = ed_est
+    st.title("📦 Cadastro")
+    ed = st.data_editor(st.session_state['estoque'], num_rows="dynamic", use_container_width=True)
+    if st.button("💾 Salvar Alterações"):
+        st.session_state['estoque'] = ed
         salvar_dados()
 
-# --- CLIENTES ---
 elif menu == "👥 Clientes":
-    st.title("👥 Gestão de Clientes")
-    with st.form("n_cli"):
-        c1, c2 = st.columns([3,1])
-        nome = c1.text_input("Nome do Cliente")
-        tel = c2.text_input("Telefone")
-        end = st.text_input("Endereço Completo")
-        if st.form_submit_button("Salvar Cliente"):
-            st.session_state['clientes_db'][nome] = {'Tel': tel, 'End': end}
+    st.title("👥 Clientes")
+    with st.form("c"):
+        n = st.text_input("Nome")
+        e = st.text_input("Endereço")
+        t = st.text_input("Telefone")
+        if st.form_submit_button("Salvar"):
+            st.session_state['clientes_db'][n] = {'End': e, 'Tel': t}
             salvar_dados()
             st.rerun()
-    
-    for n in list(st.session_state['clientes_db'].keys()):
-        col_n, col_d = st.columns([4,1])
-        col_n.write(f"**{n}** - {st.session_state['clientes_db'][n]['End']}")
-        if col_d.button("🗑️", key=n):
-            del st.session_state['clientes_db'][n]
+    for k in list(st.session_state['clientes_db'].keys()):
+        c1, c2 = st.columns([4,1])
+        c1.write(f"**{k}** - {st.session_state['clientes_db'][k]['End']}")
+        if c2.button("🗑️", key=k):
+            del st.session_state['clientes_db'][k]
             salvar_dados()
             st.rerun()
 
-# --- DASHBOARD ---
 elif menu == "📊 Dashboard":
-    st.title(f"📊 Painel Geral - {st.session_state['usuario_nome']}")
+    st.title("📊 Resumo Operacional")
     c1, c2, c3 = st.columns(3)
-    c1.metric("📦 Itens no Estoque", len(st.session_state['estoque']))
-    c2.metric("💰 Vendas Registradas", len(st.session_state['log_vendas']))
-    c3.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
+    c1.metric("Estoque", len(st.session_state['estoque']))
+    c2.metric("Vendas", len(st.session_state['log_vendas']))
+    c3.metric("Clientes", len(st.session_state['clientes_db']))
