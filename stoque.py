@@ -21,7 +21,6 @@ def extrair_dados_cetesb(f):
 
         for i, line in enumerate(lines):
             cnpj_m = re.search(r"(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})", line)
-            if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
             if cnpj_m:
                 d["CNPJ"] = cnpj_m.group(1)
                 d["Nome"] = line.replace(d["CNPJ"], "").strip()
@@ -374,21 +373,6 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 # MENU LATERAL
 # ==============================================================================
 st.sidebar.title("🛠️ MENU")
-# --- SISTEMA DE AVISOS (NOVO) ---
-st.sidebar.markdown("---")
-with st.sidebar.expander("📢 DEFINIR AVISO GERAL"):
-    aviso_txt = st.text_area("Mensagem para a Tropa:", 
-                             value=st.session_state['aviso_geral'], 
-                             height=100)
-    
-    c_salv, c_limp = st.columns(2)
-    if c_salv.button("💾 Gravar"):
-        st.session_state['aviso_geral'] = aviso_txt
-        st.rerun()
-    
-    if c_limp.button("🗑️ Apagar"):
-        st.session_state['aviso_geral'] = ""
-        st.rerun()
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 tema_sel = st.sidebar.selectbox("Tema:", ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"])
 aplicar_tema(tema_sel)
@@ -403,24 +387,6 @@ if menu == "📊 Dashboard":
     st.markdown("---")
     
     st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
-    # --- ALERTA GERAL (O ALTO-FALANTE) ---
-    if st.session_state['aviso_geral']:
-        st.markdown(f"""
-        <div style="
-            background-color: #ffebee; 
-            border: 2px solid #ff1744; 
-            border-radius: 10px; 
-            padding: 15px; 
-            margin-bottom: 20px; 
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        ">
-            <h3 style="color: #d50000; margin: 0;">📢 COMUNICADO DO COMANDO</h3>
-            <p style="font-size: 1.3em; font-weight: bold; color: #b71c1c; margin-top: 10px;">
-                {st.session_state['aviso_geral']}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
@@ -735,8 +701,4 @@ elif menu == "📥 Entrada":
                 st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
                 salvar_dados()
                 st.rerun()
-
-
-
-
 
