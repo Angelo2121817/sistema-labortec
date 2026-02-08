@@ -277,17 +277,72 @@ if menu == "📊 Dashboard":
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
+    
+    # --- ÁREA DE AGENDAMENTO (CRIAR NOVO) ---
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
             c1, c2 = st.columns(2)
             data_l = c1.date_input("Data da Coleta")
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            
             if st.form_submit_button("Agendar"):
-                novo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'}
+                # Salva como string formato BR para ficar bonito no Dashboard
+                novo = {
+                    'Cliente': cli_l, 
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
+                    'Status': 'Pendente'
+                }
                 st.session_state['log_laudos'].append(novo)
-                salvar_dados(); st.rerun()
+                salvar_dados()
+                st.success("Agendado!")
+                st.rerun()
 
+    st.markdown("---")
+    st.subheader("📋 Editar Previsões e Status")
+    
+    laudos = st.session_state.get('log_laudos', [])
+    
+    if not laudos:
+        st.info("Sem laudos registrados.")
+    else:
+        # Prepara o DataFrame para edição
+        df_p = pd.DataFrame(laudos)
+        # Cria um ID temporário para saber qual linha atualizar
+        df_p['ID'] = range(len(laudos))
+        
+        # --- CORREÇÃO AQUI ---
+        # 1. Removi 'Data_Coleta' e 'Data_Resultado' do disabled para você poder editar
+        # 2. Configurei column_config para aparecer um calendário bonitinho
+        ed_p = st.data_editor(
+            df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
+            use_container_width=True, 
+            hide_index=True,
+            disabled=['ID', 'Cliente'], # Só ID e Cliente ficam travados
+            column_config={
+                "Data_Coleta": st.column_config.TextColumn("Data Coleta (dd/mm/aaaa)"),
+                "Data_Resultado": st.column_config.TextColumn("Prev. Resultado (dd/mm/aaaa)"),
+                "Status": st.column_config.SelectboxColumn(
+                    "Status",
+                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
+                )
+            }
+        )
+
+        if st.button("💾 SALVAR ALTERAÇÕES"):
+            for _, row in ed_p.iterrows():
+                idx = int(row['ID'])
+                
+                # --- CORREÇÃO DO SALVAMENTO ---
+                # Agora atualizamos TUDO, inclusive a Coleta
+                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta'])
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado'])
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            
+            salvar_dados()
+            st.success("Dados atualizados! O Dashboard já vai mostrar as novas datas.")
+            st.rerun()
     st.markdown("---"); st.subheader("📋 Editar Previsões")
     laudos = st.session_state.get('log_laudos', [])
     if not laudos: st.info("Sem laudos.")
@@ -386,3 +441,4 @@ elif menu == "📥 Entrada":
             st.session_state['estoque'].at[idx, 'Saldo'] += q_ent
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': p_ent, 'Qtd': q_ent})
             salvar_dados(); st.rerun()
+
