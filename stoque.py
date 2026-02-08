@@ -174,13 +174,40 @@ def _fix_date_br(val):
     except:
         return str(val)
 
-def _fix_datetime_br(val):
-    if not val or pd.isna(val) or str(val).strip() == "":
+def _fix_date_br(val):
+    """Converte QUALQUER formato de data para DD/MM/AAAA (padrão brasileiro)"""
+    if not val or pd.isna(val) or str(val).strip() == "" or str(val).strip() == "Não definida":
         return ""
-    try:
-        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
-    except:
-        return val
+    
+    val_str = str(val).strip()
+    
+    # Se já está em formato DD/MM/AAAA, retorna como está
+    if len(val_str) == 10 and val_str[2] == '/' and val_str[5] == '/':
+        try:
+            dia, mes, ano = val_str.split('/')
+            if 1 <= int(dia) <= 31 and 1 <= int(mes) <= 12 and len(ano) == 4:
+                return val_str
+        except:
+            pass
+    
+    # Tenta converter de vários formatos
+    formatos = [
+        '%d/%m/%Y',      # DD/MM/AAAA
+        '%Y-%m-%d',      # AAAA-MM-DD (padrão Google Sheets)
+        '%m/%d/%Y',      # MM/DD/AAAA
+        '%d-%m-%Y',      # DD-MM-AAAA
+        '%Y/%m/%d',      # AAAA/MM/DD
+    ]
+    
+    for fmt in formatos:
+        try:
+            data_convertida = pd.to_datetime(val_str, format=fmt)
+            return data_convertida.strftime("%d/%m/%Y")
+        except:
+            continue
+    
+    # Se nenhum formato funcionou, retorna vazio
+    return ""
 
 def carregar_dados():
     try:
@@ -755,6 +782,7 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
 
 
