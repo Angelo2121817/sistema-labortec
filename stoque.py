@@ -473,8 +473,8 @@ elif menu == "🧪 Laudos":
             if st.form_submit_button("Agendar"):
                 novo = {
                     'Cliente': cli_l, 
-                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
-                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"),  # FORÇA FORMATO BR
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"),  # FORÇA FORMATO BR
                     'Status': 'Pendente'
                 }
                 st.session_state['log_laudos'].append(novo)
@@ -492,14 +492,18 @@ elif menu == "🧪 Laudos":
         df_p = pd.DataFrame(laudos)
         df_p['ID'] = range(len(laudos))
         
+        # CONVERTE STRINGS DE DATA PARA DATETIME PARA EXIBIÇÃO
+        df_p['Data_Coleta_display'] = pd.to_datetime(df_p['Data_Coleta'], format='%d/%m/%Y', errors='coerce').dt.strftime('%d/%m/%Y')
+        df_p['Data_Resultado_display'] = pd.to_datetime(df_p['Data_Resultado'], format='%d/%m/%Y', errors='coerce').dt.strftime('%d/%m/%Y')
+        
         ed_p = st.data_editor(
-            df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
+            df_p[['ID', 'Cliente', 'Data_Coleta_display', 'Data_Resultado_display', 'Status']],
             use_container_width=True, 
             hide_index=True,
             disabled=['ID', 'Cliente'],
             column_config={
-                "Data_Coleta": st.column_config.TextColumn("Data Coleta (dd/mm/aaaa)"),
-                "Data_Resultado": st.column_config.TextColumn("Prev. Resultado (dd/mm/aaaa)"),
+                "Data_Coleta_display": st.column_config.TextColumn("Data Coleta (DD/MM/AAAA)"),
+                "Data_Resultado_display": st.column_config.TextColumn("Prev. Resultado (DD/MM/AAAA)"),
                 "Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Análise", "Concluído", "Cancelado"])
             }
         )
@@ -507,8 +511,9 @@ elif menu == "🧪 Laudos":
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID'])
-                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta'])
-                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado'])
+                # SALVA NO FORMATO CORRETO
+                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta_display'])
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado_display'])
                 st.session_state['log_laudos'][idx]['Status'] = row['Status']
             
             salvar_dados()
@@ -691,3 +696,4 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
