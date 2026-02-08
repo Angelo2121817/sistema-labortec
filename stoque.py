@@ -8,79 +8,69 @@ from fpdf import FPDF
 import os
 import json
 from streamlit_gsheets import GSheetsConnection
-# --- SISTEMA DE LOGIN PERSONALIZADO ---
+# --- SISTEMA DE SEGURANÇA (IDENTIFICAÇÃO POR SENHA) ---
 from datetime import datetime, timedelta
 
-# 1. BANCO DE DADOS DE USUÁRIOS (Aqui você define as senhas)
+# Tabela de Usuários e Senhas
+# O sistema vai procurar a senha aqui e descobrir o nome sozinho
 CREDENCIAIS = {
-    "General": {
-        "nome": "General",
-        "senha": "labormetal22"
-    },
-    "Fabricio": {
-        "nome": "Fabricio",
-        "senha": "fabricio2225"
-    },
-    "Anderson": {
-        "nome": "Anderson",
-        "senha": "anderson2225"
-    },
-    "Angelo": {
-        "nome": "Angelo",
-        "senha": "angelo2225"
-    }
+    "General": "labormetal22",
+    "Fabricio": "fabricio2225",
+    "Anderson": "anderson2225",
+    "Angelo": "angelo2225"
 }
 
 def obter_saudacao():
-    """Calcula a saudação baseada no horário de Brasília (UTC-3)."""
-    agora = datetime.utcnow() - timedelta(hours=3)
-    hora = agora.hour
-    if 5 <= hora < 12:
-        return "Bom dia"
-    elif 12 <= hora < 18:
-        return "Boa tarde"
-    else:
-        return "Boa noite"
+    """Define se é Bom dia, Tarde ou Noite (Horário Brasil)"""
+    hora = (datetime.utcnow() - timedelta(hours=3)).hour
+    if 5 <= hora < 12: return "Bom dia"
+    elif 12 <= hora < 18: return "Boa tarde"
+    else: return "Boa noite"
 
 def verificar_senha():
-    """Tela de Login Multi-usuário."""
+    """Tela de Login: Identifica o usuário apenas pela senha"""
     if "autenticado" not in st.session_state:
         st.session_state["autenticado"] = False
         st.session_state["usuario_nome"] = ""
 
     if not st.session_state["autenticado"]:
-        st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito - Labortec</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🔐 Labortec - Acesso Restrito</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Digite seu código pessoal para liberar o sistema.</p>", unsafe_allow_html=True)
+        st.markdown("---")
         
-        # Caixa para selecionar QUEM está entrando
-        usuario_selecionado = st.selectbox("Quem é você?", list(CREDENCIAIS.keys()))
-        
-        # Caixa de senha
-        senha = st.text_input("Sua Senha:", type="password")
-        
-        col1, col2, col3 = st.columns([1,1,1])
-        if col2.button("🚀 Entrar no Sistema"):
-            # Verifica se a senha bate com o usuário escolhido
-            usuario_dados = CREDENCIAIS.get(usuario_selecionado)
-            if usuario_dados and senha == usuario_dados["senha"]:
-                st.session_state["autenticado"] = True
-                st.session_state["usuario_nome"] = usuario_dados["nome"]
-                st.toast(f"Login aprovado! Bem-vindo, {usuario_dados['nome']}!", icon="✅")
-                st.rerun()
-            else:
-                st.error("Senha incorreta! Tente novamente.")
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            # Apenas pede a senha
+            senha_digitada = st.text_input("Senha de Acesso:", type="password")
+            
+            if st.button("🚀 ACESSAR", type="primary", use_container_width=True):
+                usuario_encontrado = None
+                
+                # O DETETIVE: Procura a senha no banco de dados
+                for nome, senha_real in CREDENCIAIS.items():
+                    if senha_digitada == senha_real:
+                        usuario_encontrado = nome
+                        break # Achou! Para de procurar.
+                
+                if usuario_encontrado:
+                    st.session_state["autenticado"] = True
+                    st.session_state["usuario_nome"] = usuario_encontrado
+                    st.toast(f"Identidade Confirmada: {usuario_encontrado}", icon="✅")
+                    st.rerun()
+                else:
+                    st.error("⛔ Senha não identificada. Tente novamente.")
         return False
-    return True
+    
+    # Se já estiver logado, mostra a saudação no menu lateral
+    else:
+        try:
+            st.sidebar.success(f"👋 **{obter_saudacao()}, {st.session_state['usuario_nome']}!**")
+        except: pass
+        return True
 
 # --- EXECUÇÃO DO LOGIN ---
 if not verificar_senha():
-    st.stop()
-
-# --- BARRA LATERAL COM A SAUDAÇÃO ---
-# Isso aqui vai aparecer no topo do menu lateral depois que logar
-saudacao = obter_saudacao()
-nome_logado = st.session_state["usuario_nome"]
-st.sidebar.success(f"👋 **{saudacao}, {nome_logado}!**")
-st.sidebar.markdown("---")
+    st.stop() # Trava o sistema aqui se não estiver logado
 
 # --- CONFIGURAÇÃO INICIAL (ÍCONE DE QUÍMICA 🧪) ---
 st.set_page_config(page_title="Sistema Integrado v55", layout="wide", page_icon="🧪")
@@ -1043,6 +1033,7 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
 
 
