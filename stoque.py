@@ -634,26 +634,25 @@ elif menu == "👥 Clientes":
                 c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
     else: st.info("Nenhum cliente cadastrado.")
 
-# ==============================================================================
-# 5. ESTOQUE (COM BLINDAGEM DE DADOS + MÍNIMO EDITÁVEL)
-# ==============================================================================
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral")
-    
-    # 1. BLINDAGEM: Garante que as colunas existem e são números
     if not st.session_state["estoque"].empty:
-        # Se a coluna Mínimo não existir, cria ela agora com 0.0
-        if "Estoque_Minimo" not in st.session_state["estoque"].columns:
-            st.session_state["estoque"]["Estoque_Minimo"] = 0.0
-            
-        # Força conversão para número (evita erro de digitação antiga)
-        cols_numericas = ["Saldo", "Estoque_Minimo", "Preco_Base"]
-        for col in cols_numericas:
-            if col in st.session_state["estoque"].columns:
-                st.session_state["estoque"][col] = pd.to_numeric(
-                    st.session_state["estoque"][col], errors='coerce'
-                ).fillna(0.0)
-            elif menu == "📋 Conferência Geral":
+        st.session_state["estoque"]["Saldo"] = pd.to_numeric(st.session_state["estoque"]["Saldo"], errors='coerce').fillna(0)
+
+    def estilo_saldo(val): return 'background-color: #d4edda; color: #155724; font-weight: 900; border: 1px solid #c3e6cb'
+    try: df_styled = st.session_state["estoque"].style.map(estilo_saldo, subset=["Saldo"])
+    except: df_styled = st.session_state["estoque"]
+
+    ed = st.data_editor(
+        df_styled, use_container_width=True, num_rows="dynamic", key="editor_estoque_v4",
+        column_config={
+            "Saldo": st.column_config.NumberColumn("✅ SALDO (KG)", format="%.2f", step=1),
+            "Preco_Base": None, "Estoque_Inicial": None, "Estoque_Minimo": None
+        }
+    )
+    if not ed.equals(st.session_state["estoque"]): st.session_state["estoque"] = ed; salvar_dados()
+
+elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência")
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
 
@@ -672,47 +671,23 @@ elif menu == "📦 Estoque":
         else:
             st.info("Nenhuma entrada de estoque registrada.")
 
-    # 2. ESTILO: Verde Tático
-    def estilo_saldo(val):
-        return 'background-color: #d4edda; color: #155724; font-weight: 900; border: 1px solid #c3e6cb'
-
-    try:
-        df_styled = st.session_state["estoque"].style.map(estilo_saldo, subset=["Saldo"])
-    except:
-        df_styled = st.session_state["estoque"]
-
-    st.caption("📝 Defina o **Mínimo** (🚨) para controle. O **Saldo** (✅) também é ajustável.")
-
-    # 3. EDITOR (Mínimo visível e editável)
-    ed = st.data_editor(
-        df_styled, 
-        use_container_width=True, 
-        num_rows="dynamic",
-        key="editor_estoque_v6", # Key nova para resetar qualquer erro visual
-        column_config={
-            "Saldo": st.column_config.NumberColumn(
-                "✅ SALDO", 
-                help="Quantidade física atual",
-                format="%.2f",
-                step=1,
-            ),
-            "Estoque_Minimo": st.column_config.NumberColumn(
-                "🚨 Mínimo", # Coluna recuperada!
-                help="Abaixo disso é necessário repor",
-                format="%.0f", # Número inteiro fica mais limpo
-                step=1
-            ),
-            # Ocultando o que você não quer ver, mas mantendo no sistema
-            "Preco_Base": None, 
-            "Estoque_Inicial": None 
-        }
-    )
-    
-    # Salvar
-    if not ed.equals(st.session_state["estoque"]):
-        st.session_state["estoque"] = ed
-        salvar_dados()
-
-
-
-
+    with tab3:
+        if st.session_state['log_laudos']:
+            df_laudos = pd.DataFrame(st.session_state['log_laudos'])
+            st.dataframe(df_laudos.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhum laudo registrado.")
+elif menu == "📥 Entrada de Estoque":
+    st.title("📥 Entrada de Mercadoria")
+    if st.session_state['estoque'].empty: st.warning("Sem produtos!"); st.stop()
+    opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
+    prod = st.selectbox("Selecione o Produto", opcoes)
+    qtd = st.number_input("Quantidade (KG)", min_value=0.0)
+    if st.button("Confirmar Entrada"):
+        cod = prod.split(" - ")[0]
+        mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
+        if not st.session_state['estoque'][mask].empty:
+            idx = st.session_state['estoque'][mask].index[0]
+            st.session_state['estoque'].at[idx, 'Saldo'] += qtd
+            st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
+            salvar_dados(); st.success("Estoque Atualizado!")
