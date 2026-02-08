@@ -473,22 +473,71 @@ elif menu == "🧪 Laudos":
     
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
-            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-            c1, c2 = st.columns(2)
-            data_l = c1.date_input("Data da Coleta")
-            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            if not st.session_state['clientes_db']:
+                st.warning("Cadastre clientes primeiro!")
+            else:
+                cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
+                c1, c2 = st.columns(2)
+                data_l = c1.date_input("Data da Coleta")
+                data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+                
+                if st.form_submit_button("Agendar"):
+                    novo = {
+                        'Cliente': cli_l, 
+                        'Data_Coleta': data_l.strftime("%d/%m/%Y"),
+                        'Data_Resultado': data_r.strftime("%d/%m/%Y"),
+                        'Status': 'Pendente'
+                    }
+                    st.session_state['log_laudos'].append(novo)
+                    salvar_dados()
+                    st.success("✅ Laudo agendado com sucesso!")
+                    st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Editar Previsões e Status")
+    
+    laudos = st.session_state.get('log_laudos', [])
+    if not laudos:
+        st.info("Sem laudos registrados.")
+    else:
+        # Cria DataFrame com ID
+        df_p = pd.DataFrame(laudos)
+        df_p['ID'] = range(len(laudos))
+        
+        # Reordena colunas
+        df_display = df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']].copy()
+        
+        ed_p = st.data_editor(
+            df_display,
+            use_container_width=True, 
+            hide_index=True,
+            disabled=['ID', 'Cliente', 'Data_Coleta'],
+            column_config={
+                "ID": st.column_config.NumberColumn("ID", width=50),
+                "Cliente": st.column_config.TextColumn("Cliente", width=200),
+                "Data_Coleta": st.column_config.TextColumn("Data Coleta (DD/MM/AAAA)", width=150),
+                "Data_Resultado": st.column_config.TextColumn("Prev. Resultado (DD/MM/AAAA)", width=150),
+                "Status": st.column_config.SelectboxColumn(
+                    "Status", 
+                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"],
+                    width=120
+                )
+            }
+        )
+
+        if st.button("💾 SALVAR ALTERAÇÕES"):
+            for idx_row, row in ed_p.iterrows():
+                id_laudo = int(row['ID'])
+                # Encontra o índice correto no session_state
+                for i, laudo in enumerate(st.session_state['log_laudos']):
+                    if i == id_laudo:
+                        st.session_state['log_laudos'][i]['Data_Resultado'] = str(row['Data_Resultado'])
+                        st.session_state['log_laudos'][i]['Status'] = str(row['Status'])
+                        break
             
-            if st.form_submit_button("Agendar"):
-                novo = {
-                    'Cliente': cli_l, 
-                    'Data_Coleta': data_l.strftime("%d/%m/%Y"),  # FORÇA FORMATO BR
-                    'Data_Resultado': data_r.strftime("%d/%m/%Y"),  # FORÇA FORMATO BR
-                    'Status': 'Pendente'
-                }
-                st.session_state['log_laudos'].append(novo)
-                salvar_dados()
-                st.success("Agendado!")
-                st.rerun()
+            salvar_dados()
+            st.success("✅ Dados atualizados com sucesso!")
+            st.rerun()
 
     st.markdown("---")
     st.subheader("📋 Editar Previsões e Status")
@@ -704,5 +753,6 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
 
