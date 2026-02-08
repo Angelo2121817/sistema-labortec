@@ -8,11 +8,10 @@ from fpdf import FPDF
 import os
 import json
 from streamlit_gsheets import GSheetsConnection
-# --- SISTEMA DE SEGURANÇA (IDENTIFICAÇÃO POR SENHA) ---
+# --- SISTEMA DE SEGURANÇA (COM ARTE VISUAL) ---
 from datetime import datetime, timedelta
 
-# Tabela de Usuários e Senhas
-# O sistema vai procurar a senha aqui e descobrir o nome sozinho
+# Senhas dos Operadores
 CREDENCIAIS = {
     "General": "labormetal22",
     "Fabricio": "fabricio2225",
@@ -21,66 +20,89 @@ CREDENCIAIS = {
 }
 
 def obter_saudacao():
-    """Define se é Bom dia, Tarde ou Noite (Horário Brasil)"""
     hora = (datetime.utcnow() - timedelta(hours=3)).hour
     if 5 <= hora < 12: return "Bom dia"
     elif 12 <= hora < 18: return "Boa tarde"
     else: return "Boa noite"
 
 def verificar_senha():
-    """Tela de Login: Identifica o usuário apenas pela senha"""
+    """Tela de Login com Design Labortec & Metal Química"""
     if "autenticado" not in st.session_state:
         st.session_state["autenticado"] = False
         st.session_state["usuario_nome"] = ""
 
     if not st.session_state["autenticado"]:
-        st.markdown("<h2 style='text-align: center;'>🔐 Labortec - Acesso Restrito</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Digite seu código pessoal para liberar o sistema.</p>", unsafe_allow_html=True)
-        st.markdown("---")
-        
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            # Apenas pede a senha
-            senha_digitada = st.text_input("Senha de Acesso:", type="password")
+        # --- ARTE DA TELA DE LOGIN ---
+        st.markdown("""
+            <style>
+                .login-container {
+                    background-color: #f0f2f6;
+                    padding: 30px;
+                    border-radius: 15px;
+                    border: 2px solid #d6d6d6;
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+                .titulo-principal {
+                    color: #1f1f1f;
+                    font-size: 28px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                }
+                .sub-logos {
+                    display: flex;
+                    justify-content: center;
+                    gap: 20px;
+                    font-size: 18px;
+                    font-weight: bold;
+                }
+                .labortec { color: #004aad; } /* Azul Labortec */
+                .metal { color: #d35400; }    /* Laranja Metal */
+            </style>
             
-            if st.button("🚀 ACESSAR", type="primary", use_container_width=True):
+            <div class="login-container">
+                <div class="titulo-principal">🔐 SISTEMA INTEGRADO</div>
+                <div class="sub-logos">
+                    <span class="labortec">🧪 LABORTEC CONSULTORIA</span>
+                    <span>|</span>
+                    <span class="metal">⚙️ METAL QUÍMICA</span>
+                </div>
+                <p style="margin-top: 15px; color: #555;">Área Restrita aos Operadores</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # --- CAMPO DE SENHA ---
+        c1, c2, c3 = st.columns([1,2,1])
+        with c2:
+            senha = st.text_input("🔑 Digite seu Código de Acesso:", type="password")
+            
+            if st.button("🚀 ENTRAR NO SISTEMA", type="primary", use_container_width=True):
                 usuario_encontrado = None
-                
-                # O DETETIVE: Procura a senha no banco de dados
                 for nome, senha_real in CREDENCIAIS.items():
-                    if senha_digitada == senha_real:
+                    if senha == senha_real:
                         usuario_encontrado = nome
-                        break # Achou! Para de procurar.
+                        break
                 
                 if usuario_encontrado:
                     st.session_state["autenticado"] = True
                     st.session_state["usuario_nome"] = usuario_encontrado
-                    st.toast(f"Identidade Confirmada: {usuario_encontrado}", icon="✅")
+                    st.toast(f"Acesso Liberado: {usuario_encontrado}", icon="🔓")
                     st.rerun()
                 else:
-                    st.error("⛔ Senha não identificada. Tente novamente.")
+                    st.error("⛔ Acesso Negado: Código inválido.")
         return False
     
-    # Se já estiver logado, mostra a saudação no menu lateral
-    else:
-        try:
-            st.sidebar.success(f"👋 **{obter_saudacao()}, {st.session_state['usuario_nome']}!**")
-        except: pass
-        return True
+    return True
 
 # --- EXECUÇÃO DO LOGIN ---
 if not verificar_senha():
-    st.stop() # Trava o sistema aqui se não estiver logado
+    st.stop()
 
-# --- CONFIGURAÇÃO INICIAL (ÍCONE DE QUÍMICA 🧪) ---
-st.set_page_config(page_title="Sistema Integrado v55", layout="wide", page_icon="🧪")
-
-# --- ARQUIVO DE BANCO DE DADOS ---
-# --- CONEXÃO COM O GOOGLE SHEETS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-def carregar_dados():
+# --- BARRA LATERAL (APÓS LOGIN) ---
+if st.session_state["autenticado"]:
     try:
+        st.sidebar.success(f"👋 **{obter_saudacao()}, {st.session_state['usuario_nome']}!**")
+    except: pass
         # Carrega Estoque
         df_est = conn.read(worksheet="Estoque", ttl="0")
         if not df_est.empty: st.session_state['estoque'] = df_est
@@ -1033,6 +1055,7 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
 
 
