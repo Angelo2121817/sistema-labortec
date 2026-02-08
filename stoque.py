@@ -402,22 +402,10 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
 
-# ==============================================================================
-# 7. PÁGINAS DO SISTEMA
-# ==============================================================================
-
-# ==============================================================================
-# 7. PÁGINAS DO SISTEMA
-# ==============================================================================
-
-# ==============================================================================
-# 7. PÁGINAS DO SISTEMA
-# ==============================================================================
-
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     
-    # --- 1. ALERTA GERAL (MANTIDO) ---
+    # --- ALERTA GERAL (O ALTO-FALANTE PISCANTE) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
         <style>
@@ -437,17 +425,18 @@ if menu == "📊 Dashboard":
         <div class="alert-blink"><span>📢</span><span>{st.session_state['aviso_geral']}</span></div>
         """, unsafe_allow_html=True)
 
-    # --- 2. RADAR DE LAUDOS (MANTIDO) ---
     st.markdown("---")
-    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; border-left: 5px solid #1e3d59; padding-left: 10px;'>📡 RADAR DE LAUDOS (PENDENTES)</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 MONITORAMENTO DE LAUDOS</h4>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
-    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
+    # Filtra apenas os pendentes (exclui arquivados)
+    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) != "Arquivado" and str(l.get("Status", "Pendente")) != "Cancelado"]
 
     if not ativos:
         st.success("✅ Tudo limpo! Nenhuma missão pendente.")
     else:
         items_html = ""
+        # Garante que o carrossel tenha itens suficientes para rodar bonito
         lista_loop = ativos * (4 if len(ativos) < 4 else 1)
         
         for l in lista_loop:
@@ -457,64 +446,162 @@ if menu == "📊 Dashboard":
 
             items_html += f"""
             <div class="card">
-                <div class="card-header" title="{cliente}">🏢 {cliente}</div>
-                <div class="card-body">
-                    <div class="data-group"><span class="label">📅 COLETA</span><span class="value-coleta">{coleta}</span></div>
-                    <div class="divider"></div>
-                    <div class="data-group"><span class="label">🧪 PREVISÃO</span><span class="value-result">{resultado}</span></div>
+                <div class="card-header" title="{cliente}">
+                    🏢 {cliente}
                 </div>
-                <div class="card-footer"><span class="status-pill">⏳ EM ANÁLISE</span></div>
+                <div class="card-body">
+                    <div class="data-group">
+                        <span class="label">📅 COLETA</span>
+                        <span class="value-coleta">{coleta}</span>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="data-group">
+                        <span class="label">🧪 PREVISÃO</span>
+                        <span class="value-result">{resultado}</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="status-pill">⏳ EM ANÁLISE</span>
+                </div>
             </div>
             """
 
         carousel_component = f"""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+            
             .carousel-wrapper {{ overflow: hidden; width: 100%; padding: 10px 0 30px 0; }}
             .carousel-track {{ display: flex; width: max-content; animation: scroll {max(30, len(ativos)*8)}s linear infinite; }}
             .carousel-track:hover {{ animation-play-state: paused; }}
             @keyframes scroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
-            .card {{ width: 260px; flex-shrink: 0; margin-right: 25px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-family: 'Inter', sans-serif; overflow: hidden; border: 1px solid #e2e8f0; transition: transform 0.3s; }}
-            .card:hover {{ transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }}
-            .card-header {{ background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%); color: white; padding: 12px 15px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 3px solid #ffb400; }}
-            .card-body {{ padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }}
-            .data-group {{ display: flex; flex-direction: column; align-items: center; flex: 1; }}
-            .divider {{ width: 1px; height: 30px; background: #cbd5e1; margin: 0 10px; }}
-            .label {{ font-size: 10px; color: #64748b; font-weight: 800; margin-bottom: 4px; }}
-            .value-coleta {{ font-size: 14px; font-weight: 700; color: #334155; }}
-            .value-result {{ font-size: 14px; font-weight: 700; color: #059669; }}
-            .card-footer {{ background: #ffffff; padding: 10px; text-align: center; border-top: 1px solid #f1f5f9; }}
-            .status-pill {{ background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }}
+            
+            /* CARD DESIGN "OPERACIONAL" */
+            .card {{
+                width: 260px;
+                flex-shrink: 0;
+                margin-right: 25px;
+                background: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1);
+                font-family: 'Inter', sans-serif;
+                overflow: hidden;
+                border: 1px solid #e2e8f0;
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }}
+            
+            .card:hover {{
+                transform: translateY(-5px);
+                box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+                border-color: #cbd5e1;
+            }}
+
+            /* CABEÇALHO ESCURO */
+            .card-header {{
+                background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%);
+                color: white;
+                padding: 12px 15px;
+                font-weight: 600;
+                font-size: 14px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                border-bottom: 3px solid #ffb400; /* Linha dourada tática */
+            }}
+
+            .card-body {{
+                padding: 15px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background: #f8fafc;
+            }}
+
+            .data-group {{
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                flex: 1;
+            }}
+
+            .divider {{
+                width: 1px;
+                height: 30px;
+                background: #cbd5e1;
+                margin: 0 10px;
+            }}
+
+            .label {{
+                font-size: 10px;
+                color: #64748b;
+                font-weight: 800;
+                letter-spacing: 0.5px;
+                margin-bottom: 4px;
+            }}
+
+            .value-coleta {{
+                font-size: 14px;
+                font-weight: 700;
+                color: #334155;
+            }}
+
+            .value-result {{
+                font-size: 14px;
+                font-weight: 700;
+                color: #059669; /* Verde Esmeralda */
+            }}
+
+            .card-footer {{
+                background: #ffffff;
+                padding: 10px;
+                text-align: center;
+                border-top: 1px solid #f1f5f9;
+            }}
+
+            .status-pill {{
+                background: #e0f2fe;
+                color: #0369a1;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 4px 12px;
+                border-radius: 20px;
+                display: inline-block;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+
         </style>
         <div class="carousel-wrapper"><div class="carousel-track">{items_html}</div></div>
         """
         components.html(carousel_component, height=220)
 
-    # --- 3. NOVASMÉTRICAS (VISUALIZAÇÃO DE DADOS) ---
+    # --- MÉTRICAS ESTRATÉGICAS (NOVAS) ---
     
     # A) ALERTA DE ESTOQUE CRÍTICO
     st.markdown("<h4 style='text-align: left; color: #555; margin-top: 20px; border-left: 5px solid #d32f2f; padding-left: 10px;'>🚨 MUNIÇÃO BAIXA (Reposição Imediata)</h4>", unsafe_allow_html=True)
     
     df_est = st.session_state.get('estoque')
     if df_est is not None and not df_est.empty:
-        # Filtra onde Saldo < Minimo e Minimo > 0
-        criticos = df_est[
-            (pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0) < pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)) & 
-            (pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0) > 0)
-        ].copy()
-        
-        if not criticos.empty:
-            st.dataframe(
-                criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], 
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Saldo": st.column_config.NumberColumn("Atuais", format="%.2f"),
-                    "Estoque_Minimo": st.column_config.NumberColumn("Mínimo", format="%.0f")
-                }
-            )
-        else:
-            st.info("👍 Estoque operacional! Nenhum item crítico.")
+        # Garante numérico antes de comparar
+        try:
+            saldo_num = pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0)
+            min_num = pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)
+            
+            criticos = df_est[ (saldo_num < min_num) & (min_num > 0) ].copy()
+            
+            if not criticos.empty:
+                st.dataframe(
+                    criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], 
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Saldo": st.column_config.NumberColumn("Atuais", format="%.2f"),
+                        "Estoque_Minimo": st.column_config.NumberColumn("Mínimo", format="%.0f")
+                    }
+                )
+            else:
+                st.info("👍 Estoque operacional! Nenhum item crítico.")
+        except:
+            st.info("Dados de estoque insuficientes para cálculo.")
     
     st.markdown("---")
 
@@ -545,6 +632,54 @@ if menu == "📊 Dashboard":
         else:
             st.caption("Sem dados de produtos.")
 
+# --- LAUDOS RESTAURADOS ---
+elif menu == "🧪 Laudos":
+    st.title("🧪 Gestão de Laudos")
+    with st.expander("📅 Agendar Nova Coleta", expanded=True):
+        with st.form("f_laudo"):
+            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
+            c1, c2 = st.columns(2)
+            data_l = c1.date_input("Data da Coleta")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            if st.form_submit_button("Agendar"):
+                novo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'}
+                st.session_state['log_laudos'].append(novo)
+                salvar_dados()
+                st.success("Agendado!")
+                st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Editar Previsões e Status")
+    laudos = st.session_state.get('log_laudos', [])
+    # Filtra para não mostrar arquivados na edição rápida
+    laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
+    
+    if not laudos_ativos: 
+        st.info("Sem laudos ativos.")
+    else:
+        df_p = pd.DataFrame(laudos)
+        # Cria ID para editar a lista original corretamente
+        df_p['ID_Real'] = range(len(laudos))
+        # Filtra visualmente
+        df_view = df_p[df_p['Status'] != 'Arquivado'].copy()
+        
+        ed_p = st.data_editor(
+            df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
+            use_container_width=True, hide_index=True, disabled=['ID_Real', 'Cliente'],
+            column_config={
+                "Data_Coleta": st.column_config.TextColumn("Coleta (dd/mm/aaaa)"),
+                "Data_Resultado": st.column_config.TextColumn("Resultado (dd/mm/aaaa)"),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Análise", "Concluído", "Cancelado"])
+            }
+        )
+        if st.button("💾 SALVAR ALTERAÇÕES"):
+            for _, row in ed_p.iterrows():
+                idx = int(row['ID_Real'])
+                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta'])
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado'])
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            salvar_dados(); st.success("Atualizado!"); st.rerun()
+
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
     if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
@@ -571,16 +706,21 @@ elif menu == "💰 Vendas & Orçamentos":
                 pdf = criar_doc_pdf(vend, cli, d_cli, itens_sel.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
                 st.download_button("📥 Baixar", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
         with c_ped:
-            origem = st.radio("Origem?", ["METAL QUÍMICA", "INDEPENDENTE"], horizontal=True)
+            origem = st.radio("Origem?", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
             if st.button("✅ CONFIRMAR", type="primary", use_container_width=True):
                 pdf = criar_doc_pdf(vend, cli, d_cli, itens_sel.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
                 if "METAL" in origem:
                     for _, row in itens_sel.iterrows():
-                        idxs = st.session_state['estoque'][st.session_state['estoque']['Cod'] == row['Cod']].index
-                        if len(idxs) > 0: st.session_state['estoque'].at[idxs[0], 'Saldo'] -= row['Qtd']
+                        mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
+                        if not st.session_state['estoque'][mask].empty:
+                            idx = st.session_state['estoque'][mask].index[0]
+                            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
                     st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
                     salvar_dados(); st.success("Venda Registrada!")
-                else: st.success("Venda Registrada!")
+                else: 
+                    st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários (Indep)', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
+                    salvar_dados(); st.success("Venda Registrada!")
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
 
 elif menu == "👥 Clientes":
@@ -667,17 +807,23 @@ elif menu == "👥 Clientes":
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral")
     if not st.session_state["estoque"].empty:
-        st.session_state["estoque"]["Saldo"] = pd.to_numeric(st.session_state["estoque"]["Saldo"], errors='coerce').fillna(0)
+        # Blindagem Numérica
+        for col in ["Saldo", "Estoque_Minimo"]:
+            if col in st.session_state["estoque"].columns:
+                st.session_state["estoque"][col] = pd.to_numeric(st.session_state["estoque"][col], errors='coerce').fillna(0)
+            else:
+                st.session_state["estoque"][col] = 0.0
 
     def estilo_saldo(val): return 'background-color: #d4edda; color: #155724; font-weight: 900; border: 1px solid #c3e6cb'
     try: df_styled = st.session_state["estoque"].style.map(estilo_saldo, subset=["Saldo"])
     except: df_styled = st.session_state["estoque"]
 
     ed = st.data_editor(
-        df_styled, use_container_width=True, num_rows="dynamic", key="editor_estoque_v4",
+        df_styled, use_container_width=True, num_rows="dynamic", key="editor_estoque_v5",
         column_config={
             "Saldo": st.column_config.NumberColumn("✅ SALDO (KG)", format="%.2f", step=1),
-            "Preco_Base": None, "Estoque_Inicial": None, "Estoque_Minimo": None
+            "Estoque_Minimo": st.column_config.NumberColumn("🚨 Mínimo", format="%.0f", step=1),
+            "Preco_Base": None, "Estoque_Inicial": None
         }
     )
     if not ed.equals(st.session_state["estoque"]): st.session_state["estoque"] = ed; salvar_dados()
@@ -687,77 +833,48 @@ elif menu == "📦 Estoque":
 # ==============================================================================
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência Tática")
-    
-    # Abas para organizar o front
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos & Arquivamento"])
 
-    # --- ABA VENDAS ---
     with tab1:
         if st.session_state.get('log_vendas'):
-            df = pd.DataFrame(st.session_state['log_vendas'])
-            st.dataframe(df.iloc[::-1], use_container_width=True)
-        else:
-            st.info("Nenhuma venda registrada.")
+            st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True)
+        else: st.info("Nenhuma venda.")
 
-    # --- ABA ENTRADAS ---
     with tab2:
         if st.session_state.get('log_entradas'):
-            df = pd.DataFrame(st.session_state['log_entradas'])
-            st.dataframe(df.iloc[::-1], use_container_width=True)
-        else:
-            st.info("Nenhuma entrada registrada.")
+            st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True)
+        else: st.info("Nenhuma entrada.")
 
-    # --- ABA LAUDOS (AQUI ESTÁ A NOVIDADE) ---
     with tab3:
         laudos = st.session_state.get('log_laudos', [])
-        
-        # Filtros
         pendentes = [l for l in laudos if l.get('Status') != 'Arquivado']
         arquivados = [l for l in laudos if l.get('Status') == 'Arquivado']
 
         st.subheader(f"⚠️ Pendentes: {len(pendentes)}")
-        
-        if not pendentes:
-            st.success("Nada pendente. A mesa está limpa, General!")
+        if not pendentes: st.success("Mesa limpa!")
         else:
-            # Lista os pendentes com botão de ação
             for i, item in enumerate(laudos):
-                # Só mostra se NÃO estiver arquivado
                 if item.get('Status') != 'Arquivado':
-                    
-                    # Cartão Expansível para cada Laudo
-                    with st.expander(f"📄 {item['Cliente']} | Coleta: {item['Data_Coleta']}"):
+                    with st.expander(f"📄 {item['Cliente']} | {item['Data_Coleta']}"):
                         c1, c2 = st.columns([2, 1])
-                        
-                        # Coluna 1: Dados
                         c1.write(f"**Previsão:** {item.get('Data_Resultado', '-')}")
-                        c1.write(f"**Status Atual:** {item.get('Status', 'Pendente')}")
-                        link_drive = c1.text_input("🔗 Link do PDF (Google Drive/Nuvem):", key=f"link_{i}", placeholder="Cole o link aqui se quiser...")
-
-                        # Coluna 2: Ação
-                        c2.write("") # Espaço para alinhar
-                        c2.write("") 
-                        if c2.button("📂 ARQUIVAR / CONCLUIR", key=f"btn_arq_{i}", type="primary"):
-                            # AÇÃO DE ARQUIVAMENTO
+                        c1.write(f"**Status:** {item.get('Status', 'Pendente')}")
+                        link_drive = c1.text_input("🔗 Link Arquivo:", key=f"link_{i}")
+                        c2.write(""); c2.write("")
+                        if c2.button("📂 ARQUIVAR", key=f"btn_arq_{i}", type="primary"):
                             st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
                             st.session_state['log_laudos'][i]['Link_Arquivo'] = link_drive
                             st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
-                            
-                            salvar_dados()
-                            st.toast("Laudo arquivado com sucesso!", icon="🗄️")
-                            st.rerun()
+                            salvar_dados(); st.toast("Arquivado!"); st.rerun()
 
         st.markdown("---")
-        
-        # Área de Histórico (Expansível para não poluir)
-        with st.expander(f"🗄️ Ver Arquivo Morto ({len(arquivados)})"):
+        with st.expander(f"🗄️ Arquivo Morto ({len(arquivados)})"):
             if arquivados:
                 df_arq = pd.DataFrame(arquivados)
-                # Mostra colunas úteis
                 cols_show = [c for c in ['Cliente', 'Data_Coleta', 'Data_Arquivamento', 'Link_Arquivo'] if c in df_arq.columns]
                 st.dataframe(df_arq[cols_show], use_container_width=True)
-            else:
-                st.info("O arquivo morto está vazio.")
+            else: st.info("Vazio.")
+
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
     if st.session_state['estoque'].empty: st.warning("Sem produtos!"); st.stop()
@@ -769,11 +886,7 @@ elif menu == "📥 Entrada de Estoque":
         mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
         if not st.session_state['estoque'][mask].empty:
             idx = st.session_state['estoque'][mask].index[0]
-            st.session_state['estoque'].at[idx, 'Saldo'] += qtd
+            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+            st.session_state['estoque'].at[idx, 'Saldo'] = atual + float(qtd)
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
-
-
-
-
-
