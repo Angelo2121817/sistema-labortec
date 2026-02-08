@@ -129,7 +129,6 @@ def carregar_dados():
             try:
                 df = conn.read(worksheet=aba, ttl="0")
                 if not df.empty: 
-                    # Proteção: Garantir campos em laudos antigos
                     if aba == "Log_Laudos":
                         if 'Data_Resultado' not in df.columns: df['Data_Resultado'] = 'Não definida'
                         if 'Status' not in df.columns: df['Status'] = 'Pendente'
@@ -161,7 +160,7 @@ if 'estoque' not in st.session_state:
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 
 # ==============================================================================
-# 4. TEMAS E CSS (SIMETRIA E SOFISTICAÇÃO)
+# 4. TEMAS E CSS
 # ==============================================================================
 def aplicar_tema(escolha):
     css = """
@@ -351,7 +350,6 @@ elif menu == "🧪 Laudos":
                 salvar_dados(); st.success("Agendado!"); st.rerun()
     st.markdown("---"); st.subheader("📋 Laudos Pendentes (Edição de Previsão)")
     laudos = st.session_state.get('log_laudos', [])
-    # Proteção: Garantir que todos os laudos tenham os campos necessários antes de criar o DataFrame
     for l in laudos:
         if 'Data_Resultado' not in l: l['Data_Resultado'] = 'Não definida'
         if 'Status' not in l: l['Status'] = 'Pendente'
@@ -360,16 +358,15 @@ elif menu == "🧪 Laudos":
     else:
         df_p = pd.DataFrame([laudos[i] for i in pendentes])
         df_p['ID_Orig'] = pendentes
-        # Garante a ordem das colunas para evitar o KeyError
         cols_edit = ['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']
-        for col in cols_edit:
-            if col not in df_p.columns: df_p[col] = ""
         ed_p = st.data_editor(df_p[cols_edit], use_container_width=True, hide_index=True, disabled=['ID_Orig', 'Cliente', 'Data_Coleta'])
         if st.button("💾 ATUALIZAR DATAS/STATUS"):
+            # Atualiza o session_state diretamente com os novos valores da tabela
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Orig'])
                 st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
                 st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            # Salva na nuvem e força recarregamento total para o Dashboard
             salvar_dados(); st.success("Dados atualizados!"); st.rerun()
 
 elif menu == "📦 Produtos":
