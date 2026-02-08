@@ -18,7 +18,7 @@ def verificar_senha():
         senha = st.text_input("Digite a Senha de Acesso:", type="password")
         if st.button("Entrar"):
             # DEFINA SUA SENHA AQUI: Troque 'labormetal22' pela senha que quiser
-            if senha == "labortec2026":
+            if senha == "labormetal22":
                 st.session_state["autenticado"] = True
                 st.rerun()
             else:
@@ -879,5 +879,6 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
 
