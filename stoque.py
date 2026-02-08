@@ -128,7 +128,12 @@ def carregar_dados():
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
             try:
                 df = conn.read(worksheet=aba, ttl="0")
-                if not df.empty: st.session_state[aba.lower()] = df.to_dict('records')
+                if not df.empty: 
+                    # Proteção: Garantir campos em laudos antigos
+                    if aba == "Log_Laudos":
+                        if 'Data_Resultado' not in df.columns: df['Data_Resultado'] = 'Não definida'
+                        if 'Status' not in df.columns: df['Status'] = 'Pendente'
+                    st.session_state[aba.lower()] = df.to_dict('records')
             except: st.session_state[aba.lower()] = []
         return True
     except: return False
@@ -161,7 +166,6 @@ if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 def aplicar_tema(escolha):
     css = """
     <style>
-        /* Efeito Neon Pulsante */
         @keyframes neonPulse {
             0% { text-shadow: 0 0 5px #ff4b4b, 0 0 10px #ff4b4b; color: #ff4b4b; }
             50% { text-shadow: 0 0 20px #ff4b4b, 0 0 30px #ff4b4b; color: #ff0000; }
@@ -172,59 +176,17 @@ def aplicar_tema(escolha):
             50% { text-shadow: 0 0 20px #4bff4b, 0 0 30px #4bff4b; color: #00ff00; }
             100% { text-shadow: 0 0 5px #4bff4b, 0 0 10px #4bff4b; color: #4bff4b; }
         }
-        .neon-date {
-            font-weight: bold;
-            animation: neonPulse 2s infinite;
-            font-size: 1.1em;
-            display: inline-block;
-        }
-        .neon-result {
-            font-weight: bold;
-            animation: neonPulseGreen 2s infinite;
-            font-size: 1.1em;
-            display: inline-block;
-        }
-        .prevista-label {
-            font-size: 0.9em;
-            color: #555;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-        /* Card de Coleta Simétrico */
+        .neon-date { font-weight: bold; animation: neonPulse 2s infinite; font-size: 1.1em; display: inline-block; }
+        .neon-result { font-weight: bold; animation: neonPulseGreen 2s infinite; font-size: 1.1em; display: inline-block; }
+        .prevista-label { font-size: 0.9em; color: #555; font-weight: bold; margin-bottom: 2px; }
         .coleta-card {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            border-left: 5px solid #ff4b4b;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            height: 200px; /* Aumentado para acomodar nova data */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            transition: transform 0.3s;
-            overflow: hidden;
+            background: white; padding: 20px; border-radius: 15px; border-left: 5px solid #ff4b4b;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; height: 200px;
+            display: flex; flex-direction: column; justify-content: center; transition: transform 0.3s; overflow: hidden;
         }
-        .coleta-card:hover {
-            transform: translateY(-5px);
-        }
-        .coleta-cliente {
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #1e3d59;
-            margin-bottom: 10px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        /* Centralizar Título */
-        .centered-title {
-            text-align: center;
-            color: #1e3d59;
-            font-weight: bold;
-            padding: 20px 0;
-            font-size: 2.5em;
-        }
+        .coleta-card:hover { transform: translateY(-5px); }
+        .coleta-cliente { font-size: 1.1em; font-weight: bold; color: #1e3d59; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .centered-title { text-align: center; color: #1e3d59; font-weight: bold; padding: 20px 0; font-size: 2.5em; }
     </style>
     """
     if escolha == "⚪ Padrão (Clean)": css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
@@ -238,8 +200,7 @@ def aplicar_tema(escolha):
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        if os.path.exists("labortec.jpg"):
-            self.image("labortec.jpg", x=10, y=8, w=48)
+        if os.path.exists("labortec.jpg"): self.image("labortec.jpg", x=10, y=8, w=48)
         offset_y = 10 
         self.set_font('Arial', 'B', 19); self.set_xy(65, 10 + offset_y); self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
         self.set_font('Arial', 'B', 19); self.set_xy(110, 10 + offset_y); titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO'); self.cell(90, 10, titulo_doc, 0, 1, 'R')
@@ -249,7 +210,6 @@ class PDF(FPDF):
         self.set_xy(110, 25 + offset_y); vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema'); self.cell(90, 5, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
         self.set_xy(65, 30 + offset_y); self.cell(100, 5, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
         self.line(10, 40 + offset_y, 200, 40 + offset_y); self.set_y(48 + offset_y)
-
     def footer(self):
         self.set_y(-25); self.set_font('Arial', 'I', 7)
         self.cell(0, 4, 'Obs.: FRETE NÃO INCLUSO. PROPOSTA VÁLIDA POR 5 DIAS.', 0, 1, 'C')
@@ -283,8 +243,7 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 # ==============================================================================
 st.sidebar.title("🛠️ MENU")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
-opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"]
-tema_sel = st.sidebar.selectbox("Tema:", opcoes_temas)
+tema_sel = st.sidebar.selectbox("Tema:", ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"])
 aplicar_tema(tema_sel)
 menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Produtos", "📋 Conferência Geral", "👥 Clientes"])
 
@@ -294,19 +253,13 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
-    
-    # Radar de Coletas Simétrico
     st.subheader("📡 Radar de Coletas Estratégicas")
     laudos = st.session_state.get('log_laudos', [])
     laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
-    
-    if not laudos_pendentes:
-        st.success("✅ Nenhuma coleta pendente no radar.")
+    if not laudos_pendentes: st.success("✅ Nenhuma coleta pendente no radar.")
     else:
         try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
         except: pass
-        
-        # Exibição em Cards Simétricos
         cols_radar = st.columns(4)
         for i, l in enumerate(laudos_pendentes[:8]): 
             with cols_radar[i % 4]:
@@ -322,9 +275,7 @@ if menu == "📊 Dashboard":
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True); st.markdown("---")
     st.subheader("📈 Métricas de Performance")
     c1, c2, c3 = st.columns(3)
     c1.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
@@ -389,8 +340,6 @@ elif menu == "👥 Clientes":
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
-    
-    # Seção 1: Agendamento
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
@@ -398,35 +347,24 @@ elif menu == "🧪 Laudos":
             data_l = c1.date_input("Data da Coleta")
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
             if st.form_submit_button("Agendar"):
-                st.session_state['log_laudos'].append({
-                    'Cliente': cli_l, 
-                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
-                    'Data_Resultado': data_r.strftime("%d/%m/%Y"),
-                    'Status': 'Pendente'
-                })
+                st.session_state['log_laudos'].append({'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'})
                 salvar_dados(); st.success("Agendado!"); st.rerun()
-
-    # Seção 2: Edição de Pendentes
-    st.markdown("---")
-    st.subheader("📋 Laudos Pendentes (Edição de Previsão)")
+    st.markdown("---"); st.subheader("📋 Laudos Pendentes (Edição de Previsão)")
     laudos = st.session_state.get('log_laudos', [])
+    # Proteção: Garantir que todos os laudos tenham os campos necessários antes de criar o DataFrame
+    for l in laudos:
+        if 'Data_Resultado' not in l: l['Data_Resultado'] = 'Não definida'
+        if 'Status' not in l: l['Status'] = 'Pendente'
     pendentes = [i for i, l in enumerate(laudos) if l.get('Status', 'Pendente') == 'Pendente']
-    
-    if not pendentes:
-        st.info("Nenhum laudo pendente para edição.")
+    if not pendentes: st.info("Nenhum laudo pendente para edição.")
     else:
         df_p = pd.DataFrame([laudos[i] for i in pendentes])
-        # Adiciona o índice original para controle
         df_p['ID_Orig'] = pendentes
-        
-        # Editor de dados para atualizar datas
-        ed_p = st.data_editor(
-            df_p[['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']], 
-            use_container_width=True, 
-            hide_index=True,
-            disabled=['ID_Orig', 'Cliente', 'Data_Coleta']
-        )
-        
+        # Garante a ordem das colunas para evitar o KeyError
+        cols_edit = ['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']
+        for col in cols_edit:
+            if col not in df_p.columns: df_p[col] = ""
+        ed_p = st.data_editor(df_p[cols_edit], use_container_width=True, hide_index=True, disabled=['ID_Orig', 'Cliente', 'Data_Coleta'])
         if st.button("💾 ATUALIZAR DATAS/STATUS"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Orig'])
