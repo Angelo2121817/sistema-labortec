@@ -372,16 +372,18 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 # ==============================================================================
 # 6. MENU LATERAL E TEMAS
 # ==============================================================================
+# ==============================================================================
+# 6. MENU LATERAL E TEMAS
+# ==============================================================================
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
-# --- SISTEMA DE AVISOS (NOVO) ---
+# --- SISTEMA DE AVISOS (TEXTO CORRIGIDO) ---
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
-with st.sidebar.expander("📢 DEFINIR AVISO GERAL"):
-    aviso_txt = st.text_area("Mensagem para a Tropa:", 
-                             value=st.session_state['aviso_geral'], 
-                             height=100)
+with st.sidebar.expander("📢 DEFINIR AVISO"):
+    # Mudado de "Mensagem para a Tropa" para "Mensagem do Mural"
+    aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
     c_salv, c_limp = st.columns(2)
     if c_salv.button("💾 Gravar"):
         st.session_state['aviso_geral'] = aviso_txt
@@ -397,7 +399,6 @@ tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
 aplicar_tema(tema_sel)
 
 menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", "📦 Estoque", "📋 Conferência Geral", "👥 Clientes"])
-
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
@@ -890,3 +891,4 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] = atual + float(qtd)
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
