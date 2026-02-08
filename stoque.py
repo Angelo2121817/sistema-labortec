@@ -620,47 +620,43 @@ elif menu == "👥 Clientes":
             st.rerun()
 
 elif menu == "📦 Estoque":
-    st.title("📦 Estoque")
+    st.title("📦 Estoque Geral")
     
-    # 1. Garante que o Saldo é número
+    # 1. Garante numérico
     if not st.session_state["estoque"].empty:
         st.session_state["estoque"]["Saldo"] = pd.to_numeric(st.session_state["estoque"]["Saldo"], errors='coerce').fillna(0)
 
-    # 2. Estilização: Fundo VERDE e Texto VERDE ESCURO
+    # 2. Estilo: Verde Tático
     def estilo_saldo(val):
-        # background-color: #d4edda (Verde Claro)
-        # color: #155724 (Verde Escuro)
         return 'background-color: #d4edda; color: #155724; font-weight: 900; border: 1px solid #c3e6cb'
 
-    # Aplica o estilo
-    # Nota: O st.data_editor suporta estilos de forma limitada, mas vamos tentar manter sua lógica
     try:
         df_styled = st.session_state["estoque"].style.map(estilo_saldo, subset=["Saldo"])
     except:
-        df_styled = st.session_state["estoque"] # Se der erro no estilo, mostra normal
+        df_styled = st.session_state["estoque"]
 
-    # 3. Editor de Dados
+    # 3. Editor (Com colunas Ocultas)
     ed = st.data_editor(
         df_styled, 
         use_container_width=True, 
         num_rows="dynamic",
-        key="editor_estoque_v2", # Mudei a key para forçar atualização visual
+        key="editor_estoque_v3",
         column_config={
+            # Colunas que a gente quer ver bonitas:
             "Saldo": st.column_config.NumberColumn(
-                "✅ SALDO (KG)",  # Mudei emoji para Check Verde
-                help="Quantidade em estoque (KG)",
+                "✅ SALDO (KG)", 
+                help="Quantidade atual",
                 format="%.2f",
                 step=1,
             ),
-             "Preco_Base": st.column_config.NumberColumn(
-                "💰 Preço Base",
-                format="R$ %.2f"
-            )
+            # COLUNAS QUE VOCÊ PEDIU PARA TIRAR (Define como None para ocultar)
+            "Preco_Base": None,     # Oculto (mas existe para o cálculo de vendas)
+            "Estoque_Inicial": None, # Oculto
+            "Estoque_Minimo": None   # Se quiser tirar o mínimo também, deixe None. Se quiser ver, apague essa linha.
         }
     )
     
-    # Salvar se houver alteração
-    # Compara ignorando indices/estilos para garantir que salvamos os DADOS
+    # Salvar
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
         salvar_dados()
@@ -705,4 +701,5 @@ elif menu == "📥 Entrada":
                 st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
                 salvar_dados()
                 st.rerun()
+
 
