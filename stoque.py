@@ -82,6 +82,10 @@ except:
     st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud.")
     st.stop()
 
+# Inicializar versão do Dashboard para forçar re-renderização
+if 'dash_version' not in st.session_state:
+    st.session_state['dash_version'] = 0
+
 # ==============================================================================
 # 2. SEGURANÇA E LOGIN
 # ==============================================================================
@@ -134,6 +138,7 @@ def carregar_dados():
                         if 'Status' not in df.columns: df['Status'] = 'Pendente'
                     st.session_state[aba.lower()] = df.to_dict('records')
             except: st.session_state[aba.lower()] = []
+        st.session_state['dash_version'] += 1 # Incrementa versão ao carregar
         return True
     except: return False
 
@@ -146,6 +151,7 @@ def salvar_dados():
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state['log_vendas']))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state['log_entradas']))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state['log_laudos']))
+        st.session_state['dash_version'] += 1 # Incrementa versão ao salvar
         st.toast("✅ Nuvem Atualizada!")
     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
@@ -250,42 +256,45 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # PÁGINAS
 # ==============================================================================
 if menu == "📊 Dashboard":
-    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
-    if st.button("🔄 Sincronizar Dados"):
-        carregar_dados()
-        st.rerun()
-    st.markdown("---")
-    st.subheader("📡 Radar de Coletas Estratégicas")
-    
-    # Garantir leitura atualizada
-    laudos = st.session_state.get('log_laudos', [])
-    laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
-    
-    if not laudos_pendentes: st.success("✅ Nenhuma coleta pendente no radar.")
-    else:
-        try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
-        except: pass
-        cols_radar = st.columns(4)
-        for i, l in enumerate(laudos_pendentes[:8]): 
-            with cols_radar[i % 4]:
-                data_res = l.get('Data_Resultado', 'Não definida')
-                st.markdown(f"""
-                <div class="coleta-card">
-                    <div class="coleta-cliente">🏢 {l['Cliente']}</div>
-                    <div class="prevista-label">Data Prevista Coleta:</div>
-                    <div class="neon-date">📅 {l['Data_Coleta']}</div>
-                    <div style="margin-top: 10px;">
-                        <div class="prevista-label">Previsão Resultado:</div>
-                        <div class="neon-result">🧪 {data_res}</div>
+    # O container garante que o Dashboard seja reconstruído quando a versão muda
+    with st.container(key=f"dash_container_{st.session_state['dash_version']}"):
+        st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
+        if st.button("🔄 Sincronizar Agora"):
+            carregar_dados()
+            st.rerun()
+        st.markdown("---")
+        st.subheader("📡 Radar de Coletas Estratégicas")
+        
+        # Leitura direta do session_state garantida
+        laudos_atuais = st.session_state.get('log_laudos', [])
+        laudos_pendentes = [l for l in laudos_atuais if l.get('Status', 'Pendente') == 'Pendente']
+        
+        if not laudos_pendentes: st.success("✅ Nenhuma coleta pendente no radar.")
+        else:
+            try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
+            except: pass
+            cols_radar = st.columns(4)
+            for i, l in enumerate(laudos_pendentes[:8]): 
+                with cols_radar[i % 4]:
+                    data_res = l.get('Data_Resultado', 'Não definida')
+                    st.markdown(f"""
+                    <div class="coleta-card">
+                        <div class="coleta-cliente">🏢 {l['Cliente']}</div>
+                        <div class="prevista-label">Data Prevista Coleta:</div>
+                        <div class="neon-date">📅 {l['Data_Coleta']}</div>
+                        <div style="margin-top: 10px;">
+                            <div class="prevista-label">Previsão Resultado:</div>
+                            <div class="neon-result">🧪 {data_res}</div>
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True); st.markdown("---")
-    st.subheader("📈 Métricas de Performance")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
-    c2.metric("📦 Mix de Produtos", len(st.session_state['estoque']))
-    c3.metric("💰 Volume de Vendas", len(st.session_state['log_vendas']))
+                    """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True); st.markdown("---")
+        st.subheader("📈 Métricas de Performance")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
+        c2.metric("📦 Mix de Produtos", len(st.session_state['estoque']))
+        c3.metric("💰 Volume de Vendas", len(st.session_state['log_vendas']))
+        st.caption(f"Última atualização do sistema: {obter_horario_br().strftime('%H:%M:%S')}")
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
@@ -367,12 +376,13 @@ elif menu == "🧪 Laudos":
         cols_edit = ['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']
         ed_p = st.data_editor(df_p[cols_edit], use_container_width=True, hide_index=True, disabled=['ID_Orig', 'Cliente', 'Data_Coleta'])
         if st.button("💾 ATUALIZAR DATAS/STATUS"):
+            # Atualiza o session_state diretamente
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Orig'])
                 st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
                 st.session_state['log_laudos'][idx]['Status'] = row['Status']
             salvar_dados()
-            carregar_dados() # Força recarregamento imediato
+            st.session_state['dash_version'] += 1 # Força mudança de versão para o Dashboard
             st.success("Dados atualizados!")
             st.rerun()
 
