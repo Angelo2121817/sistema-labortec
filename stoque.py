@@ -210,7 +210,28 @@ def salvar_dados():
             conn.update(worksheet="Clientes", data=df_clis)
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
-        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
+        
+        # GARANTE DATAS BRASILEIRAS NO LOG LAUDOS ANTES DE SALVAR
+        laudos_df = pd.DataFrame(st.session_state.get("log_laudos", []))
+        if not laudos_df.empty:
+            # Tenta converter colunas de data para string DD/MM/YYYY se estiverem como data
+            for col in ['Data_Coleta', 'Data_Resultado']:
+                if col in laudos_df.columns:
+                    # Converte para string e depois tenta forçar formato
+                    laudos_df[col] = laudos_df[col].astype(str)
+                    
+                    # Corrige datas YYYY-MM-DD para DD/MM/YYYY
+                    def fix_date(d):
+                        try:
+                            if "-" in d and d.index("-") == 4: # Formato 2024-05-10
+                                return datetime.strptime(d[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                            return d
+                        except:
+                            return d
+                    
+                    laudos_df[col] = laudos_df[col].apply(fix_date)
+
+        conn.update(worksheet="Log_Laudos", data=laudos_df)
         st.toast("✅ Sincronizado!")
     except Exception:
         st.error("Erro ao salvar")
@@ -380,8 +401,19 @@ if menu == "📊 Dashboard":
         
         for l in ativos:
             cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
-            coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
-            resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
+            # Tenta forçar a exibição correta se estiver YYYY-MM-DD
+            data_coleta_raw = str(l.get("Data_Coleta", "") or "Data não informada")
+            data_resultado_raw = str(l.get("Data_Resultado", "") or "Não definida")
+            
+            def formatar_para_exibicao(d):
+                if "-" in d and len(d) == 10: # 2024-05-10
+                    try:
+                        return datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m/%Y")
+                    except: return d
+                return d
+            
+            coleta = html.escape(formatar_para_exibicao(data_coleta_raw))
+            resultado = html.escape(formatar_para_exibicao(data_resultado_raw))
 
             items_html += f"""
             <div class="carousel-item">
@@ -459,6 +491,7 @@ elif menu == "🧪 Laudos":
             data_l = c1.date_input("Data da Coleta")
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
             if st.form_submit_button("Agendar"):
+                # AQUI GARANTE QUE JÁ SALVA COMO STRING DD/MM/YYYY
                 novo = {
                     "Cliente": cli_l,
                     "Data_Coleta": data_l.strftime("%d/%m/%Y"),
@@ -476,6 +509,11 @@ elif menu == "🧪 Laudos":
         st.info("Sem laudos.")
     else:
         df_p = pd.DataFrame(laudos)
+        # Tenta normalizar para exibir
+        for col in ['Data_Coleta', 'Data_Resultado']:
+             if col in df_p.columns:
+                 df_p[col] = df_p[col].astype(str).apply(lambda x: datetime.strptime(x, "%Y-%m-%d").strftime("%d/%m/%Y") if "-" in x and len(x)==10 else x)
+
         df_p["ID"] = range(len(laudos))
         ed_p = st.data_editor(
             df_p[["ID", "Cliente", "Data_Coleta", "Data_Resultado", "Status"]],
@@ -486,8 +524,8 @@ elif menu == "🧪 Laudos":
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row["ID"])
-                st.session_state["log_laudos"][idx]["Data_Resultado"] = row["Data_Resultado"]
-                st.session_state["log_laudos"][idx]["Status"] = row["Status"]
+                st.session_state["log_laudos"][idx]["Data_Resultado"] = str(row["Data_Resultado"])
+                st.session_state["log_laudos"][idx]["Status"] = str(row["Status"])
             salvar_dados()
             st.success("Atualizado!")
             st.rerun()
