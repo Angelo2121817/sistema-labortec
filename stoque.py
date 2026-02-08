@@ -356,7 +356,7 @@ st.sidebar.title("🛠️ MENU")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 tema_sel = st.sidebar.selectbox("Tema:", ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"])
 aplicar_tema(tema_sel)
-menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Produtos", "📋 Conferência Geral", "👥 Clientes"])
+menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Estoque", "📋 Conferência Geral", "👥 Clientes"])
 
 
 # ==============================================================================
@@ -609,8 +609,8 @@ elif menu == "👥 Clientes":
             st.success("Lista atualizada!")
             st.rerun()
 
-elif menu == "📦 Produtos":
-    st.title("📦 Produtos")
+elif menu == "📦 Estoque":
+    st.title("📦 Estoque")
     ed = st.data_editor(st.session_state["estoque"], use_container_width=True, num_rows="dynamic")
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
