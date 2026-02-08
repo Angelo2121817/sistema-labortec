@@ -29,8 +29,8 @@ def extrair_dados_cetesb(f):
                 if i + 2 < len(lines):
                     addr_line = lines[i+2]
                     cep_m = re.search(r'(\d{5}-\d{3})', addr_line)
-                    if cep_m:
-                        d['CEP'] = cep_m.group(1)
+                    if m := cep_m:
+                        d['CEP'] = m.group(1)
                         partes_antes = addr_line.split(d['CEP'])[0].strip()
                         m_num_bai = re.match(r'(\d+)\s+(.*)', partes_antes)
                         if m_num_bai:
@@ -117,9 +117,9 @@ def verificar_senha():
 if not verificar_senha(): st.stop()
 
 # ==============================================================================
-# 3. MOTOR DE DADOS (CACHE ZERO)
+# 3. MOTOR DE DADOS
 # ==============================================================================
-def carregar_dados_bruto():
+def carregar_dados():
     try:
         df_est = conn.read(worksheet="Estoque", ttl=0)
         if not df_est.empty: st.session_state['estoque'] = df_est
@@ -128,8 +128,9 @@ def carregar_dados_bruto():
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
             df = conn.read(worksheet=aba, ttl=0)
             if not df.empty:
-                if aba == "Log_Laudos" and 'Data_Resultado' not in df.columns:
-                    df['Data_Resultado'] = 'Não definida'
+                if aba == "Log_Laudos":
+                    if 'Data_Resultado' not in df.columns: df['Data_Resultado'] = 'Não definida'
+                    if 'Status' not in df.columns: df['Status'] = 'Pendente'
                 st.session_state[aba.lower()] = df.to_dict('records')
             else:
                 st.session_state[aba.lower()] = []
@@ -146,10 +147,10 @@ def salvar_dados():
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state['log_entradas']))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state['log_laudos']))
         st.toast("✅ Sincronizado!")
-    except Exception as e: st.error(f"Erro ao salvar: {e}")
+    except: st.error("Erro ao salvar")
 
 if 'dados_carregados' not in st.session_state:
-    carregar_dados_bruto()
+    carregar_dados()
     st.session_state['dados_carregados'] = True
 
 for key in ['log_vendas', 'log_entradas', 'log_laudos']:
@@ -254,19 +255,8 @@ if menu == "📊 Dashboard":
     st.subheader("📡 Radar de Coletas e Resultados")
     
     laudos_atuais = st.session_state.get('log_laudos', [])
-    # Filtra laudos que ainda não têm resultado ou resultado futuro
-    hoje = obter_horario_br().date()
-    ativos = []
-    for l in laudos_atuais:
-        try:
-            dt_c = datetime.strptime(l['Data_Coleta'], "%d/%m/%Y").date()
-            dt_r_str = l.get('Data_Resultado', 'Não definida')
-            if dt_r_str != 'Não definida':
-                dt_r = datetime.strptime(dt_r_str, "%d/%m/%Y").date()
-                if dt_r >= hoje: ativos.append(l)
-            else:
-                ativos.append(l)
-        except: ativos.append(l)
+    # Filtro simplificado: mostra laudos pendentes (sem data de resultado ou resultado não concluído)
+    ativos = [l for l in laudos_atuais if l.get('Status', 'Pendente') == 'Pendente']
 
     if not ativos: st.success("✅ Tudo em dia!")
     else:
@@ -291,28 +281,29 @@ elif menu == "🧪 Laudos":
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
             c1, c2 = st.columns(2)
-            data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
-            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
+            data_l = c1.date_input("Data da Coleta")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
             if st.form_submit_button("Agendar"):
-                novo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y")}
+                novo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'}
                 st.session_state['log_laudos'].append(novo)
-                salvar_dados(); carregar_dados_bruto(); st.rerun()
+                salvar_dados(); st.rerun()
 
-    st.markdown("---"); st.subheader("📋 Editar Previsões de Resultado")
+    st.markdown("---"); st.subheader("📋 Editar Previsões")
     laudos = st.session_state.get('log_laudos', [])
     if not laudos: st.info("Sem laudos.")
     else:
         df_p = pd.DataFrame(laudos)
         df_p['ID'] = range(len(laudos))
-        # Editor direto para data de resultado
-        ed_p = st.data_editor(df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado']], 
+        # Editor direto
+        ed_p = st.data_editor(df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']], 
                               use_container_width=True, hide_index=True, 
                               disabled=['ID', 'Cliente', 'Data_Coleta'])
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID'])
                 st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
-            salvar_dados(); carregar_dados_bruto(); st.success("Atualizado!"); st.rerun()
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            salvar_dados(); st.success("Atualizado!"); st.rerun()
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
@@ -343,8 +334,8 @@ elif menu == "💰 Vendas & Orçamentos":
                         idx = st.session_state['estoque'][st.session_state['estoque']['Cod'] == row['Cod']].index[0]
                         st.session_state['estoque'].at[idx, 'Saldo'] -= row['Qtd']
                         st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': row['Produto'], 'Qtd': row['Qtd'], 'Vendedor': vend})
-                    salvar_dados(); st.success("Venda Metal Química Registrada!")
-                else: st.success("Venda Independente Registrada!")
+                    salvar_dados(); st.success("Venda Registrada!")
+                else: st.success("Venda Registrada!")
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
 
 elif menu == "👥 Clientes":
