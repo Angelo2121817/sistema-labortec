@@ -365,7 +365,9 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
-    st.subheader("📡 Radar de Coletas e Resultados (Carrossel)")
+    
+    # TÍTULO CENTRALIZADO E SEM A PALAVRA "CARROSSEL"
+    st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
