@@ -8,29 +8,79 @@ from fpdf import FPDF
 import os
 import json
 from streamlit_gsheets import GSheetsConnection
-# --- SISTEMA DE SEGURANÇA ---
+# --- SISTEMA DE LOGIN PERSONALIZADO ---
+from datetime import datetime, timedelta
+
+# 1. BANCO DE DADOS DE USUÁRIOS (Aqui você define as senhas)
+CREDENCIAIS = {
+    "General": {
+        "nome": "General",
+        "senha": "labormetal22"
+    },
+    "Fabricio": {
+        "nome": "Fabricio",
+        "senha": "fabricio2225"
+    },
+    "Anderson": {
+        "nome": "Anderson",
+        "senha": "anderson2225"
+    },
+    "Angelo": {
+        "nome": "Angelo",
+        "senha": "angelo2225"
+    }
+}
+
+def obter_saudacao():
+    """Calcula a saudação baseada no horário de Brasília (UTC-3)."""
+    agora = datetime.utcnow() - timedelta(hours=3)
+    hora = agora.hour
+    if 5 <= hora < 12:
+        return "Bom dia"
+    elif 12 <= hora < 18:
+        return "Boa tarde"
+    else:
+        return "Boa noite"
+
 def verificar_senha():
-    """Retorna True se a senha estiver correta."""
+    """Tela de Login Multi-usuário."""
     if "autenticado" not in st.session_state:
         st.session_state["autenticado"] = False
+        st.session_state["usuario_nome"] = ""
 
     if not st.session_state["autenticado"]:
         st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito - Labortec</h2>", unsafe_allow_html=True)
-        senha = st.text_input("Digite a Senha de Acesso:", type="password")
-        if st.button("Entrar"):
-            # DEFINA SUA SENHA AQUI: Troque 'labormetal22' pela senha que quiser
-            if senha == "labormetal22":
+        
+        # Caixa para selecionar QUEM está entrando
+        usuario_selecionado = st.selectbox("Quem é você?", list(CREDENCIAIS.keys()))
+        
+        # Caixa de senha
+        senha = st.text_input("Sua Senha:", type="password")
+        
+        col1, col2, col3 = st.columns([1,1,1])
+        if col2.button("🚀 Entrar no Sistema"):
+            # Verifica se a senha bate com o usuário escolhido
+            usuario_dados = CREDENCIAIS.get(usuario_selecionado)
+            if usuario_dados and senha == usuario_dados["senha"]:
                 st.session_state["autenticado"] = True
+                st.session_state["usuario_nome"] = usuario_dados["nome"]
+                st.toast(f"Login aprovado! Bem-vindo, {usuario_dados['nome']}!", icon="✅")
                 st.rerun()
             else:
-                st.error("Senha incorreta! Acesso negado.")
+                st.error("Senha incorreta! Tente novamente.")
         return False
     return True
 
 # --- EXECUÇÃO DO LOGIN ---
 if not verificar_senha():
-    st.stop() # Trava o sistema aqui se não estiver logado
-# ----------------------------
+    st.stop()
+
+# --- BARRA LATERAL COM A SAUDAÇÃO ---
+# Isso aqui vai aparecer no topo do menu lateral depois que logar
+saudacao = obter_saudacao()
+nome_logado = st.session_state["usuario_nome"]
+st.sidebar.success(f"👋 **{saudacao}, {nome_logado}!**")
+st.sidebar.markdown("---")
 
 # --- CONFIGURAÇÃO INICIAL (ÍCONE DE QUÍMICA 🧪) ---
 st.set_page_config(page_title="Sistema Integrado v55", layout="wide", page_icon="🧪")
@@ -993,6 +1043,7 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
 
 
