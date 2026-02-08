@@ -9,7 +9,7 @@ import json
 from streamlit_gsheets import GSheetsConnection
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Sistema Integrado v58", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v59", layout="wide", page_icon="🧪")
 
 # --- 2. CONEXÃO COM O GOOGLE SHEETS ---
 try:
@@ -18,7 +18,7 @@ except:
     st.error("Erro no Secrets. Verifique o arquivo .streamlit/secrets.toml")
     st.stop()
 
-# --- 3. SISTEMA DE LOGIN (ARTE E SEGURANÇA) ---
+# --- 3. SISTEMA DE LOGIN ---
 CREDENCIAIS = {
     "General": "labormetal22",
     "Fabricio": "fabricio2225",
@@ -74,7 +74,7 @@ def verificar_senha():
 if not verificar_senha():
     st.stop()
 
-# --- 4. FUNÇÕES DE PDF (RESGATADAS) ---
+# --- 4. FUNÇÕES DE PDF (CORRIGIDA) ---
 class PDF(FPDF):
     def header(self):
         logo_path = "labortec.jpg"
@@ -118,12 +118,23 @@ def criar_pdf_nativo(vendedor, cliente, dados_cli, itens, total, condicoes, titu
     pdf.cell(70, 5, f'Vendedor: {vendedor}', 0, 1, 'R')
     pdf.set_y(55) 
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(0, 5, f"Cliente: {cliente} (Cód: {dados_cli.get('Cod_Cli','')})", 0, 1, 'L')
+    # Proteção contra dados vazios
+    nome_cli = str(cliente)
+    cod_cli = str(dados_cli.get('Cod_Cli', ''))
+    cnpj_cli = str(dados_cli.get('CNPJ', ''))
+    end_cli = str(dados_cli.get('End', ''))
+    bairro_cli = str(dados_cli.get('Bairro', ''))
+    cid_cli = str(dados_cli.get('Cidade', ''))
+    uf_cli = str(dados_cli.get('UF', ''))
+    cep_cli = str(dados_cli.get('CEP', ''))
+    tel_cli = str(dados_cli.get('Tel', ''))
+
+    pdf.cell(0, 5, f"Cliente: {nome_cli} (Cód: {cod_cli})", 0, 1, 'L')
     pdf.set_font('Arial', '', 9)
-    pdf.cell(0, 5, f"CNPJ: {dados_cli.get('CNPJ','')}", 0, 1, 'L')
-    pdf.cell(0, 5, f"Endereço: {dados_cli.get('End','')}, {dados_cli.get('Bairro','')}", 0, 1, 'L')
-    pdf.cell(0, 5, f"Cidade: {dados_cli.get('Cidade','')}/{dados_cli.get('UF','')} - CEP: {dados_cli.get('CEP','')}", 0, 1, 'L')
-    pdf.cell(0, 5, f"Tel: {dados_cli.get('Tel','')}", 0, 1, 'L')
+    pdf.cell(0, 5, f"CNPJ: {cnpj_cli}", 0, 1, 'L')
+    pdf.cell(0, 5, f"Endereço: {end_cli}, {bairro_cli}", 0, 1, 'L')
+    pdf.cell(0, 5, f"Cidade: {cid_cli}/{uf_cli} - CEP: {cep_cli}", 0, 1, 'L')
+    pdf.cell(0, 5, f"Tel: {tel_cli}", 0, 1, 'L')
     pdf.ln(5)
     pdf.set_fill_color(245, 245, 245)
     pdf.set_font('Arial', '', 9)
@@ -136,18 +147,25 @@ def criar_pdf_nativo(vendedor, cliente, dados_cli, itens, total, condicoes, titu
     for i in range(len(h_col)): pdf.cell(w[i], 6, h_col[i], 1, 0, 'C', True)
     pdf.ln()
     pdf.set_font('Arial', '', 8)
+    
     for r in itens:
         try: p_nome = r['Produto'].encode('latin-1', 'replace').decode('latin-1')[:55]
-        except: p_nome = r['Produto'][:55]
+        except: p_nome = str(r['Produto'])[:55]
+        
+        # CORREÇÃO: Usa 'Preco_Base' que é o nome correto da coluna
+        preco_item = float(r.get('Preco_Base', 0.0))
+        total_item = float(r.get('Total', 0.0))
+        
         pdf.cell(w[0], 6, str(r['Unidade']), 1, 0, 'C')
         pdf.cell(w[1], 6, str(int(r['Qtd'])), 1, 0, 'C')
         pdf.cell(w[2], 6, p_nome, 1, 0, 'L')
         pdf.cell(w[3], 6, str(r['Cod']), 1, 0, 'C')
         pdf.cell(w[4], 6, str(r['Marca']), 1, 0, 'C')
         pdf.cell(w[5], 6, str(r['NCM']), 1, 0, 'C')
-        pdf.cell(w[6], 6, f"{r['Preco_Base']:.2f}", 1, 0, 'R')
-        pdf.cell(w[7], 6, f"{r['Total']:.2f}", 1, 0, 'R')
+        pdf.cell(w[6], 6, f"{preco_item:.2f}", 1, 0, 'R')
+        pdf.cell(w[7], 6, f"{total_item:.2f}", 1, 0, 'R')
         pdf.ln()
+        
     pdf.ln(2)
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(sum(w)-15, 8, 'TOTAL GERAL:', 0, 0, 'R')
@@ -193,10 +211,10 @@ def ler_pdf_antigo(f):
         reader = PdfReader(f)
         texto_inicial = reader.pages[0].extract_text() or ""
         if "CETESB" in texto_inicial.upper(): return extrair_dados_cetesb(f)
-        return {'Nome': 'Cliente Importado', 'End': 'Preencher Manualmente'} # Simplificado para evitar erros
+        return {'Nome': 'Cliente Importado', 'End': 'Preencher Manualmente'} 
     except Exception as e: st.error(f"Erro PDF: {e}"); return None
 
-# --- 5. FUNÇÕES DE DADOS (COM BLINDAGEM) ---
+# --- 5. FUNÇÕES DE DADOS ---
 def carregar_dados():
     try:
         df_est = conn.read(worksheet="Estoque", ttl="0")
@@ -334,29 +352,19 @@ elif page == "ENTRADA":
     
     if st.button("Confirmar Entrada", type="primary"):
         cod = prod.split(" - ")[0]
-        # Correção de Index (Força string)
         mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-        
         if not st.session_state['estoque'][mask].empty:
             idx = st.session_state['estoque'][mask].index[0]
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
-            
-            # AGORA SALVA DATA E HORA
             data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
             nome_prod = st.session_state['estoque'].at[idx, 'Produto']
-            
             st.session_state['log_entradas'].append({
-                'Data': data_hora, 
-                'Cod': cod, 
-                'Produto': nome_prod,
-                'Qtd': qtd,
-                'Usuario': st.session_state['usuario_nome']
+                'Data': data_hora, 'Cod': cod, 'Produto': nome_prod, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']
             })
             salvar_dados()
             st.success(f"Entrada registrada: +{qtd}Kg em {nome_prod}!")
             st.rerun()
-        else:
-            st.error("ERRO: Produto não encontrado.")
+        else: st.error("ERRO: Produto não encontrado.")
 
 elif page == "ESTOQUE":
     exibir_cabecalho_tela("Gestão de Estoque", "metal.jpg", "METAL QUÍMICA")
@@ -396,9 +404,7 @@ elif page == "CLIENTES":
             d = ler_pdf_antigo(up)
             if d: st.session_state['temp'] = d; st.success("Lido!")
             else: st.error("Erro leitura")
-    
     if 'temp' not in st.session_state: st.session_state['temp'] = {}
-    
     with st.form("novo_cli"):
         st.caption("Preencha os dados:")
         c1,c2 = st.columns([1,3])
@@ -411,14 +417,10 @@ elif page == "CLIENTES":
         uf = c4.text_input("UF", st.session_state['temp'].get('UF',''))
         tel = c5.text_input("Tel", st.session_state['temp'].get('Tel',''))
         cep = st.text_input("CEP", st.session_state['temp'].get('CEP',''))
-        
         if st.form_submit_button("Salvar Cliente"):
-            st.session_state['clientes_db'][nome] = {
-                'Cod_Cli':cod, 'End':end, 'CNPJ':cnpj, 'Cidade':cid, 'UF':uf, 'Tel':tel, 'CEP':cep
-            }
+            st.session_state['clientes_db'][nome] = {'Cod_Cli':cod, 'End':end, 'CNPJ':cnpj, 'Cidade':cid, 'UF':uf, 'Tel':tel, 'CEP':cep}
             salvar_dados()
             st.rerun()
-    
     for nome in list(st.session_state['clientes_db'].keys()):
         c1, c2 = st.columns([4,1])
         c1.text(nome)
@@ -429,23 +431,19 @@ elif page == "CLIENTES":
 
 elif page == "VENDAS":
     st.title("Vendas")
-    
     if not st.session_state['clientes_db']:
         st.warning("Cadastre clientes primeiro!")
     else:
         c1, c2, c3 = st.columns([2,1,1])
         cli = c1.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
         vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
-        
-        # Dados do Cliente Selecionado
         d_cli = st.session_state['clientes_db'][cli]
         
-        # Tabela de Itens
         df_v = st.session_state['estoque'].copy()
         if 'Qtd' not in df_v: df_v['Qtd'] = 0.0
         edited = st.data_editor(df_v[['Cod','Produto','Saldo','Preco_Base','Qtd']], use_container_width=True)
         
-        # Cálculos
+        # Lógica de Cálculo
         ed_copy = edited.copy()
         ed_copy['Qtd'] = pd.to_numeric(ed_copy['Qtd'], errors='coerce').fillna(0)
         itens = ed_copy[ed_copy['Qtd'] > 0]
@@ -455,7 +453,6 @@ elif page == "VENDAS":
         if not itens.empty:
             st.metric("Valor Total", f"R$ {total_geral:,.2f}")
             st.markdown("---")
-            
             col_b1, col_b2, col_b3 = st.columns(3)
             p_pag = col_b1.text_input("Pagamento", "28/42 Dias")
             f_pag = col_b2.text_input("Forma", "Boleto")
@@ -463,15 +460,13 @@ elif page == "VENDAS":
             
             c_blue, c_green = st.columns(2)
             
-            # --- BOTÃO AZUL: ORÇAMENTO (NÃO MEXE NO ESTOQUE) ---
             with c_blue:
                 if st.button("📄 GERAR ORÇAMENTO", type="primary"):
                     pdf = criar_pdf_nativo(vend, cli, d_cli, itens.to_dict('records'), total_geral, {'plano':p_pag,'forma':f_pag,'venc':venc}, "ORÇAMENTO")
                     st.session_state['pdf_gerado'] = pdf
                     st.session_state['name'] = "Orcamento.pdf"
-                    st.toast("Orçamento Gerado! Baixe abaixo.")
+                    st.toast("Orçamento Gerado!")
             
-            # --- BOTÃO VERDE: VENDA (BAIXA ESTOQUE) ---
             with c_green:
                 if st.button("✅ CONFIRMAR VENDA (BAIXAR ESTOQUE)"):
                     for _, row in itens.iterrows():
@@ -479,7 +474,6 @@ elif page == "VENDAS":
                         if not st.session_state['estoque'][mask].empty:
                             idx = st.session_state['estoque'][mask].index[0]
                             st.session_state['estoque'].at[idx, 'Saldo'] -= row['Qtd']
-                            
                             st.session_state['log_vendas'].append({
                                 'Data': datetime.now().strftime("%d/%m/%Y %H:%M"),
                                 'Cliente': cli,
@@ -489,31 +483,17 @@ elif page == "VENDAS":
                                 'Usuario': st.session_state['usuario_nome']
                             })
                     salvar_dados()
-                    
                     pdf = criar_pdf_nativo(vend, cli, d_cli, itens.to_dict('records'), total_geral, {'plano':p_pag,'forma':f_pag,'venc':venc}, "PEDIDO DE VENDA")
                     st.session_state['pdf_gerado'] = pdf
                     st.session_state['name'] = "Pedido.pdf"
-                    st.success("Venda Confirmada e Estoque Baixado!")
+                    st.success("Venda Confirmada!")
             
             if st.session_state['pdf_gerado']:
                 st.download_button("📥 BAIXAR PDF", st.session_state['pdf_gerado'], st.session_state['name'], "application/pdf")
 
 elif page == "CONFERÊNCIA":
-    st.title("Conferência e Auditoria")
-    
+    st.title("Conferência")
     tab1, tab2, tab3 = st.tabs(["📋 Estoque Atual", "📥 Histórico de Entradas", "📤 Histórico de Vendas"])
-    
-    with tab1:
-        st.dataframe(st.session_state['estoque'], use_container_width=True)
-        
-    with tab2:
-        if st.session_state['log_entradas']:
-            st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True)
-        else:
-            st.info("Nenhuma entrada registrada.")
-            
-    with tab3:
-        if st.session_state['log_vendas']:
-            st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True)
-        else:
-            st.info("Nenhuma venda registrada.")
+    with tab1: st.dataframe(st.session_state['estoque'], use_container_width=True)
+    with tab2: st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True) if st.session_state['log_entradas'] else st.info("Vazio")
+    with tab3: st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True) if st.session_state['log_vendas'] else st.info("Vazio")
