@@ -251,10 +251,16 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # ==============================================================================
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
+    if st.button("🔄 Sincronizar Dados"):
+        carregar_dados()
+        st.rerun()
     st.markdown("---")
     st.subheader("📡 Radar de Coletas Estratégicas")
+    
+    # Garantir leitura atualizada
     laudos = st.session_state.get('log_laudos', [])
     laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
+    
     if not laudos_pendentes: st.success("✅ Nenhuma coleta pendente no radar.")
     else:
         try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
@@ -361,13 +367,14 @@ elif menu == "🧪 Laudos":
         cols_edit = ['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']
         ed_p = st.data_editor(df_p[cols_edit], use_container_width=True, hide_index=True, disabled=['ID_Orig', 'Cliente', 'Data_Coleta'])
         if st.button("💾 ATUALIZAR DATAS/STATUS"):
-            # Atualiza o session_state diretamente com os novos valores da tabela
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Orig'])
                 st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
                 st.session_state['log_laudos'][idx]['Status'] = row['Status']
-            # Salva na nuvem e força recarregamento total para o Dashboard
-            salvar_dados(); st.success("Dados atualizados!"); st.rerun()
+            salvar_dados()
+            carregar_dados() # Força recarregamento imediato
+            st.success("Dados atualizados!")
+            st.rerun()
 
 elif menu == "📦 Produtos":
     st.title("📦 Produtos")
