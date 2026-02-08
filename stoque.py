@@ -156,7 +156,7 @@ if 'estoque' not in st.session_state:
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 
 # ==============================================================================
-# 4. TEMAS E CSS (SOFISTICADO)
+# 4. TEMAS E CSS (SIMETRIA E SOFISTICAÇÃO)
 # ==============================================================================
 def aplicar_tema(escolha):
     css = """
@@ -171,25 +171,40 @@ def aplicar_tema(escolha):
             font-weight: bold;
             animation: neonPulse 2s infinite;
             font-size: 1.1em;
+            display: inline-block;
         }
-        /* Card de Coleta Sofisticado */
+        .prevista-label {
+            font-size: 0.9em;
+            color: #555;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+        /* Card de Coleta Simétrico */
         .coleta-card {
             background: white;
             padding: 20px;
             border-radius: 15px;
             border-left: 5px solid #ff4b4b;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
+            margin-bottom: 20px;
+            height: 160px; /* Tamanho fixo para simetria */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
             transition: transform 0.3s;
+            overflow: hidden;
         }
         .coleta-card:hover {
             transform: translateY(-5px);
         }
         .coleta-cliente {
-            font-size: 1.2em;
+            font-size: 1.1em;
             font-weight: bold;
             color: #1e3d59;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         /* Centralizar Título */
         .centered-title {
@@ -204,7 +219,7 @@ def aplicar_tema(escolha):
     if escolha == "⚪ Padrão (Clean)": css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
     elif escolha == "🔵 Azul Labortec": css += "<style>.stApp { background-color: #F0F8FF !important; color: #002B4E !important; } h1,h2,h3 { color: #004aad !important; }</style>"
     elif escolha == "🌿 Verde Natureza": css += "<style>.stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }</style>"
-    elif escolha == "⚫ Dark Mode (Noturno)": css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } .coleta-card { background: #1c1e24; color: white; border-left: 5px solid #ff4b4b; }</style>"
+    elif escolha == "⚫ Dark Mode (Noturno)": css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } .coleta-card { background: #1c1e24; color: white; border-left: 5px solid #ff4b4b; } .prevista-label { color: #aaa; }</style>"
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
@@ -269,7 +284,7 @@ if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
     
-    # Radar de Coletas Sofisticado
+    # Radar de Coletas Simétrico
     st.subheader("📡 Radar de Coletas Estratégicas")
     laudos = st.session_state.get('log_laudos', [])
     laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
@@ -280,15 +295,16 @@ if menu == "📊 Dashboard":
         try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
         except: pass
         
-        # Exibição em Cards Sofisticados
+        # Exibição em Cards Simétricos
         cols_radar = st.columns(4)
         for i, l in enumerate(laudos_pendentes[:8]): # Mostra até 8 em duas linhas
             with cols_radar[i % 4]:
                 st.markdown(f"""
                 <div class="coleta-card">
-                    <div class="neon-date">📅 {l['Data_Coleta']}</div>
                     <div class="coleta-cliente">🏢 {l['Cliente']}</div>
-                    <div style="font-size: 0.85em; color: gray;">Status: Pendente</div>
+                    <div class="prevista-label">Data Prevista:</div>
+                    <div class="neon-date">📅 {l['Data_Coleta']}</div>
+                    <div style="font-size: 0.85em; color: gray; margin-top: 5px;">Status: Pendente</div>
                 </div>
                 """, unsafe_allow_html=True)
     
