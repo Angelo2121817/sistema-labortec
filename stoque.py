@@ -307,17 +307,17 @@ elif menu == "📦 Gestão de Produtos":
         salvar_dados()
 
 # ==============================================================================
-# 5. CLIENTES (COM IMPORTADOR DE PDF + EDIÇÃO BLINDADA)
+# 5. CLIENTES (VERSÃO FINAL: EDITAR + PDF + ANTI-CRASH)
 # ==============================================================================
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
     
-    # 1. Inicializa variáveis
+    # 1. Inicializa variáveis de memória (8 Campos)
     campos = ['form_nome', 'form_tel', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod']
     for campo in campos:
         if campo not in st.session_state: st.session_state[campo] = ""
 
-    # --- FUNÇÕES DE CONTROLE ---
+    # --- FUNÇÕES DE CONTROLE (CALLBACKS) ---
     def limpar_campos():
         for c in campos: st.session_state[c] = ""
 
@@ -355,13 +355,13 @@ elif menu == "👥 Clientes":
         st.session_state['form_cep'] = str(d.get('CEP', ''))
         st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
 
-    # --- IMPORTADOR DE PDF (RESGATADO) ---
+    # --- IMPORTADOR DE PDF (INTEGRADO) ---
     with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
         arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
         if arquivo_pdf is not None:
             if st.button("🔄 Processar PDF e Preencher Formulário"):
-                # Tenta ler usando a função global (se ela existir no topo do código)
                 try:
+                    # Chama a função que colocamos no topo do código
                     dados_lidos = ler_pdf_antigo(arquivo_pdf)
                     if dados_lidos:
                         st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
@@ -376,9 +376,9 @@ elif menu == "👥 Clientes":
                     else:
                         st.error("Não foi possível ler os dados desse PDF.")
                 except NameError:
-                    st.error("⚠️ As funções de leitura de PDF sumiram do topo do código. Me avise para repor!")
+                    st.error("⚠️ As funções de leitura sumiram do topo. Verifique o início do arquivo.")
 
-    # --- FORMULÁRIO ---
+    # --- FORMULÁRIO BLINDADO ---
     with st.form("form_cliente"):
         st.write("📝 **Dados Cadastrais**")
         
@@ -397,6 +397,7 @@ elif menu == "👥 Clientes":
         c6.text_input("UF", key="form_uf")
         c7.text_input("CEP", key="form_cep")
         
+        # O botão chama a função de salvar DIRETAMENTE (Anti-Crash)
         st.form_submit_button("💾 SALVAR DADOS", on_click=salvar_no_callback)
 
     st.button("🧹 Limpar / Cancelar", on_click=limpar_campos)
@@ -419,10 +420,115 @@ elif menu == "👥 Clientes":
                 col_b.write(f"📞 {d.get('Tel', '')} | CNPJ: {d.get('CNPJ', '')}")
                 
                 c_edit, c_del = st.columns([1, 1])
+                # Botões com Callbacks
                 c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
                 c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
     else:
         st.info("Nenhum cliente cadastrado.")
+
+# ==============================================================================
+# 6. DASHBOARD (O NOVO RADAR)
+# ==============================================================================
+elif menu == "📊 Dashboard":
+    st.title("📊 Painel de Controle Integrado")
+    st.markdown("---")
+    
+    # --- 1. RADAR DE LAUDOS (ALERTA DE PRAZO) ---
+    st.subheader("🔔 Radar de Coletas (Efluentes)")
+    laudos = st.session_state.get('log_laudos', [])
+    
+    # Filtra e Tenta ordenar
+    laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
+    try:
+        laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
+    except: pass
+
+    if not laudos_pendentes:
+        st.success("✅ Tudo limpo! Nenhuma coleta pendente no radar.")
+    else:
+        # Mostra os 4 primeiros cartões de alerta
+        col_laudos = st.columns(4)
+        for i, l in enumerate(laudos_pendentes[:4]): 
+            with col_laudos[i]:
+                st.error(f"📅 **{l['Data_Coleta']}**")
+                st.info(f"🏭 {l['Cliente']}")
+                if l.get('Obs'): st.caption(f"📝 {l['Obs']}")
+    
+    st.markdown("---")
+
+    # --- 2. SITUAÇÃO TÁTICA (MÉTRICAS) ---
+    st.subheader("📈 Situação Tática")
+    c1, c2, c3 = st.columns(3)
+    
+    qtd_estoque = len(st.session_state['estoque'])
+    qtd_vendas = len(st.session_state['log_vendas'])
+    qtd_clientes = len(st.session_state['clientes_db'])
+    
+    c1.metric("📦 Arsenal (Produtos)", qtd_estoque)
+    c2.metric("💰 Baixas (Vendas)", qtd_vendas)
+    c3.metric("👥 Base de Aliados (Clientes)", qtd_clientes)
+
+    # --- 3. HISTÓRICO DE COMBATE (GRÁFICO) ---
+    if st.session_state['log_vendas']:
+        st.markdown("---")
+        st.caption("Últimas Operações de Venda:")
+        df_dash = pd.DataFrame(st.session_state['log_vendas'])
+        cols_uteis = [c for c in ['Data', 'Cliente', 'Produto', 'Qtd', 'Vendedor'] if c in df_dash.columns]
+        st.dataframe(
+            df_dash[cols_uteis].tail(5).iloc[::-1], 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+# ==============================================================================
+# 7. LAUDOS (PADRÃO)
+# ==============================================================================
+elif menu == "🧪 Laudos":
+    st.title("🧪 Agendamento de Coletas (Laudos)")
+    
+    with st.form("form_laudo"):
+        c1, c2 = st.columns([2,1])
+        lista_clientes = list(st.session_state['clientes_db'].keys())
+        
+        if not lista_clientes:
+            st.warning("⚠️ Cadastre clientes na aba 'Clientes' antes de agendar.")
+            cli_sel = None
+        else:
+            cli_sel = c1.selectbox("Selecione o Cliente:", lista_clientes)
+            
+        data_coleta = c2.date_input("Data Prevista:", format="DD/MM/YYYY")
+        obs = st.text_input("Observação (Ex: Coletar na saída da ETE)")
+        
+        if st.form_submit_button("💾 Agendar Coleta"):
+            if cli_sel:
+                novo_laudo = {
+                    "Cliente": cli_sel,
+                    "Data_Coleta": data_coleta.strftime("%d/%m/%Y"),
+                    "Obs": obs,
+                    "Status": "Pendente",
+                    "Agendado_Por": st.session_state.get('usuario_nome', 'Sistema')
+                }
+                st.session_state['log_laudos'].append(novo_laudo)
+                salvar_dados()
+                st.success(f"Agendado para {cli_sel}!")
+                st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Próximas Coletas")
+
+    if st.session_state['log_laudos']:
+        df_laudos = pd.DataFrame(st.session_state['log_laudos'])
+        edited_laudos = st.data_editor(
+            df_laudos,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="editor_laudos"
+        )
+        if not edited_laudos.equals(df_laudos):
+            st.session_state['log_laudos'] = edited_laudos.to_dict('records')
+            salvar_dados()
+    else:
+        st.info("Nenhum laudo pendente.")
 # ==============================================================================
 # 6. DASHBOARD (COM ALERTAS DE LAUDOS)
 # ==============================================================================
@@ -513,6 +619,7 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
 
 
 
