@@ -406,11 +406,14 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
 
+# ==============================================================================
+# 7. PÁGINAS DO SISTEMA
+# ==============================================================================
+
 if menu == "📊 Dashboard":
-    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
+    st.markdown('<div class="centered-title">📊 Painel de Controle Integrado</div>', unsafe_allow_html=True)
     
-    # --- ALERTA GERAL (O ALTO-FALANTE) ---
-   # --- ALERTA GERAL (VERSÃO COMPACTA E PISCANTE) ---
+    # --- ALERTA GERAL (O ALTO-FALANTE PISCANTE) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
         <style>
@@ -419,196 +422,164 @@ if menu == "📊 Dashboard":
                 50% {{ box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); transform: scale(1.01); }}
                 100% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); transform: scale(1); }}
             }}
-            
             .alert-blink {{
-                background-color: #ffebee; 
-                border: 2px solid #ff1744; 
-                color: #b71c1c;
-                padding: 8px 15px; 
-                border-radius: 30px; /* Bordas arredondadas (estilo pílula) */
-                text-align: center;
-                font-weight: bold;
-                font-size: 1.1rem;
-                margin-bottom: 25px;
-                width: fit-content; /* Ocupa só o espaço do texto */
-                margin-left: auto;
-                margin-right: auto;
-                animation: pulse-red 2s infinite; /* Faz piscar eternamente */
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 10px;
+                background-color: #ffebee; border: 2px solid #ff1744; color: #b71c1c;
+                padding: 8px 20px; border-radius: 50px; text-align: center;
+                font-weight: bold; font-size: 1.1rem; margin: 0 auto 30px auto;
+                width: fit-content; animation: pulse-red 2s infinite;
+                display: flex; align-items: center; justify-content: center; gap: 10px;
             }}
         </style>
-        
-        <div class="alert-blink">
-            <span>📢</span>
-            <span>{st.session_state['aviso_geral']}</span>
-        </div>
+        <div class="alert-blink"><span>📢</span><span>{st.session_state['aviso_geral']}</span></div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("<h3 style='text-align: center; color: #1e3d59; margin-bottom: 25px; letter-spacing: 1px;'>📡 RADAR DE OPERAÇÕES (PENDENTES)</h3>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 MONITORAMENTO DE LAUDOS</h4>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
-    # Filtra apenas os pendentes
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
 
     if not ativos:
-        st.success("✅ Tudo limpo! Nenhuma missão pendente no radar.")
+        st.success("✅ Tudo limpo! Nenhuma missão pendente.")
     else:
         items_html = ""
-        # Loop tático para preencher o carrossel visualmente se tiver poucos itens
+        # Garante que o carrossel tenha itens suficientes para rodar bonito
         lista_loop = ativos * (4 if len(ativos) < 4 else 1)
         
         for l in lista_loop:
-            cliente = html.escape(str(l.get("Cliente", "") or "Cliente Desconhecido"))
-            coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--/----"))
-            resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--/----"))
+            cliente = html.escape(str(l.get("Cliente", "") or "Sem Nome"))
+            coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--"))
+            resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--"))
 
             items_html += f"""
-            <div class="carousel-item">
-                <div class="card-top-strip"></div>
-                <div class="card-content">
-                    <div class="card-header" title="{cliente}">🏢 {cliente}</div>
-                    
-                    <div class="info-row">
-                        <span class="label-icon">📅 Coleta:</span>
-                        <span class="tag tag-date">{coleta}</span>
+            <div class="card">
+                <div class="card-header" title="{cliente}">
+                    🏢 {cliente}
+                </div>
+                <div class="card-body">
+                    <div class="data-group">
+                        <span class="label">📅 COLETA</span>
+                        <span class="value-coleta">{coleta}</span>
                     </div>
-                    
-                    <div class="info-row">
-                        <span class="label-icon">🧪 Previsão:</span>
-                        <span class="tag tag-result">{resultado}</span>
+                    <div class="divider"></div>
+                    <div class="data-group">
+                        <span class="label">🧪 PREVISÃO</span>
+                        <span class="value-result">{resultado}</span>
                     </div>
-                    
-                    <div class="status-badge">AGUARDANDO</div>
+                </div>
+                <div class="card-footer">
+                    <span class="status-pill">⏳ EM ANÁLISE</span>
                 </div>
             </div>
             """
 
-        # CSS "ELITE" (Estilo Profissional)
         carousel_component = f"""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
             
-            .carousel-wrapper {{ 
-                overflow: hidden; 
-                width: 100%; 
-                padding: 20px 0; 
-            }}
-            
-            .carousel-track {{ 
-                display: flex; 
-                width: max-content; 
-                animation: scroll {max(25, len(ativos)*6)}s linear infinite; 
-            }}
-            
+            .carousel-wrapper {{ overflow: hidden; width: 100%; padding: 10px 0 30px 0; }}
+            .carousel-track {{ display: flex; width: max-content; animation: scroll {max(30, len(ativos)*8)}s linear infinite; }}
             .carousel-track:hover {{ animation-play-state: paused; }}
-            
             @keyframes scroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
             
-            /* CARTÃO TÁTICO */
-            .carousel-item {{ 
-                width: 300px; 
-                flex-shrink: 0; 
-                margin-right: 30px; 
-                background: #ffffff; 
-                border-radius: 16px; 
-                box-shadow: 0 10px 25px rgba(0,0,0,0.12); 
-                height: 190px; 
-                display: flex; 
-                flex-direction: column; 
-                font-family: 'Roboto', sans-serif;
-                transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efeito elástico */
-                position: relative;
+            /* CARD DESIGN "OPERACIONAL" */
+            .card {{
+                width: 260px;
+                flex-shrink: 0;
+                margin-right: 25px;
+                background: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1);
+                font-family: 'Inter', sans-serif;
                 overflow: hidden;
-                border: 1px solid #f0f0f0;
+                border: 1px solid #e2e8f0;
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
             }}
             
-            .carousel-item:hover {{
-                transform: translateY(-8px) scale(1.02);
-                box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-                border-color: #d32f2f;
+            .card:hover {{
+                transform: translateY(-5px);
+                box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+                border-color: #cbd5e1;
             }}
 
-            .card-top-strip {{
-                height: 6px;
-                background: linear-gradient(90deg, #d32f2f, #ff6b6b);
-                width: 100%;
-            }}
-
-            .card-content {{
-                padding: 20px;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                height: 100%;
-            }}
-
+            /* CABEÇALHO ESCURO */
             .card-header {{
-                font-size: 18px;
-                font-weight: 800;
-                color: #2c3e50;
-                margin-bottom: 15px;
+                background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%);
+                color: white;
+                padding: 12px 15px;
+                font-weight: 600;
+                font-size: 14px;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                border-bottom: 2px solid #f5f5f5;
-                padding-bottom: 10px;
+                border-bottom: 3px solid #ffb400; /* Linha dourada tática */
             }}
 
-            .info-row {{
+            .card-body {{
+                padding: 15px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 12px;
+                background: #f8fafc;
             }}
 
-            .label-icon {{
-                font-size: 13px;
-                color: #7f8c8d;
-                font-weight: 600;
+            .data-group {{
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                flex: 1;
+            }}
+
+            .divider {{
+                width: 1px;
+                height: 30px;
+                background: #cbd5e1;
+                margin: 0 10px;
+            }}
+
+            .label {{
+                font-size: 10px;
+                color: #64748b;
+                font-weight: 800;
+                letter-spacing: 0.5px;
+                margin-bottom: 4px;
+            }}
+
+            .value-coleta {{
+                font-size: 14px;
+                font-weight: 700;
+                color: #334155;
+            }}
+
+            .value-result {{
+                font-size: 14px;
+                font-weight: 700;
+                color: #059669; /* Verde Esmeralda */
+            }}
+
+            .card-footer {{
+                background: #ffffff;
+                padding: 10px;
+                text-align: center;
+                border-top: 1px solid #f1f5f9;
+            }}
+
+            .status-pill {{
+                background: #e0f2fe;
+                color: #0369a1;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 4px 12px;
+                border-radius: 20px;
+                display: inline-block;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
-            }}
-
-            /* TAGS DE DATA (Pílulas Coloridas) */
-            .tag {{
-                padding: 6px 12px;
-                border-radius: 50px;
-                font-weight: 700;
-                font-size: 14px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            }}
-
-            .tag-date {{
-                background-color: #ffebee;
-                color: #c62828;
-                border: 1px solid #ffcdd2;
-            }}
-
-            .tag-result {{
-                background-color: #e8f5e9;
-                color: #2e7d32;
-                border: 1px solid #c8e6c9;
-            }}
-            
-            .status-badge {{
-                position: absolute;
-                bottom: 15px;
-                right: 20px;
-                font-size: 10px;
-                color: #bdbdbd;
-                font-weight: 900;
-                letter-spacing: 1px;
-                opacity: 0.5;
             }}
 
         </style>
         <div class="carousel-wrapper"><div class="carousel-track">{items_html}</div></div>
         """
-        components.html(carousel_component, height=260)
+        components.html(carousel_component, height=220)
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
     
@@ -891,6 +862,7 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
 
 
