@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import re
+import os
 from pypdf import PdfReader
 from fpdf import FPDF
 import gspread
@@ -761,4 +762,5 @@ else:
                     st.success("Baixado!")
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
+
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
