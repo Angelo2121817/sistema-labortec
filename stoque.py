@@ -196,26 +196,68 @@ if not verificar_senha():
 # 4. CARREGAMENTO E SALVAMENTO DE DADOS (Sheets)
 # ==============================================================================
 
-def carregar_dados():
+def salvar_dados():
     try:
-        # ---------------- ESTOQUE ----------------
-        df = conn.read("Estoque", ttl=0)
-        if isinstance(df, pd.DataFrame):
-            df.columns = [str(c).strip() for c in df.columns]
-            st.session_state["estoque"] = df
-        else:
-            st.session_state["estoque"] = pd.DataFrame()
+        # =========================
+        # ESTOQUE
+        # =========================
+        conn.update(
+            worksheet="Estoque",
+            data=st.session_state["estoque"]
+        )
 
-        # ---------------- CLIENTES ----------------
-        df_c = conn.read("Clientes", ttl=0)
-        if isinstance(df_c, pd.DataFrame):
-            df_c.columns = [str(c).strip() for c in df_c.columns]
-            if "Email" not in df_c.columns:
-                df_c["Email"] = ""
-            if "Nome" in df_c.columns:
-                st.session_state["clientes_db"] = df_c.set_index("Nome").to_dict("index")
-            else:
-                st.session_state["clientes_db"] = {}
+        # =========================
+        # CLIENTES
+        # =========================
+        df_cli = pd.DataFrame.from_dict(
+            st.session_state["clientes_db"],
+            orient="index"
+        )
+        df_cli.reset_index(inplace=True)
+        df_cli.rename(columns={"index": "Nome"}, inplace=True)
+
+        conn.update(
+            worksheet="Clientes",
+            data=df_cli
+        )
+
+        # =========================
+        # LOG VENDAS
+        # =========================
+        df_v = pd.DataFrame(st.session_state["log_vendas"])
+        conn.update(
+            worksheet="Log_Vendas",
+            data=df_v
+        )
+
+        # =========================
+        # LOG ENTRADAS
+        # =========================
+        df_e = pd.DataFrame(st.session_state["log_entradas"])
+        conn.update(
+            worksheet="Log_Entradas",
+            data=df_e
+        )
+
+        # =========================
+        # LOG LAUDOS
+        # =========================
+        df_l = pd.DataFrame(st.session_state["log_laudos"])
+
+        if not df_l.empty:
+            df_l["Data_Coleta"] = df_l["Data_Coleta"].apply(to_br_date)
+            df_l["Data_Resultado"] = df_l["Data_Resultado"].apply(to_br_date)
+
+        conn.update(
+            worksheet="Log_Laudos",
+            data=df_l
+        )
+
+        # Sucesso
+        st.toast("💾 Dados sincronizados!")
+
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
 
         # ---------------- LOGS ----------------
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
@@ -824,3 +866,4 @@ elif menu == "📥 Entrada":
                 salvar_dados()
                 st.success("Entrada registrada!")
                 st.rerun()
+
