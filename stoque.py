@@ -210,10 +210,11 @@ def carregar_dados():
                     if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
                     if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
 
+                    # FORÇA CONVERSÃO PARA FORMATO BRASILEIRO
                     if "Data_Coleta" in df.columns:
-                        df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
+                        df["Data_Coleta"] = df["Data_Coleta"].apply(lambda x: _fix_date_br(x))
                     if "Data_Resultado" in df.columns:
-                        df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
+                        df["Data_Resultado"] = df["Data_Resultado"].apply(lambda x: _fix_date_br(x))
                     
                     for c in ["Cliente", "Status"]:
                         df[c] = df[c].fillna("").astype(str)
@@ -226,7 +227,8 @@ def carregar_dados():
             else:
                 st.session_state[aba.lower()] = []
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Erro ao carregar: {e}")
         return False
 
 
@@ -753,6 +755,7 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
 
 
