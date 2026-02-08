@@ -156,92 +156,89 @@ if 'estoque' not in st.session_state:
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 
 # ==============================================================================
-# 4. TEMAS E CSS
+# 4. TEMAS E CSS (SOFISTICADO)
 # ==============================================================================
 def aplicar_tema(escolha):
-    css = "<style>.blink-text { animation: blinker 1.5s linear infinite; color: #FF4B4B; font-weight: bold; } @keyframes blinker { 50% { opacity: 0; } }</style>"
+    css = """
+    <style>
+        /* Efeito Neon Pulsante */
+        @keyframes neonPulse {
+            0% { text-shadow: 0 0 5px #ff4b4b, 0 0 10px #ff4b4b; color: #ff4b4b; }
+            50% { text-shadow: 0 0 20px #ff4b4b, 0 0 30px #ff4b4b; color: #ff0000; }
+            100% { text-shadow: 0 0 5px #ff4b4b, 0 0 10px #ff4b4b; color: #ff4b4b; }
+        }
+        .neon-date {
+            font-weight: bold;
+            animation: neonPulse 2s infinite;
+            font-size: 1.1em;
+        }
+        /* Card de Coleta Sofisticado */
+        .coleta-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 5px solid #ff4b4b;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            transition: transform 0.3s;
+        }
+        .coleta-card:hover {
+            transform: translateY(-5px);
+        }
+        .coleta-cliente {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #1e3d59;
+            margin-bottom: 5px;
+        }
+        /* Centralizar Título */
+        .centered-title {
+            text-align: center;
+            color: #1e3d59;
+            font-weight: bold;
+            padding: 20px 0;
+            font-size: 2.5em;
+        }
+    </style>
+    """
     if escolha == "⚪ Padrão (Clean)": css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
     elif escolha == "🔵 Azul Labortec": css += "<style>.stApp { background-color: #F0F8FF !important; color: #002B4E !important; } h1,h2,h3 { color: #004aad !important; }</style>"
     elif escolha == "🌿 Verde Natureza": css += "<style>.stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }</style>"
-    elif escolha == "⚫ Dark Mode (Noturno)": css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; }</style>"
+    elif escolha == "⚫ Dark Mode (Noturno)": css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } .coleta-card { background: #1c1e24; color: white; border-left: 5px solid #ff4b4b; }</style>"
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF (FIX: DADOS LABORTEC SUBIDOS EM 15MM)
+# 5. GERADOR DE PDF
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        # 1. Logo à esquerda (Mantida no topo)
         if os.path.exists("labortec.jpg"):
             self.image("labortec.jpg", x=10, y=8, w=48)
-        
-        # Deslocamento original era 25mm (1 polegada). 
-        # Usuário pediu para subir 15mm, então o novo offset é 10mm (25 - 15 = 10)
         offset_y = 10 
-        
-        # 2. Textos da Labortec (Aumentados em 20%)
-        self.set_font('Arial', 'B', 19)
-        self.set_xy(65, 10 + offset_y)
-        self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
-        
-        # Título do Documento
-        self.set_font('Arial', 'B', 19)
-        self.set_xy(110, 10 + offset_y)
-        titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO')
-        self.cell(90, 10, titulo_doc, 0, 1, 'R')
-        
-        # Detalhes da Labortec
-        self.set_font('Arial', '', 10)
-        self.set_xy(65, 20 + offset_y)
-        self.cell(100, 5, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
-        
-        # Data
-        self.set_xy(110, 20 + offset_y)
-        self.cell(90, 5, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
-        
-        # Contatos
-        self.set_xy(65, 25 + offset_y)
-        self.cell(100, 5, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
-        
-        # Vendedor
-        self.set_xy(110, 25 + offset_y)
-        vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema')
-        self.cell(90, 5, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
-        
-        # CNPJ
-        self.set_xy(65, 30 + offset_y)
-        self.cell(100, 5, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
-        
-        # 5. Linha Divisória (Ajustada para o novo offset)
-        self.line(10, 40 + offset_y, 200, 40 + offset_y)
-        self.set_y(48 + offset_y)
+        self.set_font('Arial', 'B', 19); self.set_xy(65, 10 + offset_y); self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
+        self.set_font('Arial', 'B', 19); self.set_xy(110, 10 + offset_y); titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO'); self.cell(90, 10, titulo_doc, 0, 1, 'R')
+        self.set_font('Arial', '', 10); self.set_xy(65, 20 + offset_y); self.cell(100, 5, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
+        self.set_xy(110, 20 + offset_y); self.cell(90, 5, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
+        self.set_xy(65, 25 + offset_y); self.cell(100, 5, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
+        self.set_xy(110, 25 + offset_y); vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema'); self.cell(90, 5, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
+        self.set_xy(65, 30 + offset_y); self.cell(100, 5, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
+        self.line(10, 40 + offset_y, 200, 40 + offset_y); self.set_y(48 + offset_y)
+
+    def footer(self):
+        self.set_y(-25); self.set_font('Arial', 'I', 7)
+        self.cell(0, 4, 'Obs.: FRETE NÃO INCLUSO. PROPOSTA VÁLIDA POR 5 DIAS.', 0, 1, 'C')
+        self.cell(0, 4, 'PRAZO DE RETIRADA: 3 A 5 DIAS ÚTEIS APÓS CONFIRMAÇÃO.', 0, 0, 'C')
 
 def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
     pdf = PDF(); pdf.vendedor_nome = vendedor; pdf.titulo_doc = titulo; pdf.add_page()
-    
-    # Bloco Cliente
-    pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, 'L', fill=True)
-    
-    # Dados do Cliente
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(0, 6, f" Endereço: {dados_cli.get('End', '')}", 'LR', 1, 'L')
+    pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(240, 240, 240); pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, 'L', fill=True)
+    pdf.set_font('Arial', '', 9); pdf.cell(0, 6, f" Endereço: {dados_cli.get('End', '')}", 'LR', 1, 'L')
     pdf.cell(0, 6, f" Cidade: {dados_cli.get('Cidade', '')}/{dados_cli.get('UF', '')} - CEP: {dados_cli.get('CEP', '')}", 'LR', 1, 'L')
-    pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", 'LRB', 1, 'L')
-    pdf.ln(5)
-    
-    # Bloco Condições
-    pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, 'L')
-    pdf.ln(6)
-    
-    # Tabela de Itens
-    pdf.set_font('Arial', 'B', 8); pdf.set_fill_color(225, 225, 225)
-    w = [15, 15, 85, 25, 20, 30] 
-    cols = ['Un', 'Qtd', 'Produto', 'Marca', 'NCM', 'Total']
+    pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", 'LRB', 1, 'L'); pdf.ln(5)
+    pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, 'L'); pdf.ln(6)
+    pdf.set_font('Arial', 'B', 8); pdf.set_fill_color(225, 225, 225); w = [15, 15, 85, 25, 20, 30]; cols = ['Un', 'Qtd', 'Produto', 'Marca', 'NCM', 'Total']
     for i, c in enumerate(cols): pdf.cell(w[i], 8, c, 1, 0, 'C', fill=True)
-    pdf.ln()
-    
-    pdf.set_font('Arial', '', 8)
+    pdf.ln(); pdf.set_font('Arial', '', 8)
     for r in itens:
         pdf.cell(w[0], 7, str(r.get('Unidade', 'KG')), 1, 0, 'C')
         pdf.cell(w[1], 7, str(r['Qtd']), 1, 0, 'C')
@@ -249,19 +246,10 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
         pdf.cell(w[3], 7, str(r.get('Marca', 'LABORTEC')), 1, 0, 'C')
         pdf.cell(w[4], 7, str(r.get('NCM', '')), 1, 0, 'C')
         pdf.cell(w[5], 7, f"{float(r['Total']):.2f}", 1, 1, 'R')
-    
-    # Total Geral
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(sum(w)-w[5], 10, "TOTAL GERAL: ", 0, 0, 'R')
-    pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, 'R')
-    
-    # Assinaturas
-    pdf.ln(30)
-    y = pdf.get_y()
-    pdf.line(25, y, 90, y); pdf.line(120, y, 185, y)
+    pdf.set_font('Arial', 'B', 10); pdf.cell(sum(w)-w[5], 10, "TOTAL GERAL: ", 0, 0, 'R'); pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, 'R')
+    pdf.ln(30); y = pdf.get_y(); pdf.line(25, y, 90, y); pdf.line(120, y, 185, y)
     pdf.set_font('Arial', '', 8); pdf.set_xy(25, y+2); pdf.cell(65, 4, 'Assinatura Cliente', 0, 0, 'C')
     pdf.set_xy(120, y+2); pdf.cell(65, 4, 'Assinatura Labortec', 0, 1, 'C')
-    
     return pdf.output(dest='S').encode('latin-1')
 
 # ==============================================================================
@@ -278,25 +266,39 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # PÁGINAS
 # ==============================================================================
 if menu == "📊 Dashboard":
-    st.title("📊 Dashboard Operacional")
+    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
-    st.subheader("🔔 Radar de Coletas (Laudos)")
+    
+    # Radar de Coletas Sofisticado
+    st.subheader("📡 Radar de Coletas Estratégicas")
     laudos = st.session_state.get('log_laudos', [])
     laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
-    if not laudos_pendentes: st.success("✅ Nenhuma coleta pendente.")
+    
+    if not laudos_pendentes:
+        st.success("✅ Nenhuma coleta pendente no radar.")
     else:
         try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
         except: pass
-        col_laudos = st.columns(4)
-        for i, l in enumerate(laudos_pendentes[:4]): 
-            with col_laudos[i]:
-                st.error(f"📅 **{l['Data_Coleta']}**")
-                st.info(f"🏭 {l['Cliente']}")
+        
+        # Exibição em Cards Sofisticados
+        cols_radar = st.columns(4)
+        for i, l in enumerate(laudos_pendentes[:8]): # Mostra até 8 em duas linhas
+            with cols_radar[i % 4]:
+                st.markdown(f"""
+                <div class="coleta-card">
+                    <div class="neon-date">📅 {l['Data_Coleta']}</div>
+                    <div class="coleta-cliente">🏢 {l['Cliente']}</div>
+                    <div style="font-size: 0.85em; color: gray;">Status: Pendente</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
+    st.subheader("📈 Métricas de Performance")
     c1, c2, c3 = st.columns(3)
-    c1.metric("👥 Clientes", len(st.session_state['clientes_db']))
-    c2.metric("📦 Produtos", len(st.session_state['estoque']))
-    c3.metric("💰 Vendas", len(st.session_state['log_vendas']))
+    c1.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
+    c2.metric("📦 Mix de Produtos", len(st.session_state['estoque']))
+    c3.metric("💰 Volume de Vendas", len(st.session_state['log_vendas']))
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
