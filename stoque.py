@@ -138,28 +138,31 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF
+# 5. GERADOR DE PDF (CORRIGIDO: SÓ LABORTEC + LINHA AJUSTADA)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        if os.path.exists("labortec.jpg"): self.image("labortec.jpg", x=10, y=8, w=45)
-        self.set_font('Arial', 'B', 11)
-        self.set_xy(60, 12)
-        self.cell(0, 5, 'LABORTEC CONSULTORIA & METAL QUÍMICA', 0, 1, 'L')
-        self.line(10, 30, 200, 30)
-        self.ln(15)
+        # 1. Logo (Se existir)
+        if os.path.exists("labortec.jpg"): 
+            self.image("labortec.jpg", x=10, y=8, w=45)
+        
+        # 2. Título (Apenas Labortec agora)
+        self.set_font('Arial', 'B', 14)
+        self.set_xy(60, 15) # Posição do texto
+        self.cell(0, 5, 'LABORTEC CONSULTORIA', 0, 1, 'L')
+        
+        # 3. Subtítulo (Endereço/CNPJ)
+        self.set_font('Arial', '', 9)
+        self.set_xy(60, 22)
+        self.cell(0, 5, 'Rua Alfredo Bruno, 22 - Campinas/SP', 0, 1, 'L')
+        self.set_xy(60, 27)
+        self.cell(0, 5, 'CNPJ: 03.763.197/0001-09 | Tel: (19) 3238-9320', 0, 1, 'L')
 
-def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, titulo):
-    pdf = PDF()
-    pdf.add_page()
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, titulo, 0, 1, 'C')
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(0, 5, f"Data: {datetime.now().strftime('%d/%m/%Y')} | Vendedor: {vendedor}", 0, 1, 'R')
-    pdf.ln(5)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(0, 6, f" CLIENTE: {cliente}", 1, 1, 'L')
-    pdf.ln(5)
+        # 4. Linha Separadora (Abaixei para 45 para não riscar o logo)
+        self.set_draw_color(0, 0, 0) # Cor preta
+        self.set_line_width(0.5)
+        self.line(10, 45, 200, 45) 
+        self.ln(35) # Espaço para começar o conteúdo abaixo da linha
     
     # Tabela
     pdf.set_font('Arial', 'B', 8)
@@ -418,3 +421,4 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
