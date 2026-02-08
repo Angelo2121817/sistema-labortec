@@ -801,31 +801,82 @@ elif menu == "📦 Estoque":
     )
     if not ed.equals(st.session_state["estoque"]): st.session_state["estoque"] = ed; salvar_dados()
 
+# ==============================================================================
+# 8. CONFERÊNCIA (AGORA COM ARQUIVAMENTO DE LAUDOS)
+# ==============================================================================
 elif menu == "📋 Conferência Geral":
-    st.title("📋 Conferência")
-    tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
+    st.title("📋 Conferência Tática")
+    
+    # Abas para organizar o front
+    tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos & Arquivamento"])
 
+    # --- ABA VENDAS ---
     with tab1:
-        if st.session_state['log_vendas']:
-            # Cria o DataFrame e inverte a ordem (iloc[::-1]) para o mais recente aparecer em cima
-            df_vendas = pd.DataFrame(st.session_state['log_vendas'])
-            st.dataframe(df_vendas.iloc[::-1], use_container_width=True)
+        if st.session_state.get('log_vendas'):
+            df = pd.DataFrame(st.session_state['log_vendas'])
+            st.dataframe(df.iloc[::-1], use_container_width=True)
         else:
-            st.info("Nenhuma venda registrada ainda.")
+            st.info("Nenhuma venda registrada.")
 
+    # --- ABA ENTRADAS ---
     with tab2:
-        if st.session_state['log_entradas']:
-            df_entradas = pd.DataFrame(st.session_state['log_entradas'])
-            st.dataframe(df_entradas.iloc[::-1], use_container_width=True)
+        if st.session_state.get('log_entradas'):
+            df = pd.DataFrame(st.session_state['log_entradas'])
+            st.dataframe(df.iloc[::-1], use_container_width=True)
         else:
-            st.info("Nenhuma entrada de estoque registrada.")
+            st.info("Nenhuma entrada registrada.")
 
+    # --- ABA LAUDOS (AQUI ESTÁ A NOVIDADE) ---
     with tab3:
-        if st.session_state['log_laudos']:
-            df_laudos = pd.DataFrame(st.session_state['log_laudos'])
-            st.dataframe(df_laudos.iloc[::-1], use_container_width=True)
+        laudos = st.session_state.get('log_laudos', [])
+        
+        # Filtros
+        pendentes = [l for l in laudos if l.get('Status') != 'Arquivado']
+        arquivados = [l for l in laudos if l.get('Status') == 'Arquivado']
+
+        st.subheader(f"⚠️ Pendentes: {len(pendentes)}")
+        
+        if not pendentes:
+            st.success("Nada pendente. A mesa está limpa, General!")
         else:
-            st.info("Nenhum laudo registrado.")
+            # Lista os pendentes com botão de ação
+            for i, item in enumerate(laudos):
+                # Só mostra se NÃO estiver arquivado
+                if item.get('Status') != 'Arquivado':
+                    
+                    # Cartão Expansível para cada Laudo
+                    with st.expander(f"📄 {item['Cliente']} | Coleta: {item['Data_Coleta']}"):
+                        c1, c2 = st.columns([2, 1])
+                        
+                        # Coluna 1: Dados
+                        c1.write(f"**Previsão:** {item.get('Data_Resultado', '-')}")
+                        c1.write(f"**Status Atual:** {item.get('Status', 'Pendente')}")
+                        link_drive = c1.text_input("🔗 Link do PDF (Google Drive/Nuvem):", key=f"link_{i}", placeholder="Cole o link aqui se quiser...")
+
+                        # Coluna 2: Ação
+                        c2.write("") # Espaço para alinhar
+                        c2.write("") 
+                        if c2.button("📂 ARQUIVAR / CONCLUIR", key=f"btn_arq_{i}", type="primary"):
+                            # AÇÃO DE ARQUIVAMENTO
+                            st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
+                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link_drive
+                            st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
+                            
+                            salvar_dados()
+                            st.toast("Laudo arquivado com sucesso!", icon="🗄️")
+                            st.rerun()
+
+        st.markdown("---")
+        
+        # Área de Histórico (Expansível para não poluir)
+        with st.expander(f"🗄️ Ver Arquivo Morto ({len(arquivados)})"):
+            if arquivados:
+                df_arq = pd.DataFrame(arquivados)
+                # Mostra colunas úteis
+                cols_show = [c for c in ['Cliente', 'Data_Coleta', 'Data_Arquivamento', 'Link_Arquivo'] if c in df_arq.columns]
+                st.dataframe(df_arq[cols_show], use_container_width=True)
+            else:
+                st.info("O arquivo morto está vazio.")
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
     if st.session_state['estoque'].empty: st.warning("Sem produtos!"); st.stop()
@@ -840,5 +891,6 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
 
