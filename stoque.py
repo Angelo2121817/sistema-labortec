@@ -96,45 +96,36 @@ def salvar_dados():
         st.toast("💾 Salvo no Google Sheets!", icon="🚀")
     except Exception as e:
         st.warning(f"Erro ao salvar na nuvem: {e}")
-# --- INICIALIZAÇÃO ---
+# --- INICIALIZAÇÃO BLINDADA ---
 if 'dados_carregados' not in st.session_state:
-    sucesso = carregar_dados()
+    carregar_dados() # Tenta carregar do Google
     st.session_state['dados_carregados'] = True
-    if not sucesso:
-        st.session_state['estoque'] = pd.DataFrame({
-            'Cod': ['2259', '0002', '0001'],
-            'Produto': ['POLITEC LBC-100 (POLIMERO FLOCULANTE)', 'PPT ING-100 (LIQUIDO CORROSIVO)', 'PPT ORG-100 (PRECIPITADOR)'],
-            'Marca': ['LABORTEC', 'LABORTEC', 'LABORTEC'],
-            'NCM': ['39069019', '28274921', '29302021'],
-            'Unidade': ['KG', 'KG', 'KG'],
-            'Preco_Base': [42.90, 7.43, 13.99],
-            'Saldo': [1000.0, 2000.0, 1500.0],
-            'Estoque_Inicial': [1000.0, 2000.0, 1500.0],
-            'Estoque_Minimo': [100.0, 50.0, 50.0]
-        })
-        st.session_state['tabelas_precos'] = {
-            'PADRAO': {'2259': 42.90, '0002': 7.43, '0001': 13.99},
-            '0614': {'2259': 38.00, '0002': 6.50, '0001': 12.00},
-            'REVENDA': {'2259': 35.00, '0002': 5.00, '0001': 10.00}
-        }
-        st.session_state['clientes_db'] = {
-            'METALURGICA RAMASSOL IMPERIAL LTDA': {
-                'Cod_Cli': '00442', 'CNPJ': '02.969.334/0001-01', 
-                'End': 'AVENIDA PINO VENDRAMINI, 20-90', 'Bairro': 'JD. SÃO BERNARDO', 
-                'Cidade': 'MIRASSOL', 'UF': 'SP', 'CEP': '15130-000', 'Tel': '(17)3253-9500',
-                'Tabela': '0614'
-            }
-        }
-        st.session_state['log_vendas'] = []
-        st.session_state['log_entradas'] = []
-        st.session_state['log_laudos'] = []
 
-if 'Estoque_Inicial' not in st.session_state['estoque'].columns:
-    st.session_state['estoque']['Estoque_Inicial'] = st.session_state['estoque']['Saldo']
-if 'Estoque_Minimo' not in st.session_state['estoque'].columns:
-    st.session_state['estoque']['Estoque_Minimo'] = 0.0
-if 'log_laudos' not in st.session_state:
-    st.session_state['log_laudos'] = []
+# --- KIT DE SOBREVIVÊNCIA (Garante que nada falta) ---
+# Se a tabela de preços não veio do Google, cria uma padrão agora
+if 'tabelas_precos' not in st.session_state:
+    st.session_state['tabelas_precos'] = {
+        'PADRAO': {},
+        'REVENDA': {}
+    }
+
+# Garante que as outras listas existam (caso a planilha esteja virgem)
+if 'estoque' not in st.session_state:
+    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Inicial', 'Estoque_Minimo'])
+
+if 'clientes_db' not in st.session_state:
+    st.session_state['clientes_db'] = {}
+
+if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
+if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
+if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
+
+# Garante colunas vitais no estoque
+if not st.session_state['estoque'].empty:
+    if 'Estoque_Inicial' not in st.session_state['estoque'].columns:
+        st.session_state['estoque']['Estoque_Inicial'] = st.session_state['estoque']['Saldo']
+    if 'Estoque_Minimo' not in st.session_state['estoque'].columns:
+        st.session_state['estoque']['Estoque_Minimo'] = 0.0
 
 if 'pdf_gerado' not in st.session_state: st.session_state['pdf_gerado'] = None
 if 'nome_arquivo_pdf' not in st.session_state: st.session_state['nome_arquivo_pdf'] = "documento.pdf"
@@ -1002,6 +993,7 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
+
 
 
 
