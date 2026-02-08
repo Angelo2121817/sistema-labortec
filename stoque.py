@@ -307,23 +307,38 @@ elif menu == "📦 Gestão de Produtos":
         salvar_dados()
 
 # ==============================================================================
-# 5. CLIENTES
-# ==============================================================================
-# ==============================================================================
-# 5. CLIENTES (COM EDIÇÃO E EXCLUSÃO)
+# 5. CLIENTES (COM CORREÇÃO DO ERRO DE EDIÇÃO)
 # ==============================================================================
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
     
-    # Inicializa variáveis para edição
+    # 1. Inicializa variáveis de memória
     if 'form_nome' not in st.session_state: st.session_state['form_nome'] = ""
     if 'form_tel' not in st.session_state: st.session_state['form_tel'] = ""
     if 'form_end' not in st.session_state: st.session_state['form_end'] = ""
 
-    # Formulário de Cadastro/Edição
+    # 2. Funções de Gatilho (Callbacks) - O SEGREDO DO SUCESSO
+    def preparar_edicao(nome, tel, end):
+        st.session_state['form_nome'] = nome
+        st.session_state['form_tel'] = tel
+        st.session_state['form_end'] = end
+
+    def limpar_campos():
+        st.session_state['form_nome'] = ""
+        st.session_state['form_tel'] = ""
+        st.session_state['form_end'] = ""
+
+    def excluir_cliente(nome):
+        if nome in st.session_state['clientes_db']:
+            del st.session_state['clientes_db'][nome]
+            salvar_dados()
+
+    # 3. Formulário
     with st.form("form_cliente"):
         st.write("📝 **Dados do Cliente**")
         c1, c2 = st.columns([3,1])
+        
+        # Os campos estão ligados à memória (session_state)
         nome = c1.text_input("Nome do Cliente (Empresa)", key="form_nome")
         tel = c2.text_input("Telefone", key="form_tel")
         end = st.text_input("Endereço Completo", key="form_end")
@@ -332,8 +347,8 @@ elif menu == "👥 Clientes":
             if nome:
                 st.session_state['clientes_db'][nome] = {'End': end, 'Tel': tel}
                 salvar_dados()
-                st.success(f"Cliente {nome} atualizado!")
-                # Limpa os campos
+                st.success(f"Cliente {nome} salvo com sucesso!")
+                # Limpa forçando a reinicialização das variáveis
                 st.session_state['form_nome'] = ""
                 st.session_state['form_tel'] = ""
                 st.session_state['form_end'] = ""
@@ -341,33 +356,30 @@ elif menu == "👥 Clientes":
             else:
                 st.error("O nome é obrigatório.")
 
-    if st.button("🧹 Cancelar Edição / Limpar Campos"):
-        st.session_state['form_nome'] = ""
-        st.session_state['form_tel'] = ""
-        st.session_state['form_end'] = ""
-        st.rerun()
+    # Botão de Limpar (Fora do form)
+    st.button("🧹 Limpar Campos", on_click=limpar_campos)
 
     st.markdown("---")
     st.subheader("📇 Lista de Contatos")
     
-    # Lista com botões de Editar e Excluir
-    for k in sorted(list(st.session_state['clientes_db'].keys())):
+    # 4. Listagem Segura
+    lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
+    
+    for k in lista_clientes:
         col_info, col_edit, col_del = st.columns([4, 0.5, 0.5])
+        
         dados = st.session_state['clientes_db'][k]
         col_info.markdown(f"**{k}** \n📍 {dados.get('End', '---')} | 📞 {dados.get('Tel', '---')}")
         
-        # Botão EDITAR
-        if col_edit.button("✏️", key=f"edit_{k}", help="Editar"):
-            st.session_state['form_nome'] = k
-            st.session_state['form_tel'] = dados.get('Tel', '')
-            st.session_state['form_end'] = dados.get('End', '')
-            st.rerun()
+        # Botão EDITAR (Usa callback para evitar o erro)
+        col_edit.button("✏️", key=f"btn_edit_{k}", help="Editar", 
+                        on_click=preparar_edicao, 
+                        args=(k, dados.get('Tel', ''), dados.get('End', '')))
             
-        # Botão EXCLUIR
-        if col_del.button("🗑️", key=f"del_{k}", help="Excluir"):
-            del st.session_state['clientes_db'][k]
-            salvar_dados()
-            st.rerun()
+        # Botão EXCLUIR (Usa callback para evitar erro de refresh)
+        col_del.button("🗑️", key=f"btn_del_{k}", help="Excluir", 
+                       on_click=excluir_cliente, 
+                       args=(k,))
 
 # ==============================================================================
 # 6. DASHBOARD (COM ALERTAS DE LAUDOS)
@@ -459,5 +471,6 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
 
 
