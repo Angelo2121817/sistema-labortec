@@ -653,7 +653,7 @@ elif menu == "📦 Estoque":
                 st.session_state["estoque"][col] = pd.to_numeric(
                     st.session_state["estoque"][col], errors='coerce'
                 ).fillna(0.0)
-    elif menu == "📋 Conferência Geral":
+            elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência")
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
 
@@ -712,6 +712,7 @@ elif menu == "📦 Estoque":
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
         salvar_dados()
+
 
 
 
