@@ -167,9 +167,20 @@ def aplicar_tema(escolha):
             50% { text-shadow: 0 0 20px #ff4b4b, 0 0 30px #ff4b4b; color: #ff0000; }
             100% { text-shadow: 0 0 5px #ff4b4b, 0 0 10px #ff4b4b; color: #ff4b4b; }
         }
+        @keyframes neonPulseGreen {
+            0% { text-shadow: 0 0 5px #4bff4b, 0 0 10px #4bff4b; color: #4bff4b; }
+            50% { text-shadow: 0 0 20px #4bff4b, 0 0 30px #4bff4b; color: #00ff00; }
+            100% { text-shadow: 0 0 5px #4bff4b, 0 0 10px #4bff4b; color: #4bff4b; }
+        }
         .neon-date {
             font-weight: bold;
             animation: neonPulse 2s infinite;
+            font-size: 1.1em;
+            display: inline-block;
+        }
+        .neon-result {
+            font-weight: bold;
+            animation: neonPulseGreen 2s infinite;
             font-size: 1.1em;
             display: inline-block;
         }
@@ -187,7 +198,7 @@ def aplicar_tema(escolha):
             border-left: 5px solid #ff4b4b;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             margin-bottom: 20px;
-            height: 160px; /* Tamanho fixo para simetria */
+            height: 200px; /* Aumentado para acomodar nova data */
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -297,14 +308,18 @@ if menu == "📊 Dashboard":
         
         # Exibição em Cards Simétricos
         cols_radar = st.columns(4)
-        for i, l in enumerate(laudos_pendentes[:8]): # Mostra até 8 em duas linhas
+        for i, l in enumerate(laudos_pendentes[:8]): 
             with cols_radar[i % 4]:
+                data_res = l.get('Data_Resultado', 'Não definida')
                 st.markdown(f"""
                 <div class="coleta-card">
                     <div class="coleta-cliente">🏢 {l['Cliente']}</div>
-                    <div class="prevista-label">Data Prevista:</div>
+                    <div class="prevista-label">Data Prevista Coleta:</div>
                     <div class="neon-date">📅 {l['Data_Coleta']}</div>
-                    <div style="font-size: 0.85em; color: gray; margin-top: 5px;">Status: Pendente</div>
+                    <div style="margin-top: 10px;">
+                        <div class="prevista-label">Previsão Resultado:</div>
+                        <div class="neon-result">🧪 {data_res}</div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
     
@@ -373,13 +388,51 @@ elif menu == "👥 Clientes":
             salvar_dados(); st.rerun()
 
 elif menu == "🧪 Laudos":
-    st.title("🧪 Laudos")
-    with st.form("f_laudo"):
-        cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-        data_l = st.date_input("Data")
-        if st.form_submit_button("Agendar"):
-            st.session_state['log_laudos'].append({'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Status': 'Pendente'})
-            salvar_dados(); st.rerun()
+    st.title("🧪 Gestão de Laudos")
+    
+    # Seção 1: Agendamento
+    with st.expander("📅 Agendar Nova Coleta", expanded=True):
+        with st.form("f_laudo"):
+            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
+            c1, c2 = st.columns(2)
+            data_l = c1.date_input("Data da Coleta")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            if st.form_submit_button("Agendar"):
+                st.session_state['log_laudos'].append({
+                    'Cliente': cli_l, 
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"),
+                    'Status': 'Pendente'
+                })
+                salvar_dados(); st.success("Agendado!"); st.rerun()
+
+    # Seção 2: Edição de Pendentes
+    st.markdown("---")
+    st.subheader("📋 Laudos Pendentes (Edição de Previsão)")
+    laudos = st.session_state.get('log_laudos', [])
+    pendentes = [i for i, l in enumerate(laudos) if l.get('Status', 'Pendente') == 'Pendente']
+    
+    if not pendentes:
+        st.info("Nenhum laudo pendente para edição.")
+    else:
+        df_p = pd.DataFrame([laudos[i] for i in pendentes])
+        # Adiciona o índice original para controle
+        df_p['ID_Orig'] = pendentes
+        
+        # Editor de dados para atualizar datas
+        ed_p = st.data_editor(
+            df_p[['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']], 
+            use_container_width=True, 
+            hide_index=True,
+            disabled=['ID_Orig', 'Cliente', 'Data_Coleta']
+        )
+        
+        if st.button("💾 ATUALIZAR DATAS/STATUS"):
+            for _, row in ed_p.iterrows():
+                idx = int(row['ID_Orig'])
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            salvar_dados(); st.success("Dados atualizados!"); st.rerun()
 
 elif menu == "📦 Produtos":
     st.title("📦 Produtos")
