@@ -653,51 +653,10 @@ elif menu == "📦 Estoque":
                 st.session_state["estoque"][col] = pd.to_numeric(
                     st.session_state["estoque"][col], errors='coerce'
                 ).fillna(0.0)
-elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Entrada de Mercadoria")
-    
-    if st.session_state['estoque'].empty:
-        st.warning("Cadastre produtos no estoque primeiro!")
-        st.stop()
+    elif menu == "📋 Conferência Geral":
+    st.title("📋 Conferência")
+    tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
 
-    with st.form("f_ent"):
-        # Cria lista de opções segura
-        opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
-        prod_sel = st.selectbox("Selecione o Produto", opcoes)
-        qtd_ent = st.number_input("Quantidade (KG)", min_value=0.0, step=1.0)
-        
-        if st.form_submit_button("✅ Confirmar Entrada"):
-            # Pega o código separado do nome
-            cod = prod_sel.split(" - ")[0]
-            
-            # Localiza o produto no DataFrame
-            mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-            
-            if not st.session_state['estoque'][mask].empty:
-                idx = st.session_state['estoque'][mask].index[0]
-                
-                # --- AQUI ESTAVA O ERRO (CORRIGIDO) ---
-                # Pega o saldo atual e converte para float (número) na marra
-                saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0.0)
-                novo_saldo = saldo_atual + float(qtd_ent)
-                
-                # Atualiza o estoque
-                st.session_state['estoque'].at[idx, 'Saldo'] = novo_saldo
-                
-                # Registra no Log
-                nome_prod = st.session_state['estoque'].at[idx, 'Produto']
-                st.session_state['log_entradas'].append({
-                    'Data': datetime.now().strftime("%d/%m/%Y %H:%M"),
-                    'Produto': nome_prod,
-                    'Qtd': qtd_ent,
-                    'Usuario': st.session_state['usuario_nome']
-                })
-                
-                salvar_dados()
-                st.success(f"Entrada de +{qtd_ent}Kg em {nome_prod} realizada!")
-                st.rerun()
-            else:
-                st.error("Erro crítico: Produto não encontrado no índice.")
     with tab1:
         if st.session_state['log_vendas']:
             # Cria o DataFrame e inverte a ordem (iloc[::-1]) para o mais recente aparecer em cima
@@ -753,5 +712,6 @@ elif menu == "📥 Entrada de Estoque":
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
         salvar_dados()
+
 
 
