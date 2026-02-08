@@ -655,10 +655,28 @@ elif menu == "📦 Estoque":
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência")
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
-    with tab1: st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True) if st.session_state['log_vendas'] else st.info("Vazio")
-    with tab2: st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True) if st.session_state['log_entradas'] else st.info("Vazio")
-    with tab3: st.dataframe(pd.DataFrame(st.session_state['log_laudos']).iloc[::-1], use_container_width=True) if st.session_state['log_laudos'] else st.info("Vazio")
 
+    with tab1:
+        if st.session_state['log_vendas']:
+            # Cria o DataFrame e inverte a ordem (iloc[::-1]) para o mais recente aparecer em cima
+            df_vendas = pd.DataFrame(st.session_state['log_vendas'])
+            st.dataframe(df_vendas.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhuma venda registrada ainda.")
+
+    with tab2:
+        if st.session_state['log_entradas']:
+            df_entradas = pd.DataFrame(st.session_state['log_entradas'])
+            st.dataframe(df_entradas.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhuma entrada de estoque registrada.")
+
+    with tab3:
+        if st.session_state['log_laudos']:
+            df_laudos = pd.DataFrame(st.session_state['log_laudos'])
+            st.dataframe(df_laudos.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhum laudo registrado.")
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
     if st.session_state['estoque'].empty: st.warning("Sem produtos!"); st.stop()
@@ -673,3 +691,4 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
