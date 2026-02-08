@@ -309,60 +309,84 @@ elif menu == "📦 Gestão de Produtos":
 # ==============================================================================
 # 5. CLIENTES
 # ==============================================================================
+# ==============================================================================
+# 5. CLIENTES (COM EDIÇÃO E EXCLUSÃO)
+# ==============================================================================
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
     
-    # Formulário de Cadastro Rápido
+    # Inicializa variáveis para edição
+    if 'form_nome' not in st.session_state: st.session_state['form_nome'] = ""
+    if 'form_tel' not in st.session_state: st.session_state['form_tel'] = ""
+    if 'form_end' not in st.session_state: st.session_state['form_end'] = ""
+
+    # Formulário de Cadastro/Edição
     with st.form("form_cliente"):
+        st.write("📝 **Dados do Cliente**")
         c1, c2 = st.columns([3,1])
-        nome = c1.text_input("Nome do Cliente (Empresa)")
-        tel = c2.text_input("Telefone")
-        end = st.text_input("Endereço Completo")
+        nome = c1.text_input("Nome do Cliente (Empresa)", key="form_nome")
+        tel = c2.text_input("Telefone", key="form_tel")
+        end = st.text_input("Endereço Completo", key="form_end")
         
-        if st.form_submit_button("💾 Salvar Cliente"):
+        if st.form_submit_button("💾 SALVAR CLIENTE"):
             if nome:
                 st.session_state['clientes_db'][nome] = {'End': end, 'Tel': tel}
                 salvar_dados()
-                st.success(f"Cliente {nome} salvo!")
+                st.success(f"Cliente {nome} atualizado!")
+                # Limpa os campos
+                st.session_state['form_nome'] = ""
+                st.session_state['form_tel'] = ""
+                st.session_state['form_end'] = ""
                 st.rerun()
             else:
                 st.error("O nome é obrigatório.")
-    
+
+    if st.button("🧹 Cancelar Edição / Limpar Campos"):
+        st.session_state['form_nome'] = ""
+        st.session_state['form_tel'] = ""
+        st.session_state['form_end'] = ""
+        st.rerun()
+
     st.markdown("---")
     st.subheader("📇 Lista de Contatos")
     
-    # Listagem com botão de excluir
-    for k in list(st.session_state['clientes_db'].keys()):
-        col_n, col_d = st.columns([4,1])
+    # Lista com botões de Editar e Excluir
+    for k in sorted(list(st.session_state['clientes_db'].keys())):
+        col_info, col_edit, col_del = st.columns([4, 0.5, 0.5])
         dados = st.session_state['clientes_db'][k]
-        col_n.markdown(f"**{k}** \n📍 {dados.get('End', 'Sem endereço')} | 📞 {dados.get('Tel', 'Sem tel')}")
+        col_info.markdown(f"**{k}** \n📍 {dados.get('End', '---')} | 📞 {dados.get('Tel', '---')}")
         
-        if col_d.button("🗑️", key=f"del_{k}"):
+        # Botão EDITAR
+        if col_edit.button("✏️", key=f"edit_{k}", help="Editar"):
+            st.session_state['form_nome'] = k
+            st.session_state['form_tel'] = dados.get('Tel', '')
+            st.session_state['form_end'] = dados.get('End', '')
+            st.rerun()
+            
+        # Botão EXCLUIR
+        if col_del.button("🗑️", key=f"del_{k}", help="Excluir"):
             del st.session_state['clientes_db'][k]
             salvar_dados()
             st.rerun()
 
 # ==============================================================================
-# 6. DASHBOARD (O NOVO RADAR)
+# 6. DASHBOARD (COM ALERTAS DE LAUDOS)
 # ==============================================================================
 elif menu == "📊 Dashboard":
     st.title("📊 Painel de Controle Integrado")
     st.markdown("---")
     
-    # --- 1. RADAR DE LAUDOS (ALERTA DE PRAZO) ---
+    # 1. RADAR DE LAUDOS
     st.subheader("🔔 Radar de Coletas (Efluentes)")
     laudos = st.session_state.get('log_laudos', [])
-    
-    # Filtra e Tenta ordenar
     laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
-    try:
-        laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
-    except: pass
-
+    
     if not laudos_pendentes:
         st.success("✅ Tudo limpo! Nenhuma coleta pendente no radar.")
     else:
-        # Mostra os 4 primeiros cartões de alerta
+        try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
+        except: pass
+        
         col_laudos = st.columns(4)
         for i, l in enumerate(laudos_pendentes[:4]): 
             with col_laudos[i]:
@@ -372,31 +396,20 @@ elif menu == "📊 Dashboard":
     
     st.markdown("---")
 
-    # --- 2. SITUAÇÃO TÁTICA (MÉTRICAS) ---
+    # 2. MÉTRICAS TÁTICAS
     st.subheader("📈 Situação Tática")
     c1, c2, c3 = st.columns(3)
-    
-    qtd_estoque = len(st.session_state['estoque'])
-    qtd_vendas = len(st.session_state['log_vendas'])
-    qtd_clientes = len(st.session_state['clientes_db'])
-    
-    c1.metric("📦 Arsenal (Produtos)", qtd_estoque)
-    c2.metric("💰 Baixas (Vendas)", qtd_vendas)
-    c3.metric("👥 Base de Aliados (Clientes)", qtd_clientes)
+    c1.metric("📦 Arsenal (Produtos)", len(st.session_state['estoque']))
+    c2.metric("💰 Baixas (Vendas)", len(st.session_state['log_vendas']))
+    c3.metric("👥 Aliados (Clientes)", len(st.session_state['clientes_db']))
 
-    # --- 3. HISTÓRICO DE COMBATE (GRÁFICO) ---
+    # 3. HISTÓRICO RECENTE
     if st.session_state['log_vendas']:
         st.markdown("---")
         st.caption("Últimas Operações de Venda:")
         df_dash = pd.DataFrame(st.session_state['log_vendas'])
-        # Mostra apenas colunas essenciais
         cols_uteis = [c for c in ['Data', 'Cliente', 'Produto', 'Qtd', 'Vendedor'] if c in df_dash.columns]
-        st.dataframe(
-            df_dash[cols_uteis].tail(5).iloc[::-1], 
-            use_container_width=True, 
-            hide_index=True
-        )
-
+        st.dataframe(df_dash[cols_uteis].tail(5).iloc[::-1], use_container_width=True, hide_index=True)
 # ==============================================================================
 # 7. LAUDOS (O NOVO MÓDULO)
 # ==============================================================================
@@ -446,4 +459,5 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
 
