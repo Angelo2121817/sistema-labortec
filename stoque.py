@@ -653,6 +653,24 @@ elif menu == "📦 Estoque":
                 st.session_state["estoque"][col] = pd.to_numeric(
                     st.session_state["estoque"][col], errors='coerce'
                 ).fillna(0.0)
+elif menu == "📋 Conferência Geral":
+    st.title("📋 Conferência")
+    tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
+
+    with tab1:
+        if st.session_state['log_vendas']:
+            # Cria o DataFrame e inverte a ordem (iloc[::-1]) para o mais recente aparecer em cima
+            df_vendas = pd.DataFrame(st.session_state['log_vendas'])
+            st.dataframe(df_vendas.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhuma venda registrada ainda.")
+
+    with tab2:
+        if st.session_state['log_entradas']:
+            df_entradas = pd.DataFrame(st.session_state['log_entradas'])
+            st.dataframe(df_entradas.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhuma entrada de estoque registrada.")
 
     # 2. ESTILO: Verde Tático
     def estilo_saldo(val):
@@ -694,3 +712,4 @@ elif menu == "📦 Estoque":
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
         salvar_dados()
+
