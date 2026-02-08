@@ -181,7 +181,6 @@ def aplicar_tema(escolha):
         .neon-result { font-weight: bold; animation: neonPulseGreen 2s infinite; font-size: 1.0em; display: inline-block; }
         .prevista-label { font-size: 0.85em; color: #555; font-weight: bold; margin-bottom: 2px; }
         
-        /* Container de Rolagem Horizontal para o Radar */
         .radar-container {
             display: flex;
             overflow-x: auto;
@@ -189,16 +188,18 @@ def aplicar_tema(escolha):
             gap: 20px;
             scrollbar-width: thin;
             scrollbar-color: #ff4b4b #f0f2f6;
+            white-space: nowrap; /* Garante que os cards não quebrem linha */
         }
         .radar-container::-webkit-scrollbar { height: 8px; }
         .radar-container::-webkit-scrollbar-track { background: #f0f2f6; border-radius: 10px; }
         .radar-container::-webkit-scrollbar-thumb { background: #ff4b4b; border-radius: 10px; }
 
         .coleta-card {
-            flex: 0 0 280px; /* Largura fixa para os cards */
+            flex: 0 0 280px;
             background: white; padding: 15px; border-radius: 12px; border-left: 5px solid #ff4b4b;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform 0.3s; 
-            height: 180px; display: flex; flex-direction: column; justify-content: center;
+            height: 180px; display: inline-flex; flex-direction: column; justify-content: center;
+            vertical-align: top; margin-right: 10px;
         }
         .coleta-card:hover { transform: translateY(-5px); }
         .coleta-cliente { font-size: 1.0em; font-weight: bold; color: #1e3d59; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -292,7 +293,7 @@ if menu == "📊 Dashboard":
             </div>
             """
         
-        # Renderizar o container com scroll
+        # Renderizar o container com scroll (usando f-string para garantir a junção correta)
         st.markdown(f'<div class="radar-container">{cards_html}</div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True); st.markdown("---")
