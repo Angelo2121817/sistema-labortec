@@ -195,14 +195,12 @@ if not verificar_senha():
 # ==============================================================================
 # 4. CARREGAMENTO E SALVAMENTO DE DADOS (Sheets)
 # ==============================================================================
-
 def salvar_dados():
     try:
         # ESTOQUE
-        conn.update(
+        conn.write(
             worksheet="Estoque",
-            data=st.session_state["estoque"],
-            reload=True
+            data=st.session_state["estoque"]
         )
 
         # CLIENTES
@@ -213,38 +211,35 @@ def salvar_dados():
         df_cli.reset_index(inplace=True)
         df_cli.rename(columns={"index": "Nome"}, inplace=True)
 
-        conn.update(
+        conn.write(
             worksheet="Clientes",
-            data=df_cli,
-            reload=True
+            data=df_cli
         )
 
         # LOG VENDAS
-        df_v = pd.DataFrame(st.session_state["log_vendas"])
-        conn.update(
+        df_vendas = pd.DataFrame(st.session_state["log_vendas"])
+        conn.write(
             worksheet="Log_Vendas",
-            data=df_v,
-            reload=True
+            data=df_vendas
         )
 
         # LOG ENTRADAS
-        df_e = pd.DataFrame(st.session_state["log_entradas"])
-        conn.update(
+        df_ent = pd.DataFrame(st.session_state["log_entradas"])
+        conn.write(
             worksheet="Log_Entradas",
-            data=df_e,
-            reload=True
+            data=df_ent
         )
 
         # LOG LAUDOS
-        df_l = pd.DataFrame(st.session_state["log_laudos"])
-        if not df_l.empty:
-            df_l["Data_Coleta"] = df_l["Data_Coleta"].apply(to_br_date)
-            df_l["Data_Resultado"] = df_l["Data_Resultado"].apply(to_br_date)
+        df_laudos = pd.DataFrame(st.session_state["log_laudos"])
 
-        conn.update(
+        if not df_laudos.empty:
+            df_laudos["Data_Coleta"] = df_laudos["Data_Coleta"].apply(to_br_date)
+            df_laudos["Data_Resultado"] = df_laudos["Data_Resultado"].apply(to_br_date)
+
+        conn.write(
             worksheet="Log_Laudos",
-            data=df_l,
-            reload=True
+            data=df_laudos
         )
 
         st.toast("💾 Dados sincronizados!")
@@ -878,5 +873,6 @@ elif menu == "📥 Entrada":
                 salvar_dados()
                 st.success("Entrada registrada!")
                 st.rerun()
+
 
 
