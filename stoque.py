@@ -159,12 +159,20 @@ def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _fix_date_br(val):
+    """Converte qualquer formato de data para DD/MM/AAAA"""
     if not val or pd.isna(val) or str(val).strip() == "":
         return ""
     try:
-        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y")
+        # Tenta vários formatos
+        for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']:
+            try:
+                return pd.to_datetime(val, format=fmt).strftime("%d/%m/%Y")
+            except:
+                continue
+        # Se nenhum formato funcionou, retorna como está
+        return str(val)
     except:
-        return val
+        return str(val)
 
 def _fix_datetime_br(val):
     if not val or pd.isna(val) or str(val).strip() == "":
@@ -696,4 +704,5 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
