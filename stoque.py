@@ -205,7 +205,7 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF (NOVO MODELO: SIMÉTRICO E COMPLETO)
+# 5. GERADOR DE PDF (CORRIGIDO: POSICIONAMENTO E REMOÇÃO DE CÓDIGOS)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
@@ -213,7 +213,7 @@ class PDF(FPDF):
         if os.path.exists("labortec.jpg"):
             self.image("labortec.jpg", x=10, y=8, w=40)
         
-        # Nome da Empresa (Cabeçalho Esquerdo)
+        # Nome da Empresa (Cabeçalho Esquerdo - Ajustado para não sobrepor)
         self.set_font('Arial', 'B', 16)
         self.set_xy(10, 8)
         self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
@@ -221,11 +221,10 @@ class PDF(FPDF):
         # Título do Documento (Cabeçalho Direito)
         self.set_font('Arial', 'B', 16)
         self.set_xy(100, 8)
-        # O título será passado na função criar_doc_pdf, aqui usamos uma variável global temporária ou apenas o placeholder
         titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO')
         self.cell(100, 10, titulo_doc, 0, 1, 'R')
         
-        # Informações da Labortec (Abaixo do Nome)
+        # Informações da Labortec (Abaixo do Nome - Ajustado para não sobrepor)
         self.set_font('Arial', '', 9)
         self.set_xy(10, 18)
         self.cell(100, 5, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
@@ -264,11 +263,10 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     pdf.titulo_doc = titulo
     pdf.add_page()
     
-    # --- BLOCO CLIENTE ---
+    # --- BLOCO CLIENTE (REMOVIDO CÓDIGO DO CLIENTE) ---
     pdf.set_font('Arial', 'B', 10)
-    # Fundo cinza claro para o cabeçalho do cliente
     pdf.set_fill_color(245, 245, 245)
-    pdf.cell(0, 7, f" Cliente: {cliente} (Cód: {dados_cli.get('Cod_Cli', 'N/A')})", 1, 1, 'L', fill=True)
+    pdf.cell(0, 7, f" Cliente: {cliente}", 1, 1, 'L', fill=True)
     
     pdf.set_font('Arial', '', 9)
     end = dados_cli.get('End', '')
@@ -291,32 +289,29 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     pdf.cell(0, 7, f" Pagto: {pagto} | Forma: {forma} | Vencto: {venc}", 1, 1, 'L')
     pdf.ln(5)
     
-    # --- TABELA DE ITENS ---
+    # --- TABELA DE ITENS (REMOVIDO COLUNA CÓDIGO) ---
     pdf.set_font('Arial', 'B', 8)
     pdf.set_fill_color(230, 230, 230)
-    # Larguras: Un(12), Qtd(12), Produto(80), Cod(15), Marca(25), NCM(20), Total(26)
-    pdf.cell(12, 7, 'Un', 1, 0, 'C', fill=True)
-    pdf.cell(12, 7, 'Qtd', 1, 0, 'C', fill=True)
-    pdf.cell(75, 7, 'Produto', 1, 0, 'C', fill=True)
-    pdf.cell(15, 7, 'Cód', 1, 0, 'C', fill=True)
-    pdf.cell(25, 7, 'Marca', 1, 0, 'C', fill=True)
-    pdf.cell(20, 7, 'NCM', 1, 0, 'C', fill=True)
+    # Reajustado larguras: Un(15), Qtd(15), Produto(95), Marca(30), NCM(25), Total(31)
+    pdf.cell(15, 7, 'Un', 1, 0, 'C', fill=True)
+    pdf.cell(15, 7, 'Qtd', 1, 0, 'C', fill=True)
+    pdf.cell(95, 7, 'Produto', 1, 0, 'C', fill=True)
+    pdf.cell(30, 7, 'Marca', 1, 0, 'C', fill=True)
+    pdf.cell(25, 7, 'NCM', 1, 0, 'C', fill=True)
     pdf.cell(31, 7, 'Total', 1, 1, 'C', fill=True)
     
     pdf.set_font('Arial', '', 8)
     for r in itens:
-        # Altura dinâmica para produtos longos
-        pdf.cell(12, 6, str(r.get('Unidade', 'KG')), 1, 0, 'C')
-        pdf.cell(12, 6, str(r['Qtd']), 1, 0, 'C')
-        pdf.cell(75, 6, str(r['Produto'])[:45], 1, 0, 'L')
-        pdf.cell(15, 6, str(r['Cod']), 1, 0, 'C')
-        pdf.cell(25, 6, str(r.get('Marca', 'LABORTEC')), 1, 0, 'C')
-        pdf.cell(20, 6, str(r.get('NCM', '')), 1, 0, 'C')
+        pdf.cell(15, 6, str(r.get('Unidade', 'KG')), 1, 0, 'C')
+        pdf.cell(15, 6, str(r['Qtd']), 1, 0, 'C')
+        pdf.cell(95, 6, str(r['Produto'])[:60], 1, 0, 'L')
+        pdf.cell(30, 6, str(r.get('Marca', 'LABORTEC')), 1, 0, 'C')
+        pdf.cell(25, 6, str(r.get('NCM', '')), 1, 0, 'C')
         pdf.cell(31, 6, f"{float(r['Total']):.2f}", 1, 1, 'R')
     
     # Total Geral
     pdf.set_font('Arial', 'B', 10)
-    pdf.cell(159, 8, "TOTAL GERAL: ", 0, 0, 'R')
+    pdf.cell(180, 8, "TOTAL GERAL: ", 0, 0, 'R')
     pdf.cell(31, 8, f"R$ {total:,.2f}", 1, 1, 'R')
     
     # --- BLOCO ASSINATURAS ---
