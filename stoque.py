@@ -8,8 +8,8 @@ from fpdf import FPDF
 import json
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA (TEM QUE SER A PRIMEIRA COISA) ---
-st.set_page_config(page_title="Sistema Integrado v56", layout="wide", page_icon="🧪")
+# --- 1. CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Sistema Integrado v57", layout="wide", page_icon="🧪")
 
 # --- 2. CONEXÃO COM O GOOGLE SHEETS ---
 try:
@@ -18,7 +18,7 @@ except:
     st.error("Erro no Secrets. Verifique o arquivo .streamlit/secrets.toml")
     st.stop()
 
-# --- 3. SISTEMA DE LOGIN (ARTE E SEGURANÇA) ---
+# --- 3. SISTEMA DE LOGIN ---
 CREDENCIAIS = {
     "General": "labormetal22",
     "Fabricio": "fabricio2225",
@@ -38,7 +38,6 @@ def verificar_senha():
         st.session_state["usuario_nome"] = ""
 
     if not st.session_state["autenticado"]:
-        # Design da Tela de Login
         st.markdown("""
             <style>
                 .login-container { background-color: #f0f2f6; padding: 30px; border-radius: 15px; border: 2px solid #d6d6d6; text-align: center; margin-bottom: 20px; }
@@ -73,9 +72,9 @@ def verificar_senha():
     return True
 
 if not verificar_senha():
-    st.stop() # PARA TUDO AQUI SE NÃO ESTIVER LOGADO
+    st.stop()
 
-# --- 4. FUNÇÕES DE DADOS (CARREGAR E SALVAR) ---
+# --- 4. FUNÇÕES DE DADOS ---
 def carregar_dados():
     try:
         df_est = conn.read(worksheet="Estoque", ttl="0")
@@ -116,7 +115,7 @@ def salvar_dados():
         st.toast("💾 Salvo na Nuvem!", icon="☁️")
     except Exception as e: st.warning(f"Erro ao salvar: {e}")
 
-# --- 5. INICIALIZAÇÃO DE VARIÁVEIS ---
+# --- 5. INICIALIZAÇÃO ---
 if 'dados_carregados' not in st.session_state:
     st.session_state['dados_carregados'] = carregar_dados()
 
@@ -137,7 +136,7 @@ if not st.session_state['estoque'].empty:
 
 if 'pdf_gerado' not in st.session_state: st.session_state['pdf_gerado'] = None
 
-# --- 6. FUNÇÕES VISUAIS E TEMAS ---
+# --- 6. TEMAS E VISUAL ---
 def aplicar_tema(escolha):
     css = """<style>
         [data-testid="stSidebar"] .block-container { text-align: center; }
@@ -161,8 +160,6 @@ def exibir_cabecalho_tela(titulo, logo, empresa):
         st.caption(empresa)
     st.markdown("---")
 
-# --- 7. NAVEGAÇÃO E MENU LATERAL ---
-# Se o código chegar aqui, o menu VAI aparecer
 st.sidebar.title("MENU GERAL")
 st.sidebar.success(f"👋 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 st.sidebar.markdown("---")
@@ -172,25 +169,21 @@ aplicar_tema(tema)
 
 page = st.sidebar.radio("Navegar:", ["📊 DASHBOARD", "LAUDOS", "VENDAS", "ENTRADA", "ESTOQUE", "MÍNIMOS", "CONFERÊNCIA", "CLIENTES"])
 
-# --- 8. LÓGICA DAS PÁGINAS ---
+# --- 7. LÓGICA DAS PÁGINAS ---
 
 if page == "📊 DASHBOARD":
     st.markdown("<h1 style='text-align: center;'>⚗️ Central de Inteligência</h1>", unsafe_allow_html=True)
     st.markdown("---")
-    
     col1, col2 = st.columns(2)
     total_vendas = sum(i['Qtd'] for i in st.session_state['log_vendas'])
     total_entrada = sum(i['Qtd'] for i in st.session_state['log_entradas'])
     col1.metric("📦 Total Vendido", f"{total_vendas:,.1f} KG")
     col2.metric("📥 Total Reposto", f"{total_entrada:,.1f} KG")
-    
     st.subheader("📅 Próximos Laudos")
     laudos = st.session_state.get('log_laudos', [])
     if laudos:
-        df_l = pd.DataFrame(laudos)
-        st.dataframe(df_l, use_container_width=True)
-    else:
-        st.info("Sem laudos agendados.")
+        st.dataframe(pd.DataFrame(laudos), use_container_width=True)
+    else: st.info("Sem laudos agendados.")
 
 elif page == "LAUDOS":
     exibir_cabecalho_tela("Agendamento de Laudos", "labortec.jpg", "LABORTEC")
@@ -201,7 +194,6 @@ elif page == "LAUDOS":
             st.session_state['log_laudos'].append({"Cliente": cli, "Data_Coleta": data.strftime("%d/%m/%Y")})
             salvar_dados()
             st.success("Agendado!")
-    
     if st.session_state['log_laudos']:
         df = pd.DataFrame(st.session_state['log_laudos'])
         edited = st.data_editor(df, num_rows="dynamic", use_container_width=True)
@@ -216,14 +208,22 @@ elif page == "ENTRADA":
     opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
     prod = c1.selectbox("Produto", opcoes)
     qtd = c2.number_input("Qtd (KG)", min_value=0.0)
+    
     if st.button("Confirmar Entrada", type="primary"):
         cod = prod.split(" - ")[0]
-        idx = st.session_state['estoque'][st.session_state['estoque']['Cod']==cod].index[0]
-        st.session_state['estoque'].at[idx, 'Saldo'] += qtd
-        st.session_state['log_entradas'].append({'Data': datetime.now().strftime("%d/%m/%Y"), 'Cod': cod, 'Qtd': qtd})
-        salvar_dados()
-        st.success("Estoque atualizado!")
-        st.rerun()
+        # --- CORREÇÃO DO ERRO INDEX ERROR ---
+        # Forçamos a comparação usando string para garantir que ache o produto
+        mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
+        
+        if not st.session_state['estoque'][mask].empty:
+            idx = st.session_state['estoque'][mask].index[0]
+            st.session_state['estoque'].at[idx, 'Saldo'] += qtd
+            st.session_state['log_entradas'].append({'Data': datetime.now().strftime("%d/%m/%Y"), 'Cod': cod, 'Qtd': qtd})
+            salvar_dados()
+            st.success("Estoque atualizado!")
+            st.rerun()
+        else:
+            st.error("ERRO CRÍTICO: Produto não encontrado no banco de dados. Verifique os códigos.")
 
 elif page == "ESTOQUE":
     exibir_cabecalho_tela("Gestão de Estoque", "metal.jpg", "METAL QUÍMICA")
@@ -238,7 +238,6 @@ elif page == "ESTOQUE":
                 st.session_state['estoque'] = pd.concat([st.session_state['estoque'], novo], ignore_index=True)
                 salvar_dados()
                 st.rerun()
-    
     edited = st.data_editor(st.session_state['estoque'], use_container_width=True, num_rows="dynamic")
     if not edited.equals(st.session_state['estoque']):
         st.session_state['estoque'] = edited
@@ -249,8 +248,11 @@ elif page == "MÍNIMOS":
     edited = st.data_editor(st.session_state['estoque'][['Cod','Produto','Saldo','Estoque_Minimo']], use_container_width=True)
     if st.button("Salvar Mínimos"):
         for i, row in edited.iterrows():
-            idx = st.session_state['estoque'][st.session_state['estoque']['Cod']==row['Cod']].index[0]
-            st.session_state['estoque'].at[idx, 'Estoque_Minimo'] = row['Estoque_Minimo']
+            # Correção de busca
+            mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
+            if not st.session_state['estoque'][mask].empty:
+                idx = st.session_state['estoque'][mask].index[0]
+                st.session_state['estoque'].at[idx, 'Estoque_Minimo'] = row['Estoque_Minimo']
         salvar_dados()
         st.success("Salvo!")
 
@@ -265,7 +267,6 @@ elif page == "CLIENTES":
             st.session_state['clientes_db'][nome] = {'Cod_Cli':cod, 'End':end}
             salvar_dados()
             st.rerun()
-    
     for nome in list(st.session_state['clientes_db'].keys()):
         c1, c2 = st.columns([4,1])
         c1.text(nome)
@@ -285,9 +286,12 @@ elif page == "VENDAS":
         itens = edited[edited['Qtd']>0]
         if not itens.empty:
             for _, row in itens.iterrows():
-                idx = st.session_state['estoque'][st.session_state['estoque']['Cod']==row['Cod']].index[0]
-                st.session_state['estoque'].at[idx, 'Saldo'] -= row['Qtd']
-                st.session_state['log_vendas'].append({'Data': datetime.now().strftime("%d/%m/%Y"), 'Cliente': cli, 'Cod': row['Cod'], 'Produto': row['Produto'], 'Qtd': row['Qtd']})
+                # --- CORREÇÃO DE BUSCA (INT vs STR) ---
+                mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
+                if not st.session_state['estoque'][mask].empty:
+                    idx = st.session_state['estoque'][mask].index[0]
+                    st.session_state['estoque'].at[idx, 'Saldo'] -= row['Qtd']
+                    st.session_state['log_vendas'].append({'Data': datetime.now().strftime("%d/%m/%Y"), 'Cliente': cli, 'Cod': row['Cod'], 'Produto': row['Produto'], 'Qtd': row['Qtd']})
             salvar_dados()
             st.success("Venda registrada!")
             st.rerun()
