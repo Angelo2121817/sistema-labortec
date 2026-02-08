@@ -622,10 +622,10 @@ elif menu == "👥 Clientes":
 elif menu == "📦 Estoque":
     st.title("📦 Estoque")
     
-    # ESTILIZAÇÃO DO SALDO (FUNDO VERMELHO CLARO, TEXTO VERMELHO ESCURO)
+    # SALDO AGORA COM FUNDO AMARELO E TEXTO PRETO
     df_styled = st.session_state["estoque"].style.set_properties(
         subset=["Saldo"], 
-        **{'color': '#b71c1c', 'font-weight': 'bold', 'background-color': '#ffcdd2'}
+        **{'color': '#000000', 'font-weight': 'bold', 'background-color': '#fff176'}
     )
     
     ed = st.data_editor(
@@ -634,8 +634,8 @@ elif menu == "📦 Estoque":
         num_rows="dynamic",
         column_config={
             "Saldo": st.column_config.NumberColumn(
-                "Saldo (Un)",
-                help="Quantidade em estoque",
+                "Saldo (KG)", # Mantido como KG
+                help="Quantidade em estoque em KG",
                 format="%.2f",
                 step=1,
             ),
