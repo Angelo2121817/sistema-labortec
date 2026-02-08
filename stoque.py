@@ -158,19 +158,15 @@ def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
-# FUNÇÕES AUXILIARES DE FORMATAÇÃO DE DATA
 def _fix_date_br(val):
-    """Converte para DD/MM/AAAA se for data, senão retorna o valor original"""
     if not val or pd.isna(val) or str(val).strip() == "":
         return ""
     try:
-        # Tenta converter para datetime e depois formatar para BR
         return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y")
     except:
-        return val # Retorna texto original (ex: 'Não definida')
+        return val
 
 def _fix_datetime_br(val):
-    """Converte para DD/MM/AAAA HH:MM se for data, senão retorna original"""
     if not val or pd.isna(val) or str(val).strip() == "":
         return ""
     try:
@@ -200,24 +196,20 @@ def carregar_dados():
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
                 
-                # CORREÇÃO DE DATAS: Força o formato BR ao carregar
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
                     if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
                     if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
 
-                    # Aplica formatação BR nas datas
                     if "Data_Coleta" in df.columns:
                         df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
                     if "Data_Resultado" in df.columns:
                         df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
                     
-                    # Garante que campos vazios de texto sejam strings vazias
                     for c in ["Cliente", "Status"]:
                         df[c] = df[c].fillna("").astype(str)
 
-                # Para Logs de Vendas e Entradas que têm hora
                 elif aba in ["Log_Vendas", "Log_Entradas"]:
                     if "Data" in df.columns:
                         df["Data"] = df["Data"].apply(_fix_datetime_br)
@@ -403,12 +395,10 @@ if menu == "📊 Dashboard":
         st.success("✅ Tudo em dia!")
     else:
         items_html = ""
-        # Multiplica para garantir efeito de loop
         loop_factor = 2 if len(ativos) > 4 else 8
         
         for l in ativos:
             cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
-            # As datas já foram corrigidas na carga, então não precisamos mexer aqui
             coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
             resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
 
@@ -631,7 +621,30 @@ elif menu == "👥 Clientes":
 
 elif menu == "📦 Estoque":
     st.title("📦 Estoque")
-    ed = st.data_editor(st.session_state["estoque"], use_container_width=True, num_rows="dynamic")
+    
+    # ESTILIZAÇÃO DO SALDO (FUNDO VERMELHO CLARO, TEXTO VERMELHO ESCURO)
+    df_styled = st.session_state["estoque"].style.set_properties(
+        subset=["Saldo"], 
+        **{'color': '#b71c1c', 'font-weight': 'bold', 'background-color': '#ffcdd2'}
+    )
+    
+    ed = st.data_editor(
+        df_styled, 
+        use_container_width=True, 
+        num_rows="dynamic",
+        column_config={
+            "Saldo": st.column_config.NumberColumn(
+                "Saldo (Un)",
+                help="Quantidade em estoque",
+                format="%.2f",
+                step=1,
+            ),
+             "Preco_Base": st.column_config.NumberColumn(
+                "Preço Base",
+                format="R$ %.2f"
+            )
+        }
+    )
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
         salvar_dados()
