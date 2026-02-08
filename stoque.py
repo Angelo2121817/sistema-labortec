@@ -376,37 +376,61 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # ==============================================================================
 # PÁGINAS
 # ==============================================================================
-if menu == "📊 Dashboard":
-    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
-    st.markdown("---")
-    st.subheader("📡 Radar de Coletas e Resultados (Carrossel)")
-
-    laudos_atuais = st.session_state.get("log_laudos", [])
-    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
-
-    if not ativos:
-        st.success("✅ Tudo em dia!")
-    else:
-        # Monta os cards em HTML
-        items_html = ""
-        # Multiplicamos a lista para dar efeito de loop se tiver poucos itens
-        # mas a animação de scroll cuida do resto
-        for l in ativos:
-            cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
-            coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
-            resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
-
-            items_html += f"""
-            <div class="carousel-item">
-                <div class="coleta-cliente">🏢 {cliente}</div>
-                <div class="prevista-label">Coleta:</div>
-                <div class="neon-date">📅 {coleta}</div>
-                <div style="margin-top: 8px;">
-                    <div class="prevista-label">Resultado:</div>
-                    <div class="neon-result">🧪 {resultado}</div>
-                </div>
+        # CSS e Estrutura do Carrossel Automático
+        carousel_component = f"""
+        <style>
+            .carousel-wrapper {{
+                overflow: hidden;
+                width: 100%;
+                position: relative;
+                padding: 10px 0;
+            }}
+            .carousel-track {{
+                display: flex;
+                width: calc(300px * {len(ativos) * 2});
+                animation: scroll {max(20, len(ativos)*4)}s linear infinite; /* Ajustei para ficar um pouco mais lento e suave */
+            }}
+            .carousel-track:hover {{
+                animation-play-state: paused;
+            }}
+            @keyframes scroll {{
+                0% {{ transform: translateX(0); }}
+                100% {{ transform: translateX(calc(-300px * {len(ativos)})); }}
+            }}
+            .carousel-item {{
+                width: 280px;
+                flex-shrink: 0;
+                margin-right: 20px;
+                background: white;
+                padding: 15px;
+                border-radius: 12px;
+                border-left: 6px solid #ff4b4b; /* Borda um pouco mais grossa */
+                box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+                height: 170px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                font-family: sans-serif;
+            }}
+            .coleta-cliente {{ font-weight: bold; color: #1e3d59; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+            .prevista-label {{ font-size: 13px; color: #666; font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }}
+            
+            /* DATA DA COLETA: Vermelho Terra */
+            .neon-date {{ font-weight: bold; color: #d32f2f; font-size: 15px; }}
+            
+            /* MUDANÇA AQUI: DATA DO RESULTADO agora é Verde Escuro Profissional (sem neon) */
+            .neon-result {{ font-weight: bold; color: #1e7e34; font-size: 16px; }}
+        </style>
+        
+        <div class="carousel-wrapper">
+            <div class="carousel-track">
+                {items_html}
+                {items_html}
             </div>
-            """
+        </div>
+        """
+
+        components.html(carousel_component, height=200)
 
         # CSS e Estrutura do Carrossel Automático
         carousel_component = f"""
@@ -657,3 +681,4 @@ elif menu == "📥 Entrada":
                 st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
                 salvar_dados()
                 st.rerun()
+
