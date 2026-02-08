@@ -16,7 +16,7 @@ def extrair_dados_cetesb(f):
         reader = PdfReader(f)
         text = reader.pages[0].extract_text()
         lines = [l.strip() for l in text.split('\n') if l.strip()]
-        d = {'Nome': '', 'CNPJ': '', 'End': '', 'Bairro': '', 'Cidade': '', 'CEP': '', 'UF': 'SP', 'Cod_Cli': '', 'Tel': ''}
+        d = {'Nome': '', 'CNPJ': '', 'End': '', 'Bairro': '', 'Cidade': '', 'CEP': '', 'UF': 'SP', 'Cod_Cli': '', 'Tel': '', 'Email': ''}
         for i, line in enumerate(lines):
             cnpj_m = re.search(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', line)
             if cnpj_m:
@@ -54,7 +54,7 @@ def ler_pdf_antigo(f):
         clean = re.sub(r'\s+', ' ', text).strip()
         idx_inicio = clean.lower().find("cliente")
         core = clean[idx_inicio:] if idx_inicio != -1 else clean
-        d = {'Nome':'', 'Cod_Cli':'', 'End':'', 'CEP':'', 'Bairro':'', 'Cidade':'', 'UF':'', 'CNPJ':'', 'Tel':''}
+        d = {'Nome':'', 'Cod_Cli':'', 'End':'', 'CEP':'', 'Bairro':'', 'Cidade':'', 'UF':'', 'CNPJ':'', 'Tel':'', 'Email':''}
         def extract(key, stops):
             match = re.search(re.escape(key) + r'[:\s]*', core, re.IGNORECASE)
             if not match: return ""
@@ -123,8 +123,13 @@ def carregar_dados():
     try:
         df_est = conn.read(worksheet="Estoque", ttl=0)
         if not df_est.empty: st.session_state['estoque'] = df_est
+        
         df_cli = conn.read(worksheet="Clientes", ttl=0)
-        if not df_cli.empty: st.session_state['clientes_db'] = df_cli.set_index('Nome').to_dict('index')
+        if not df_cli.empty:
+            # Garantir campo Email em clientes antigos
+            if 'Email' not in df_cli.columns: df_cli['Email'] = ''
+            st.session_state['clientes_db'] = df_cli.set_index('Nome').to_dict('index')
+        
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
             df = conn.read(worksheet=aba, ttl=0)
             if not df.empty:
@@ -253,11 +258,8 @@ if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
     st.subheader("📡 Radar de Coletas e Resultados")
-    
     laudos_atuais = st.session_state.get('log_laudos', [])
-    # Filtro simplificado: mostra laudos pendentes (sem data de resultado ou resultado não concluído)
     ativos = [l for l in laudos_atuais if l.get('Status', 'Pendente') == 'Pendente']
-
     if not ativos: st.success("✅ Tudo em dia!")
     else:
         cols_radar = st.columns(4)
@@ -277,82 +279,23 @@ if menu == "📊 Dashboard":
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
-    
-    # --- ÁREA DE AGENDAMENTO (CRIAR NOVO) ---
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
             c1, c2 = st.columns(2)
             data_l = c1.date_input("Data da Coleta")
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
-            
             if st.form_submit_button("Agendar"):
-                # Salva como string formato BR para ficar bonito no Dashboard
-                novo = {
-                    'Cliente': cli_l, 
-                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
-                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
-                    'Status': 'Pendente'
-                }
+                novo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'}
                 st.session_state['log_laudos'].append(novo)
-                salvar_dados()
-                st.success("Agendado!")
-                st.rerun()
-
-    st.markdown("---")
-    st.subheader("📋 Editar Previsões e Status")
-    
-    laudos = st.session_state.get('log_laudos', [])
-    
-    if not laudos:
-        st.info("Sem laudos registrados.")
-    else:
-        # Prepara o DataFrame para edição
-        df_p = pd.DataFrame(laudos)
-        # Cria um ID temporário para saber qual linha atualizar
-        df_p['ID'] = range(len(laudos))
-        
-        # --- CORREÇÃO AQUI ---
-        # 1. Removi 'Data_Coleta' e 'Data_Resultado' do disabled para você poder editar
-        # 2. Configurei column_config para aparecer um calendário bonitinho
-        ed_p = st.data_editor(
-            df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
-            use_container_width=True, 
-            hide_index=True,
-            disabled=['ID', 'Cliente'], # Só ID e Cliente ficam travados
-            column_config={
-                "Data_Coleta": st.column_config.TextColumn("Data Coleta (dd/mm/aaaa)"),
-                "Data_Resultado": st.column_config.TextColumn("Prev. Resultado (dd/mm/aaaa)"),
-                "Status": st.column_config.SelectboxColumn(
-                    "Status",
-                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
-                )
-            }
-        )
-
-        if st.button("💾 SALVAR ALTERAÇÕES"):
-            for _, row in ed_p.iterrows():
-                idx = int(row['ID'])
-                
-                # --- CORREÇÃO DO SALVAMENTO ---
-                # Agora atualizamos TUDO, inclusive a Coleta
-                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta'])
-                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado'])
-                st.session_state['log_laudos'][idx]['Status'] = row['Status']
-            
-            salvar_dados()
-            st.success("Dados atualizados! O Dashboard já vai mostrar as novas datas.")
-            st.rerun()
+                salvar_dados(); st.rerun()
     st.markdown("---"); st.subheader("📋 Editar Previsões")
     laudos = st.session_state.get('log_laudos', [])
     if not laudos: st.info("Sem laudos.")
     else:
         df_p = pd.DataFrame(laudos)
         df_p['ID'] = range(len(laudos))
-        # Editor direto
-        ed_p = st.data_editor(df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']], 
-                              use_container_width=True, hide_index=True, 
-                              disabled=['ID', 'Cliente', 'Data_Coleta'])
+        ed_p = st.data_editor(df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']], use_container_width=True, hide_index=True, disabled=['ID', 'Cliente', 'Data_Coleta'])
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID'])
@@ -394,27 +337,57 @@ elif menu == "💰 Vendas & Orçamentos":
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
 
 elif menu == "👥 Clientes":
-    st.title("👥 Clientes")
-    with st.expander("📂 Importar CETESB"):
-        up = st.file_uploader("PDF", type="pdf")
-        if up and st.button("Processar"):
+    st.title("👥 Gestão de Clientes")
+    
+    # Seção de Cadastro e Importação
+    with st.expander("📂 Cadastrar / Importar CETESB"):
+        up = st.file_uploader("Importar PDF CETESB", type="pdf")
+        if up and st.button("Processar PDF"):
             d = ler_pdf_antigo(up)
             if d:
                 for k, v in d.items(): st.session_state[f"f_{k}"] = v
-                st.success("Lido!")
-    with st.form("f_cli"):
-        nome = st.text_input("Nome", st.session_state.get('f_Nome', ''))
-        c1, c2 = st.columns(2)
-        cnpj = c1.text_input("CNPJ", st.session_state.get('f_CNPJ', ''))
-        tel = c2.text_input("Tel", st.session_state.get('f_Tel', ''))
-        end = st.text_input("Endereço", st.session_state.get('f_End', ''))
-        c3, c4, c5 = st.columns([2,1,1])
-        cid = c3.text_input("Cidade", st.session_state.get('f_Cidade', ''))
-        uf = c4.text_input("UF", st.session_state.get('f_UF', 'SP'))
-        cep = c5.text_input("CEP", st.session_state.get('f_CEP', ''))
-        if st.form_submit_button("SALVAR"):
-            st.session_state['clientes_db'][nome] = {'CNPJ':cnpj, 'Tel':tel, 'End':end, 'Cidade':cid, 'UF':uf, 'CEP':cep}
-            salvar_dados(); st.rerun()
+                st.success("Dados do PDF carregados no formulário abaixo!")
+        
+        with st.form("f_cli"):
+            nome = st.text_input("Nome / Razão Social", st.session_state.get('f_Nome', ''))
+            c1, c2 = st.columns(2)
+            cnpj = c1.text_input("CNPJ", st.session_state.get('f_CNPJ', ''))
+            tel = c2.text_input("Telefone", st.session_state.get('f_Tel', ''))
+            email = st.text_input("E-mail", st.session_state.get('f_Email', ''))
+            end = st.text_input("Endereço", st.session_state.get('f_End', ''))
+            c3, c4, c5 = st.columns([2,1,1])
+            cid = c3.text_input("Cidade", st.session_state.get('f_Cidade', ''))
+            uf = c4.text_input("UF", st.session_state.get('f_UF', 'SP'))
+            cep = c5.text_input("CEP", st.session_state.get('f_CEP', ''))
+            if st.form_submit_button("💾 SALVAR NOVO CLIENTE"):
+                st.session_state['clientes_db'][nome] = {'CNPJ':cnpj, 'Tel':tel, 'Email':email, 'End':end, 'Cidade':cid, 'UF':uf, 'CEP':cep}
+                salvar_dados(); st.success(f"Cliente {nome} cadastrado!"); st.rerun()
+
+    # Seção de Visualização, Edição e Exclusão
+    st.markdown("---")
+    st.subheader("📋 Lista de Clientes Cadastrados")
+    if not st.session_state['clientes_db']:
+        st.info("Nenhum cliente cadastrado ainda.")
+    else:
+        # Converter dicionário para DataFrame para edição
+        df_cli_list = pd.DataFrame.from_dict(st.session_state['clientes_db'], orient='index').reset_index().rename(columns={'index': 'Nome'})
+        
+        # Editor de dados para Edição e Exclusão
+        ed_cli = st.data_editor(
+            df_cli_list, 
+            use_container_width=True, 
+            num_rows="dynamic", # Permite apagar linhas selecionando e apertando Delete
+            hide_index=True,
+            column_order=["Nome", "CNPJ", "Email", "Tel", "End", "Cidade", "UF", "CEP"]
+        )
+        
+        if st.button("💾 SALVAR ALTERAÇÕES NA LISTA"):
+            # Reconverte o DataFrame editado para o formato de dicionário do sistema
+            novos_clientes = ed_cli.set_index('Nome').to_dict('index')
+            st.session_state['clientes_db'] = novos_clientes
+            salvar_dados()
+            st.success("Lista de clientes atualizada com sucesso!")
+            st.rerun()
 
 elif menu == "📦 Produtos":
     st.title("📦 Produtos")
@@ -441,4 +414,3 @@ elif menu == "📥 Entrada":
             st.session_state['estoque'].at[idx, 'Saldo'] += q_ent
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': p_ent, 'Qtd': q_ent})
             salvar_dados(); st.rerun()
-
