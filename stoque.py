@@ -25,12 +25,12 @@ def extrair_dados_cetesb(f):
                 d["CNPJ"] = cnpj_m.group(1)
                 d["Nome"] = line.replace(d["CNPJ"], "").strip()
 
-                if i + 1 &lt; len(lines):
+                if i + 1 < len(lines):
                     prox = lines[i + 1]
                     cad_m = re.search(r"(\d+-\d+-\d+)", prox)
                     d["End"] = prox.replace(cad_m.group(1), "").strip() if cad_m else prox
 
-                if i + 2 &lt; len(lines):
+                if i + 2 < len(lines):
                     addr_line = lines[i + 2]
                     cep_m = re.search(r"(\d{5}-\d{3})", addr_line)
                     if cep_m:
@@ -74,7 +74,7 @@ def ler_pdf_antigo(f):
             min_idx = len(fragment)
             for stop in stops:
                 stop_match = re.search(re.escape(stop), fragment, re.IGNORECASE)
-                if stop_match and stop_match.start() &lt; min_idx:
+                if stop_match and stop_match.start() < min_idx:
                     min_idx = stop_match.start()
             return fragment[:min_idx].strip(" :/-|").strip()
 
@@ -118,9 +118,9 @@ def obter_horario_br():
 
 def obter_saudacao():
     hora = obter_horario_br().hour
-    if 5 &lt;= hora &lt; 12:
+    if 5 <= hora < 12:
         return "Bom dia"
-    elif 12 &lt;= hora &lt; 18:
+    elif 12 <= hora < 18:
         return "Boa tarde"
     return "Boa noite"
 
