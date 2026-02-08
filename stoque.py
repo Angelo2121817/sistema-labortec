@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import re
 import os
 import html
@@ -10,13 +10,50 @@ from streamlit_gsheets import GSheetsConnection
 import streamlit.components.v1 as components
 
 # ==============================================================================
-# 0. FUNÇÕES DE EXTRAÇÃO PDF (CETESB & PADRÃO)
+# 0. FUNÇÃO UNIVERSAL DE CONVERSÃO DE DATAS → SEMPRE DD/MM/YYYY
 # ==============================================================================
+
+def to_br_date(value):
+    """Converte qualquer formato (date, datetime, YYYY-MM-DD ou já BR) em DD/MM/YYYY"""
+    if value is None:
+        return ""
+
+    # Se for um objeto date
+    if isinstance(value, date):
+        return value.strftime("%d/%m/%Y")
+
+    value = str(value).strip()
+
+    # Caso já esteja em formato BR
+    if re.match(r"^\d{2}/\d{2}/\d{4}$", value):
+        return value
+
+    # Caso venha como YYYY-MM-DD
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except:
+            pass
+
+    # Caso venha com T (ex: 2025-10-08T00:00:00)
+    if re.match(r"^\d{4}-\d{2}-\d{2}T", value):
+        try:
+            return datetime.strptime(value[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except:
+            pass
+
+    return value  # retorna no estado original caso não consiga identificar
+
+# ==============================================================================
+# 1. FUNÇÕES DE EXTRAÇÃO PDF (CETESB & PADRÃO)
+# ==============================================================================
+
 def extrair_dados_cetesb(f):
     try:
         reader = PdfReader(f)
         text = reader.pages[0].extract_text() or ""
         lines = [l.strip() for l in text.split("\n") if l.strip()]
+
         d = {"Nome": "", "CNPJ": "", "End": "", "Bairro": "", "Cidade": "", "CEP": "", "UF": "SP", "Cod_Cli": "", "Tel": "", "Email": ""}
 
         for i, line in enumerate(lines):
@@ -40,9 +77,13 @@ def extrair_dados_cetesb(f):
                         if m_num_bai:
                             d["End"] = f"{d['End']}, {m_num_bai.group(1)}"
                             d["Bairro"] = m_num_bai.group(2).strip()
+
                         d["Cidade"] = addr_line.split(d["CEP"])[-1].strip()
+
                 break
+
         return d
+
     except Exception:
         return None
 
@@ -50,8 +91,9 @@ def extrair_dados_cetesb(f):
 def ler_pdf_antigo(f):
     try:
         reader = PdfReader(f)
-        primeira_pagina = reader.pages[0].extract_text() or ""
-        if "CETESB" in primeira_pagina.upper():
+        primeira = reader.pages[0].extract_text() or ""
+
+        if "CETESB" in primeira.upper():
             return extrair_dados_cetesb(f)
 
         text = ""
@@ -61,69 +103,71 @@ def ler_pdf_antigo(f):
                 text += t + "\n"
 
         clean = re.sub(r"\s+", " ", text).strip()
-        idx_inicio = clean.lower().find("cliente")
-        core = clean[idx_inicio:] if idx_inicio != -1 else clean
+        idx = clean.lower().find("cliente")
+        core = clean[idx:] if idx != -1 else clean
 
         d = {"Nome": "", "Cod_Cli": "", "End": "", "CEP": "", "Bairro": "", "Cidade": "", "UF": "", "CNPJ": "", "Tel": "", "Email": ""}
 
         def extract(key, stops):
-            match = re.search(re.escape(key) + r"[:\s]*", core, re.IGNORECASE)
-            if not match:
+            m = re.search(re.escape(key) + r"[:\s]*", core, re.IGNORECASE)
+            if not m:
                 return ""
-            fragment = core[match.end():]
-            min_idx = len(fragment)
+            fragment = core[m.end():]
+            min_i = len(fragment)
             for stop in stops:
-                stop_match = re.search(re.escape(stop), fragment, re.IGNORECASE)
-                if stop_match and stop_match.start() < min_idx:
-                    min_idx = stop_match.start()
-            return fragment[:min_idx].strip(" :/-|").strip()
+                sm = re.search(re.escape(stop), fragment, re.IGNORECASE)
+                if sm and sm.start() < min_i:
+                    min_i = sm.start()
+            return fragment[:min_i].strip().strip(":-/| ")
 
-        d["Nome"] = extract("Cliente", ["CNPJ", "CPF", "Endereço", "Data:", "Código:"])
+        d["Nome"] = extract("Cliente", ["CNPJ", "CPF", "Endereço"])
 
         cnpj_match = re.search(r"(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})", core)
         d["CNPJ"] = cnpj_match.group(1) if cnpj_match else ""
 
-        d["End"] = extract("Endereço", ["Bairro", "Cidade", "Cep", "CEP"])
-        d["Bairro"] = extract("Bairro", ["Cidade", "Cep", "CEP"])
-        d["Cidade"] = extract("Cidade", ["Cep", "CEP"])
-
-        cep_match = re.search(r"(\d{5}-\d{3})", core)
-        d["CEP"] = cep_match.group(1) if cep_match else ""
+        d["End"] = extract("Endereço", ["Bairro", "Cidade", "CEP"])
+        d["Bairro"] = extract("Bairro", ["Cidade", "CEP"])
+        d["Cidade"] = extract("Cidade", ["CEP"])
+        cep_m = re.search(r"(\d{5}-\d{3})", core)
+        d["CEP"] = cep_m.group(1) if cep_m else ""
 
         return d
+
     except Exception:
         return None
 
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E CONEXÃO
+# 2. CONFIGURAÇÃO & CONEXÃO
 # ==============================================================================
+
 st.set_page_config(page_title="Sistema Integrado v61", layout="wide", page_icon="🧪")
+
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud.")
+except:
+    st.error("Erro crítico ao conectar no Google Sheets.")
     st.stop()
 
-
 # ==============================================================================
-# 2. SEGURANÇA E LOGIN
+# 3. LOGIN
 # ==============================================================================
-CREDENCIAIS = {"General": "labormetal22", "Fabricio": "fabricio2225", "Anderson": "anderson2225", "Angelo": "angelo2225"}
 
+CREDENCIAIS = {
+    "General": "labormetal22",
+    "Fabricio": "fabricio2225",
+    "Anderson": "anderson2225",
+    "Angelo": "angelo2225",
+}
 
 def obter_horario_br():
     return datetime.utcnow() - timedelta(hours=3)
 
-
 def obter_saudacao():
-    hora = obter_horario_br().hour
-    if 5 <= hora < 12:
-        return "Bom dia"
-    elif 12 <= hora < 18:
-        return "Boa tarde"
+    h = obter_horario_br().hour
+    if 5 <= h < 12: return "Bom dia"
+    if 12 <= h < 18: return "Boa tarde"
     return "Boa noite"
-
 
 def verificar_senha():
     if "autenticado" not in st.session_state:
@@ -132,43 +176,41 @@ def verificar_senha():
 
     if not st.session_state["autenticado"]:
         st.markdown("<h1 style='text-align:center;'>🔐 ACESSO RESTRITO</h1>", unsafe_allow_html=True)
+
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             senha = st.text_input("Código:", type="password")
             if st.button("ACESSAR"):
-                for n, s in CREDENCIAIS.items():
-                    if senha == s:
+                for nome, pw in CREDENCIAIS.items():
+                    if senha == pw:
                         st.session_state["autenticado"] = True
-                        st.session_state["usuario_nome"] = n
+                        st.session_state["usuario_nome"] = nome
                         st.rerun()
-                st.error("Incorreto")
+                st.error("Senha incorreta.")
         return False
     return True
-
 
 if not verificar_senha():
     st.stop()
 
-
 # ==============================================================================
-# 3. MOTOR DE DADOS
+# 4. CARREGAR DADOS (COM CONVERSÃO DE DATAS PARA DD/MM/YYYY)
 # ==============================================================================
-def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
-
 
 def carregar_dados():
     try:
-        df_est = conn.read(worksheet="Estoque", ttl=0)
+        # ----------------- ESTOQUE -----------------
+        df_est = conn.read("Estoque", ttl=0)
         if isinstance(df_est, pd.DataFrame) and not df_est.empty:
-            df_est = _normalizar_colunas(df_est)
+            df_est.columns = [c.strip() for c in df_est.columns]
             st.session_state["estoque"] = df_est
+        else:
+            st.session_state["estoque"] = pd.DataFrame()
 
-        df_cli = conn.read(worksheet="Clientes", ttl=0)
+        # ----------------- CLIENTES -----------------
+        df_cli = conn.read("Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
-            df_cli = _normalizar_colunas(df_cli)
+            df_cli.columns = [c.strip() for c in df_cli.columns]
             if "Email" not in df_cli.columns:
                 df_cli["Email"] = ""
             if "Nome" in df_cli.columns:
@@ -176,326 +218,266 @@ def carregar_dados():
             else:
                 st.session_state["clientes_db"] = {}
 
+        # ----------------- LOGS -----------------
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
-            df = conn.read(worksheet=aba, ttl=0)
+            df = conn.read(aba, ttl=0)
+
             if isinstance(df, pd.DataFrame) and not df.empty:
-                df = _normalizar_colunas(df)
+                df.columns = [c.strip() for c in df.columns]
+                # Normaliza datas no carregamento:
+                if "Data" in df.columns:
+                    df["Data"] = df["Data"].apply(to_br_date)
+
                 if aba == "Log_Laudos":
-                    if "Cliente" not in df.columns:
-                        df["Cliente"] = ""
-                    if "Data_Coleta" not in df.columns:
-                        df["Data_Coleta"] = ""
-                    if "Data_Resultado" not in df.columns:
-                        df["Data_Resultado"] = "Não definida"
+                    for col in ["Data_Coleta", "Data_Resultado"]:
+                        if col not in df.columns:
+                            df[col] = ""
+                        df[col] = df[col].apply(to_br_date)
+
                     if "Status" not in df.columns:
                         df["Status"] = "Pendente"
-                    
-                    # Limpeza
-                    for c in ["Cliente", "Data_Coleta", "Data_Resultado", "Status"]:
-                        df[c] = df[c].fillna("").astype(str)
-                    
+
                 st.session_state[aba.lower()] = df.to_dict("records")
             else:
                 st.session_state[aba.lower()] = []
+
         return True
-    except Exception:
+
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
         return False
 
 
+# ==============================================================================
+# 5. SALVAR DADOS (CONVERSÃO SEGURA DE TODOS OS FORMATOS)
+# ==============================================================================
+
 def salvar_dados():
     try:
-        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+        # ESTOQUE
+        conn.update("Estoque", st.session_state["estoque"])
+
+        # CLIENTES
         if st.session_state.get("clientes_db"):
-            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
-            conn.update(worksheet="Clientes", data=df_clis)
-        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
-        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
-        
-        # GARANTE DATAS BRASILEIRAS NO LOG LAUDOS ANTES DE SALVAR
-        laudos_df = pd.DataFrame(st.session_state.get("log_laudos", []))
-        if not laudos_df.empty:
-            # Tenta converter colunas de data para string DD/MM/YYYY se estiverem como data
-            for col in ['Data_Coleta', 'Data_Resultado']:
-                if col in laudos_df.columns:
-                    # Converte para string e depois tenta forçar formato
-                    laudos_df[col] = laudos_df[col].astype(str)
-                    
-                    # Corrige datas YYYY-MM-DD para DD/MM/YYYY
-                    def fix_date(d):
-                        try:
-                            if "-" in d and d.index("-") == 4: # Formato 2024-05-10
-                                return datetime.strptime(d[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
-                            return d
-                        except:
-                            return d
-                    
-                    laudos_df[col] = laudos_df[col].apply(fix_date)
+            df_cli = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
+            conn.update("Clientes", df_cli)
 
-        conn.update(worksheet="Log_Laudos", data=laudos_df)
-        st.toast("✅ Sincronizado!")
-    except Exception:
-        st.error("Erro ao salvar")
+        # LOGS PADRÃO
+        conn.update("Log_Vendas", pd.DataFrame(st.session_state["log_vendas"]))
+        conn.update("Log_Entradas", pd.DataFrame(st.session_state["log_entradas"]))
+
+        # LOG LAUDOS — CONVERTE TUDO PARA DD/MM/YYYY
+        df_l = pd.DataFrame(st.session_state["log_laudos"])
+
+        if not df_l.empty:
+            for col in ["Data_Coleta", "Data_Resultado"]:
+                if col in df_l.columns:
+                    df_l[col] = df_l[col].apply(to_br_date)
+
+            if "Status" not in df_l.columns:
+                df_l["Status"] = "Pendente"
+
+        conn.update("Log_Laudos", df_l)
+
+        st.toast("💾 Dados sincronizados!")
+
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
 
 
+# Inicializa se necessário
 if "dados_carregados" not in st.session_state:
     carregar_dados()
     st.session_state["dados_carregados"] = True
 
+# Inicializar estruturas vazias
 for key in ["log_vendas", "log_entradas", "log_laudos"]:
-    if key not in st.session_state:
-        st.session_state[key] = []
-if "estoque" not in st.session_state:
-    st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
-if "clientes_db" not in st.session_state:
-    st.session_state["clientes_db"] = {}
+    st.session_state.setdefault(key, [])
 
+st.session_state.setdefault("estoque", pd.DataFrame())
+st.session_state.setdefault("clientes_db", {})
 
 # ==============================================================================
-# 4. TEMAS E CSS
+# 6. TEMA VISUAL
 # ==============================================================================
-def aplicar_tema(escolha):
+
+def aplicar_tema(theme):
     css = """
     <style>
-        .centered-title { text-align: center; color: #1e3d59; font-weight: bold; padding: 20px 0; font-size: 2.5em; }
+        .centered-title { text-align:center; color:#1e3d59; font-weight:700; padding:20px 0; font-size:2.5em; }
     </style>
     """
-    if escolha == "⚪ Padrão (Clean)":
-        css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
-    elif escolha == "🔵 Azul Labortec":
-        css += "<style>.stApp { background-color: #F0F8FF !important; color: #002B4E !important; } h1,h2,h3 { color: #004aad !important; }</style>"
-    elif escolha == "🌿 Verde Natureza":
-        css += "<style>.stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }</style>"
-    elif escolha == "⚫ Dark Mode (Noturno)":
-        css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } .prevista-label { color: #aaa; }</style>"
+
+    if theme == "⚪ Padrão":
+        css += "<style>.stApp{background:#FFFFFF;color:#000;}</style>"
+    elif theme == "🔵 Azul":
+        css += "<style>.stApp{background:#F0F8FF;color:#003366;}</style>"
+    elif theme == "🌿 Verde":
+        css += "<style>.stApp{background:#F1F8E9;color:#1B5E20;}</style>"
+    elif theme == "⚫ Dark":
+        css += "<style>.stApp{background:#0E1117;color:#FAFAFA;}</style>"
+
     st.markdown(css, unsafe_allow_html=True)
-
-
+    # ==============================================================================
+# 7. MENU LATERAL
 # ==============================================================================
-# 5. GERADOR DE PDF
-# ==============================================================================
-class PDF(FPDF):
-    def header(self):
-        if os.path.exists("labortec.jpg"):
-            self.image("labortec.jpg", x=10, y=8, w=48)
-        offset_y = 10
-        self.set_font("Arial", "B", 19)
-        self.set_xy(65, 10 + offset_y)
-        self.cell(100, 10, "LABORTEC", 0, 0, "L")
 
-        self.set_font("Arial", "B", 19)
-        self.set_xy(110, 10 + offset_y)
-        titulo_doc = getattr(self, "titulo_doc", "ORÇAMENTO")
-        self.cell(90, 10, titulo_doc, 0, 1, "R")
-
-        self.set_font("Arial", "", 10)
-        self.set_xy(65, 20 + offset_y)
-        self.cell(100, 5, "Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235", 0, 0, "L")
-        self.set_xy(110, 20 + offset_y)
-        self.cell(90, 5, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, "R")
-
-        self.set_xy(65, 25 + offset_y)
-        self.cell(100, 5, "labortecconsultoria@gmail.com | Tel.: (19) 3238-9320", 0, 0, "L")
-        self.set_xy(110, 25 + offset_y)
-        vendedor_nome = getattr(self, "vendedor_nome", "Sistema")
-        self.cell(90, 5, f"Vendedor: {vendedor_nome}", 0, 1, "R")
-
-        self.set_xy(65, 30 + offset_y)
-        self.cell(100, 5, "C.N.P.J.: 03.763.197/0001-09", 0, 1, "L")
-
-        self.line(10, 40 + offset_y, 200, 40 + offset_y)
-        self.set_y(48 + offset_y)
-
-    def footer(self):
-        self.set_y(-25)
-        self.set_font("Arial", "I", 7)
-        self.cell(0, 4, "Obs.: FRETE NÃO INCLUSO. PROPOSTA VÁLIDA POR 5 DIAS.", 0, 1, "C")
-        self.cell(0, 4, "PRAZO DE RETIRADA: 3 A 5 DIAS ÚTEIS APÓS CONFIRMAÇÃO.", 0, 0, "C")
-
-
-def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
-    pdf = PDF()
-    pdf.vendedor_nome = vendedor
-    pdf.titulo_doc = titulo
-    pdf.add_page()
-
-    pdf.set_font("Arial", "B", 10)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, "L", fill=True)
-
-    pdf.set_font("Arial", "", 9)
-    pdf.cell(0, 6, f" Endereço: {dados_cli.get('End', '')}", "LR", 1, "L")
-    pdf.cell(0, 6, f" Cidade: {dados_cli.get('Cidade', '')}/{dados_cli.get('UF', '')} - CEP: {dados_cli.get('CEP', '')}", "LR", 1, "L")
-    pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", "LRB", 1, "L")
-    pdf.ln(5)
-
-    pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, "L")
-    pdf.ln(6)
-
-    pdf.set_font("Arial", "B", 8)
-    pdf.set_fill_color(225, 225, 225)
-    w = [15, 15, 85, 25, 20, 30]
-    cols = ["Un", "Qtd", "Produto", "Marca", "NCM", "Total"]
-    for i, c in enumerate(cols):
-        pdf.cell(w[i], 8, c, 1, 0, "C", fill=True)
-
-    pdf.ln()
-    pdf.set_font("Arial", "", 8)
-
-    for r in itens:
-        pdf.cell(w[0], 7, str(r.get("Unidade", "KG")), 1, 0, "C")
-        pdf.cell(w[1], 7, str(r.get("Qtd", 0)), 1, 0, "C")
-        pdf.cell(w[2], 7, str(r.get("Produto", ""))[:52], 1, 0, "L")
-        pdf.cell(w[3], 7, str(r.get("Marca", "LABORTEC")), 1, 0, "C")
-        pdf.cell(w[4], 7, str(r.get("NCM", "")), 1, 0, "C")
-        try:
-            pdf.cell(w[5], 7, f"{float(r.get('Total', 0)):.2f}", 1, 1, "R")
-        except Exception:
-            pdf.cell(w[5], 7, "0.00", 1, 1, "R")
-
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(sum(w) - w[5], 10, "TOTAL GERAL: ", 0, 0, "R")
-    pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, "R")
-
-    pdf.ln(30)
-    y = pdf.get_y()
-    pdf.line(25, y, 90, y)
-    pdf.line(120, y, 185, y)
-
-    pdf.set_font("Arial", "", 8)
-    pdf.set_xy(25, y + 2)
-    pdf.cell(65, 4, "Assinatura Cliente", 0, 0, "C")
-    pdf.set_xy(120, y + 2)
-    pdf.cell(65, 4, "Assinatura Labortec", 0, 1, "C")
-
-    return pdf.output(dest="S").encode("latin-1")
-
-
-# ==============================================================================
-# MENU LATERAL
-# ==============================================================================
 st.sidebar.title("🛠️ MENU")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
-tema_sel = st.sidebar.selectbox("Tema:", ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"])
+
+tema_sel = st.sidebar.selectbox(
+    "Tema:",
+    ["⚪ Padrão", "🔵 Azul", "🌿 Verde", "⚫ Dark"]
+)
 aplicar_tema(tema_sel)
-menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Estoque", "📋 Conferência Geral", "👥 Clientes"])
 
+menu = st.sidebar.radio(
+    "Navegar:",
+    [
+        "📊 Dashboard",
+        "🧪 Laudos",
+        "💰 Vendas & Orçamentos",
+        "📥 Entrada",
+        "📦 Estoque",
+        "📋 Conferência Geral",
+        "👥 Clientes"
+    ]
+)
 
 # ==============================================================================
-# PÁGINAS
+# 8. DASHBOARD — COM DATA CORRIGIDA DD/MM/YYYY + CARROSSEL
 # ==============================================================================
+
 if menu == "📊 Dashboard":
-    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
+
+    st.markdown("<div class='centered-title'>📊 Dashboard Operacional</div>", unsafe_allow_html=True)
     st.markdown("---")
-    
-    st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align:center;color:#1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
 
-    laudos_atuais = st.session_state.get("log_laudos", [])
-    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
+    laudos = st.session_state.get("log_laudos", [])
+    pendentes = [l for l in laudos if l.get("Status", "Pendente") == "Pendente"]
 
-    if not ativos:
+    if not pendentes:
         st.success("✅ Tudo em dia!")
     else:
-        # Monta os cards em HTML
-        items_html = ""
-        loop_factor = 2 if len(ativos) > 4 else 8
-        
-        for l in ativos:
-            cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
-            # Tenta forçar a exibição correta se estiver YYYY-MM-DD
-            data_coleta_raw = str(l.get("Data_Coleta", "") or "Data não informada")
-            data_resultado_raw = str(l.get("Data_Resultado", "") or "Não definida")
-            
-            def formatar_para_exibicao(d):
-                if "-" in d and len(d) == 10: # 2024-05-10
-                    try:
-                        return datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m/%Y")
-                    except: return d
-                return d
-            
-            coleta = html.escape(formatar_para_exibicao(data_coleta_raw))
-            resultado = html.escape(formatar_para_exibicao(data_resultado_raw))
+        itens_html = ""
 
-            items_html += f"""
+        for l in pendentes:
+
+            cliente = html.escape(str(l.get("Cliente", "")))
+            data_coleta = to_br_date(l.get("Data_Coleta", ""))
+            data_resultado = to_br_date(l.get("Data_Resultado", ""))
+
+            itens_html += f"""
             <div class="carousel-item">
                 <div class="coleta-cliente">🏢 {cliente}</div>
                 <div class="prevista-label">Coleta:</div>
-                <div class="neon-date">📅 {coleta}</div>
-                <div style="margin-top: 8px;">
-                    <div class="prevista-label">Resultado:</div>
-                    <div class="neon-result">🧪 {resultado}</div>
-                </div>
+                <div class="neon-date">📅 {data_coleta}</div>
+
+                <div class="prevista-label" style="margin-top:8px;">Resultado:</div>
+                <div class="neon-result">🧪 {data_resultado}</div>
             </div>
             """
 
-        carousel_component = f"""
+        # CSS do carrossel com velocidade adaptativa
+        velocidade = max(20, len(pendentes) * 5)
+
+        carrossel = f"""
         <style>
             .carousel-wrapper {{
-                overflow: hidden;
-                width: 100%;
-                position: relative;
-                padding: 10px 0;
+                overflow:hidden;
+                width:100%;
+                padding:10px 0;
             }}
             .carousel-track {{
-                display: flex;
-                width: calc(300px * {len(ativos) * 2});
-                animation: scroll {max(20, len(ativos)*5)}s linear infinite;
+                display:flex;
+                width:calc(300px * {len(pendentes) * 2});
+                animation:scroll {velocidade}s linear infinite;
             }}
             .carousel-track:hover {{
-                animation-play-state: paused;
+                animation-play-state:paused;
             }}
             @keyframes scroll {{
-                0% {{ transform: translateX(0); }}
-                100% {{ transform: translateX(calc(-300px * {len(ativos)})); }}
+                0% {{ transform:translateX(0); }}
+                100% {{ transform:translateX(calc(-300px * {len(pendentes)})); }}
             }}
             .carousel-item {{
-                width: 280px;
-                flex-shrink: 0;
-                margin-right: 20px;
-                background: white;
-                padding: 15px;
-                border-radius: 12px;
-                border-left: 6px solid #ff4b4b;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-                height: 170px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                font-family: sans-serif;
+                width:280px;
+                background:white;
+                margin-right:20px;
+                padding:15px;
+                border-radius:12px;
+                border-left:6px solid #ff4b4b;
+                height:170px;
+                display:flex;
+                flex-direction:column;
+                justify-content:center;
+                box-shadow:0 4px 10px rgba(0,0,0,0.1);
             }}
-            .coleta-cliente {{ font-weight: bold; color: #1e3d59; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-            .prevista-label {{ font-size: 13px; color: #666; font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }}
-            
-            .neon-date {{ font-weight: bold; color: #d32f2f; font-size: 15px; }}
-            .neon-result {{ font-weight: bold; color: #1e7e34; font-size: 16px; }}
+            .coleta-cliente {{
+                font-weight:bold;
+                color:#1e3d59;
+                margin-bottom:6px;
+                font-size:15px;
+                white-space:nowrap;
+                overflow:hidden;
+                text-overflow:ellipsis;
+            }}
+            .prevista-label {{
+                font-size:12px;
+                color:#666;
+                font-weight:600;
+                text-transform:uppercase;
+            }}
+            .neon-date {{
+                font-weight:bold;
+                color:#d32f2f;
+                font-size:15px;
+            }}
+            .neon-result {{
+                font-weight:bold;
+                color:#1e7e34;
+                font-size:16px;
+            }}
         </style>
-        
+
         <div class="carousel-wrapper">
             <div class="carousel-track">
-                {items_html}
-                {items_html}
+                {itens_html}
+                {itens_html}
             </div>
         </div>
         """
 
-        components.html(carousel_component, height=200)
+        components.html(carrossel, height=200)
 
     st.markdown("---")
-    st.info("Espaço livre para novos gráficos ou métricas...")
+    st.info("Espaço livre para gráficos, KPIs, cards extras etc.")
+    # ==============================================================================
+# 9. LAUDOS — TUDO COM DATA NO PADRÃO BR (DD/MM/YYYY)
+# ==============================================================================
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
+
+    # ----------------------------------
+    # AGENDAR NOVA COLETA
+    # ----------------------------------
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
-        with st.form("f_laudo"):
-            cli_l = st.selectbox("Cliente", list(st.session_state["clientes_db"].keys()))
+        with st.form("form_novo_laudo"):
+
+            cliente = st.selectbox("Cliente", list(st.session_state["clientes_db"].keys()))
+
             c1, c2 = st.columns(2)
-            data_l = c1.date_input("Data da Coleta")
-            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+
+            data_coleta = c1.date_input("Data da Coleta")
+            data_resultado = c2.date_input("Previsão do Resultado", value=data_coleta + timedelta(days=7))
+
             if st.form_submit_button("Agendar"):
-                # AQUI GARANTE QUE JÁ SALVA COMO STRING DD/MM/YYYY
                 novo = {
-                    "Cliente": cli_l,
-                    "Data_Coleta": data_l.strftime("%d/%m/%Y"),
-                    "Data_Resultado": data_r.strftime("%d/%m/%Y"),
+                    "Cliente": cliente,
+                    "Data_Coleta": to_br_date(data_coleta),
+                    "Data_Resultado": to_br_date(data_resultado),
                     "Status": "Pendente",
                 }
                 st.session_state["log_laudos"].append(novo)
@@ -503,185 +485,294 @@ elif menu == "🧪 Laudos":
                 st.rerun()
 
     st.markdown("---")
-    st.subheader("📋 Editar Previsões")
-    laudos = st.session_state.get("log_laudos", [])
-    if not laudos:
-        st.info("Sem laudos.")
-    else:
-        df_p = pd.DataFrame(laudos)
-        # Tenta normalizar para exibir
-        for col in ['Data_Coleta', 'Data_Resultado']:
-             if col in df_p.columns:
-                 df_p[col] = df_p[col].astype(str).apply(lambda x: datetime.strptime(x, "%Y-%m-%d").strftime("%d/%m/%Y") if "-" in x and len(x)==10 else x)
+    st.subheader("📋 Editar / Atualizar Laudos")
 
-        df_p["ID"] = range(len(laudos))
-        ed_p = st.data_editor(
-            df_p[["ID", "Cliente", "Data_Coleta", "Data_Resultado", "Status"]],
-            use_container_width=True,
+    laudos = st.session_state.get("log_laudos", [])
+
+    if not laudos:
+        st.info("Nenhum laudo registrado ainda.")
+    else:
+        df = pd.DataFrame(laudos)
+
+        # Força datas em formato visível BR
+        df["Data_Coleta"] = df["Data_Coleta"].apply(to_br_date)
+        df["Data_Resultado"] = df["Data_Resultado"].apply(to_br_date)
+        df["ID"] = df.index
+
+        edit = st.data_editor(
+            df[["ID", "Cliente", "Data_Coleta", "Data_Resultado", "Status"]],
             hide_index=True,
-            disabled=["ID", "Cliente", "Data_Coleta"],
+            use_container_width=True,
+            disabled=["ID", "Cliente", "Data_Coleta"]
         )
-        if st.button("💾 SALVAR ALTERAÇÕES"):
-            for _, row in ed_p.iterrows():
+
+        if st.button("💾 Salvar Alterações"):
+            for _, row in edit.iterrows():
                 idx = int(row["ID"])
-                st.session_state["log_laudos"][idx]["Data_Resultado"] = str(row["Data_Resultado"])
-                st.session_state["log_laudos"][idx]["Status"] = str(row["Status"])
+                st.session_state["log_laudos"][idx]["Data_Resultado"] = to_br_date(row["Data_Resultado"])
+                st.session_state["log_laudos"][idx]["Status"] = row["Status"]
+
             salvar_dados()
-            st.success("Atualizado!")
+            st.success("Laudos atualizados!")
             st.rerun()
 
+
+# ==============================================================================
+# 10. VENDAS & ORÇAMENTOS — TUDO NORMALIZADO
+# ==============================================================================
+
 elif menu == "💰 Vendas & Orçamentos":
+
     st.title("💰 Vendas e Orçamentos")
+
     if not st.session_state["clientes_db"]:
-        st.warning("Cadastre clientes!")
+        st.warning("Nenhum cliente cadastrado.")
         st.stop()
 
+    clientes = list(st.session_state["clientes_db"].keys())
+
     c1, c2 = st.columns([2, 1])
-    cli = c1.selectbox("Cliente", list(st.session_state["clientes_db"].keys()))
-    vend = c2.text_input("Vendedor", st.session_state["usuario_nome"])
-    d_cli = st.session_state["clientes_db"][cli]
+    cliente = c1.selectbox("Cliente", clientes)
+    vendedor = c2.text_input("Vendedor", st.session_state["usuario_nome"])
+
+    dados_cliente = st.session_state["clientes_db"][cliente]
 
     col1, col2, col3 = st.columns(3)
-    p_pag = col1.text_input("Plano", "28/42 DIAS")
-    f_pag = col2.text_input("Forma", "BOLETO ITAU")
+    plano = col1.text_input("Plano", "28/42 DIAS")
+    forma_pag = col2.text_input("Forma", "BOLETO ITAU")
     venc = col3.text_input("Vencimento", "A COMBINAR")
 
-    df_v = st.session_state["estoque"].copy()
-    if "Qtd" not in df_v.columns:
-        df_v.insert(0, "Qtd", 0.0)
+    df = st.session_state["estoque"].copy()
 
-    ed_v = st.data_editor(
-        df_v[["Qtd", "Produto", "Cod", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo"]],
+    if "Qtd" not in df.columns:
+        df.insert(0, "Qtd", 0.0)
+
+    df["Qtd"] = pd.to_numeric(df["Qtd"], errors="coerce").fillna(0)
+
+    edit = st.data_editor(
+        df[["Qtd", "Produto", "Cod", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo"]],
         use_container_width=True,
-        hide_index=True,
+        hide_index=True
     )
 
-    itens_sel = ed_v[ed_v["Qtd"] > 0].copy()
-    itens_sel["Total"] = itens_sel["Qtd"] * itens_sel["Preco_Base"]
-    total = itens_sel["Total"].sum()
+    selecionados = edit[edit["Qtd"] > 0].copy()
+    selecionados["Total"] = selecionados["Qtd"] * selecionados["Preco_Base"]
 
-    if not itens_sel.empty:
-        st.metric("Total", f"R$ {total:,.2f}")
-        c_orc, c_ped = st.columns(2)
+    total_geral = selecionados["Total"].sum()
 
-        with c_orc:
-            if st.button("📄 ORÇAMENTO", use_container_width=True):
-                pdf = criar_doc_pdf(vend, cli, d_cli, itens_sel.to_dict("records"), total, {"plano": p_pag, "forma": f_pag, "venc": venc}, "ORÇAMENTO")
-                st.download_button("📥 Baixar", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
+    if not selecionados.empty:
+        st.metric("Total", f"R$ {total_geral:,.2f}")
 
-        with c_ped:
-            origem = st.radio("Origem?", ["METAL QUÍMICA", "INDEPENDENTE"], horizontal=True)
-            if st.button("✅ CONFIRMAR", type="primary", use_container_width=True):
-                pdf = criar_doc_pdf(vend, cli, d_cli, itens_sel.to_dict("records"), total, {"plano": p_pag, "forma": f_pag, "venc": venc}, "PEDIDO")
+        colA, colB = st.columns(2)
 
-                if "METAL" in origem:
-                    for _, row in itens_sel.iterrows():
-                        idxs = st.session_state["estoque"][st.session_state["estoque"]["Cod"] == row["Cod"]].index
-                        if len(idxs) > 0:
-                            idx = idxs[0]
-                            st.session_state["estoque"].at[idx, "Saldo"] -= row["Qtd"]
+        # -------------------------
+        # ORÇAMENTO
+        # -------------------------
+        with colA:
+            if st.button("📄 Gerar Orçamento", use_container_width=True):
+                pdf = criar_doc_pdf(
+                    vendedor,
+                    cliente,
+                    dados_cliente,
+                    selecionados.to_dict("records"),
+                    total_geral,
+                    {"plano":plano, "forma":forma_pag, "venc":venc},
+                    "ORÇAMENTO"
+                )
+                st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cliente}.pdf", "application/pdf")
 
-                        st.session_state["log_vendas"].append(
-                            {"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Cliente": cli, "Produto": row["Produto"], "Qtd": row["Qtd"], "Vendedor": vend}
-                        )
+        # -------------------------
+        # PEDIDO
+        # -------------------------
+        with colB:
+            origem = st.radio("Origem:", ["METAL QUÍMICA", "INDEPENDENTE"], horizontal=True)
+            if st.button("✅ Confirmar Pedido", use_container_width=True):
+
+                pdf = criar_doc_pdf(
+                    vendedor,
+                    cliente,
+                    dados_cliente,
+                    selecionados.to_dict("records"),
+                    total_geral,
+                    {"plano":plano, "forma":forma_pag, "venc":venc},
+                    "PEDIDO"
+                )
+
+                # DESCONTAR DO ESTOQUE
+                if origem == "METAL QUÍMICA":
+                    for _, r in selecionados.iterrows():
+                        idx = st.session_state["estoque"][st.session_state["estoque"]["Cod"] == r["Cod"]].index
+                        if not idx.empty:
+                            i = idx[0]
+                            st.session_state["estoque"].at[i, "Saldo"] -= r["Qtd"]
+
+                        st.session_state["log_vendas"].append({
+                            "Data": to_br_date(datetime.now()),
+                            "Cliente": cliente,
+                            "Produto": r["Produto"],
+                            "Qtd": r["Qtd"],
+                            "Vendedor": vendedor
+                        })
+
                     salvar_dados()
-                    st.success("Venda Registrada!")
-                else:
-                    st.success("Venda Registrada!")
+                    st.success("Pedido registrado!")
 
-                st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+                else:
+                    st.success("Pedido registrado!")
+
+                st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cliente}.pdf", "application/pdf")
+
+
+# ==============================================================================
+# 11. CLIENTES — NORMALIZADO
+# ==============================================================================
 
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
 
-    with st.expander("📂 Cadastrar / Importar CETESB"):
-        up = st.file_uploader("Importar PDF CETESB", type="pdf")
-        if up and st.button("Processar PDF"):
-            d = ler_pdf_antigo(up)
-            if d:
-                for k, v in d.items():
-                    st.session_state[f"f_{k}"] = v
-                st.success("Dados do PDF carregados no formulário abaixo!")
+    # --------------------- CADASTRAR ---------------------
+    with st.expander("📂 Cadastrar / Importar PDF"):
 
-        with st.form("f_cli"):
+        up = st.file_uploader("Importar PDF", type="pdf")
+        if up and st.button("Processar PDF"):
+            dados = ler_pdf_antigo(up)
+            if dados:
+                for k, v in dados.items():
+                    st.session_state[f"f_{k}"] = v
+                st.success("Dados carregados!")
+
+        with st.form("form_novo_cliente"):
             nome = st.text_input("Nome / Razão Social", st.session_state.get("f_Nome", ""))
             c1, c2 = st.columns(2)
             cnpj = c1.text_input("CNPJ", st.session_state.get("f_CNPJ", ""))
             tel = c2.text_input("Telefone", st.session_state.get("f_Tel", ""))
-            email = st.text_input("E-mail", st.session_state.get("f_Email", ""))
+            email = st.text_input("Email", st.session_state.get("f_Email", ""))
             end = st.text_input("Endereço", st.session_state.get("f_End", ""))
             c3, c4, c5 = st.columns([2, 1, 1])
             cid = c3.text_input("Cidade", st.session_state.get("f_Cidade", ""))
             uf = c4.text_input("UF", st.session_state.get("f_UF", "SP"))
             cep = c5.text_input("CEP", st.session_state.get("f_CEP", ""))
-            if st.form_submit_button("💾 SALVAR NOVO CLIENTE"):
-                st.session_state["clientes_db"][nome] = {"CNPJ": cnpj, "Tel": tel, "Email": email, "End": end, "Cidade": cid, "UF": uf, "CEP": cep}
+
+            if st.form_submit_button("Salvar Cliente"):
+                st.session_state["clientes_db"][nome] = {
+                    "CNPJ": cnpj,
+                    "Tel": tel,
+                    "Email": email,
+                    "End": end,
+                    "Cidade": cid,
+                    "UF": uf,
+                    "CEP": cep,
+                }
                 salvar_dados()
-                st.success(f"Cliente {nome} cadastrado!")
+                st.success("Cliente salvo!")
                 st.rerun()
 
+    # --------------------- LISTAGEM ---------------------
     st.markdown("---")
-    st.subheader("📋 Lista de Clientes Cadastrados")
+    st.subheader("📋 Lista de Clientes")
+
     if not st.session_state["clientes_db"]:
-        st.info("Nenhum cliente cadastrado ainda.")
+        st.info("Nenhum cliente cadastrado.")
     else:
-        df_cli_list = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
-        ed_cli = st.data_editor(
-            df_cli_list,
+        df_cli = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
+        edit = st.data_editor(
+            df_cli,
             use_container_width=True,
             num_rows="dynamic",
             hide_index=True,
-            column_order=["Nome", "CNPJ", "Email", "Tel", "End", "Cidade", "UF", "CEP"],
         )
-        if st.button("💾 SALVAR ALTERAÇÕES NA LISTA"):
-            st.session_state["clientes_db"] = ed_cli.set_index("Nome").to_dict("index")
+
+        if st.button("💾 Atualizar Clientes"):
+            st.session_state["clientes_db"] = edit.set_index("Nome").to_dict("index")
             salvar_dados()
-            st.success("Lista atualizada!")
+            st.success("Clientes atualizados!")
             st.rerun()
+
+
+# ==============================================================================
+# 12. ESTOQUE
+# ==============================================================================
 
 elif menu == "📦 Estoque":
     st.title("📦 Estoque")
-    ed = st.data_editor(st.session_state["estoque"], use_container_width=True, num_rows="dynamic")
-    if not ed.equals(st.session_state["estoque"]):
-        st.session_state["estoque"] = ed
+
+    df = st.data_editor(
+        st.session_state["estoque"],
+        use_container_width=True,
+        num_rows="dynamic"
+    )
+
+    if not df.equals(st.session_state["estoque"]):
+        st.session_state["estoque"] = df
         salvar_dados()
 
+
+# ==============================================================================
+# 13. CONFERÊNCIA GERAL
+# ==============================================================================
+
 elif menu == "📋 Conferência Geral":
-    st.title("📋 Conferência")
+    st.title("📋 Conferência Geral")
+
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
 
+    # VENDAS
     with tab1:
-        if st.session_state["log_vendas"]:
-            st.dataframe(pd.DataFrame(st.session_state["log_vendas"]).iloc[::-1], use_container_width=True)
+        df = pd.DataFrame(st.session_state["log_vendas"])
+        if not df.empty:
+            df["Data"] = df["Data"].apply(to_br_date)
+            st.dataframe(df.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhuma venda registrada.")
 
+    # ENTRADAS
     with tab2:
-        if st.session_state["log_entradas"]:
-            st.dataframe(pd.DataFrame(st.session_state["log_entradas"]).iloc[::-1], use_container_width=True)
+        df = pd.DataFrame(st.session_state["log_entradas"])
+        if not df.empty:
+            df["Data"] = df["Data"].apply(to_br_date)
+            st.dataframe(df.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhuma entrada no estoque registrada.")
 
+    # LAUDOS
     with tab3:
-        if st.session_state["log_laudos"]:
-            st.dataframe(pd.DataFrame(st.session_state["log_laudos"]).iloc[::-1], use_container_width=True)
+        df = pd.DataFrame(st.session_state["log_laudos"])
+        if not df.empty:
+            df["Data_Coleta"] = df["Data_Coleta"].apply(to_br_date)
+            df["Data_Resultado"] = df["Data_Resultado"].apply(to_br_date)
+            st.dataframe(df.iloc[::-1], use_container_width=True)
+        else:
+            st.info("Nenhum laudo registrado.")
+
+
+# ==============================================================================
+# 14. ENTRADA DE ESTOQUE
+# ==============================================================================
 
 elif menu == "📥 Entrada":
-    st.title("📥 Entrada")
+    st.title("📥 Entrada de Estoque")
+
     if st.session_state["estoque"].empty:
-        st.warning("Cadastre produtos no estoque primeiro.")
+        st.warning("Cadastre produtos antes de registrar entradas.")
         st.stop()
 
-    with st.form("f_ent"):
-        p_ent = st.selectbox("Produto", st.session_state["estoque"]["Produto"].fillna("").astype(str).tolist())
-        q_ent = st.number_input("Qtd", min_value=0.0)
-        if st.form_submit_button("Confirmar"):
-            idxs = st.session_state["estoque"][st.session_state["estoque"]["Produto"] == p_ent].index
-            if len(idxs) == 0:
-                st.error("Produto não encontrado.")
-            else:
-                idx = idxs[0]
-                try:
-                    st.session_state["estoque"].at[idx, "Saldo"] = float(st.session_state["estoque"].at[idx, "Saldo"]) + float(q_ent)
-                except Exception:
-                    st.session_state["estoque"].at[idx, "Saldo"] = q_ent
+    with st.form("form_entrada"):
+        produto = st.selectbox(
+            "Produto",
+            st.session_state["estoque"]["Produto"].astype(str).tolist()
+        )
+        qtd = st.number_input("Quantidade", min_value=0.0)
 
-                st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
-                salvar_dados()
-                st.rerun()
+        if st.form_submit_button("Registrar Entrada"):
+            idx = st.session_state["estoque"][st.session_state["estoque"]["Produto"] == produto].index[0]
+            st.session_state["estoque"].at[idx, "Saldo"] += qtd
+
+            st.session_state["log_entradas"].append({
+                "Data": to_br_date(datetime.now()),
+                "Produto": produto,
+                "Qtd": qtd
+            })
+
+            salvar_dados()
+            st.success("Entrada registrada!")
+            st.rerun()
