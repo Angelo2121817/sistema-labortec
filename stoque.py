@@ -278,41 +278,105 @@ elif menu == "📦 Gestão de Produtos":
         st.session_state['estoque'] = ed
         salvar_dados()
 
+# ==============================================================================
+# 5. CLIENTES
+# ==============================================================================
 elif menu == "👥 Clientes":
-    st.title("👥 Clientes")
-    with st.form("c"):
-        n = st.text_input("Nome")
-        e = st.text_input("Endereço")
-        t = st.text_input("Telefone")
-        if st.form_submit_button("Salvar"):
-            st.session_state['clientes_db'][n] = {'End': e, 'Tel': t}
-            salvar_dados()
-            st.rerun()
+    st.title("👥 Gestão de Clientes")
+    
+    # Formulário de Cadastro Rápido
+    with st.form("form_cliente"):
+        c1, c2 = st.columns([3,1])
+        nome = c1.text_input("Nome do Cliente (Empresa)")
+        tel = c2.text_input("Telefone")
+        end = st.text_input("Endereço Completo")
+        
+        if st.form_submit_button("💾 Salvar Cliente"):
+            if nome:
+                st.session_state['clientes_db'][nome] = {'End': end, 'Tel': tel}
+                salvar_dados()
+                st.success(f"Cliente {nome} salvo!")
+                st.rerun()
+            else:
+                st.error("O nome é obrigatório.")
+    
+    st.markdown("---")
+    st.subheader("📇 Lista de Contatos")
+    
+    # Listagem com botão de excluir
     for k in list(st.session_state['clientes_db'].keys()):
-        c1, c2 = st.columns([4,1])
-        c1.write(f"**{k}** - {st.session_state['clientes_db'][k]['End']}")
-        if c2.button("🗑️", key=k):
+        col_n, col_d = st.columns([4,1])
+        dados = st.session_state['clientes_db'][k]
+        col_n.markdown(f"**{k}** \n📍 {dados.get('End', 'Sem endereço')} | 📞 {dados.get('Tel', 'Sem tel')}")
+        
+        if col_d.button("🗑️", key=f"del_{k}"):
             del st.session_state['clientes_db'][k]
             salvar_dados()
             st.rerun()
 
+# ==============================================================================
+# 6. DASHBOARD (O NOVO RADAR)
+# ==============================================================================
 elif menu == "📊 Dashboard":
-    st.title("📊 Resumo Operacional")
+    st.title("📊 Painel de Controle Integrado")
+    st.markdown("---")
+    
+    # --- 1. RADAR DE LAUDOS (ALERTA DE PRAZO) ---
+    st.subheader("🔔 Radar de Coletas (Efluentes)")
+    laudos = st.session_state.get('log_laudos', [])
+    
+    # Filtra e Tenta ordenar
+    laudos_pendentes = [l for l in laudos if l.get('Status', 'Pendente') == 'Pendente']
+    try:
+        laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
+    except: pass
+
+    if not laudos_pendentes:
+        st.success("✅ Tudo limpo! Nenhuma coleta pendente no radar.")
+    else:
+        # Mostra os 4 primeiros cartões de alerta
+        col_laudos = st.columns(4)
+        for i, l in enumerate(laudos_pendentes[:4]): 
+            with col_laudos[i]:
+                st.error(f"📅 **{l['Data_Coleta']}**")
+                st.info(f"🏭 {l['Cliente']}")
+                if l.get('Obs'): st.caption(f"📝 {l['Obs']}")
+    
+    st.markdown("---")
+
+    # --- 2. SITUAÇÃO TÁTICA (MÉTRICAS) ---
+    st.subheader("📈 Situação Tática")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Estoque", len(st.session_state['estoque']))
-    c2.metric("Vendas", len(st.session_state['log_vendas']))
-    c3.metric("Clientes", len(st.session_state['clientes_db']))
+    
+    qtd_estoque = len(st.session_state['estoque'])
+    qtd_vendas = len(st.session_state['log_vendas'])
+    qtd_clientes = len(st.session_state['clientes_db'])
+    
+    c1.metric("📦 Arsenal (Produtos)", qtd_estoque)
+    c2.metric("💰 Baixas (Vendas)", qtd_vendas)
+    c3.metric("👥 Base de Aliados (Clientes)", qtd_clientes)
+
+    # --- 3. HISTÓRICO DE COMBATE (GRÁFICO) ---
+    if st.session_state['log_vendas']:
+        st.markdown("---")
+        st.caption("Últimas Operações de Venda:")
+        df_dash = pd.DataFrame(st.session_state['log_vendas'])
+        # Mostra apenas colunas essenciais
+        cols_uteis = [c for c in ['Data', 'Cliente', 'Produto', 'Qtd', 'Vendedor'] if c in df_dash.columns]
+        st.dataframe(
+            df_dash[cols_uteis].tail(5).iloc[::-1], 
+            use_container_width=True, 
+            hide_index=True
+        )
 
 # ==============================================================================
-# TELA DE LAUDOS (ADICIONADA AGORA)
+# 7. LAUDOS (O NOVO MÓDULO)
 # ==============================================================================
 elif menu == "🧪 Laudos":
     st.title("🧪 Agendamento de Coletas (Laudos)")
     
-    # Formulário de Agendamento
     with st.form("form_laudo"):
         c1, c2 = st.columns([2,1])
-        # Pega a lista de clientes cadastrados
         lista_clientes = list(st.session_state['clientes_db'].keys())
         
         if not lista_clientes:
@@ -331,7 +395,7 @@ elif menu == "🧪 Laudos":
                     "Data_Coleta": data_coleta.strftime("%d/%m/%Y"),
                     "Obs": obs,
                     "Status": "Pendente",
-                    "Agendado_Por": st.session_state['usuario_nome']
+                    "Agendado_Por": st.session_state.get('usuario_nome', 'Sistema')
                 }
                 st.session_state['log_laudos'].append(novo_laudo)
                 salvar_dados()
@@ -343,19 +407,14 @@ elif menu == "🧪 Laudos":
 
     if st.session_state['log_laudos']:
         df_laudos = pd.DataFrame(st.session_state['log_laudos'])
-        
-        # Tabela Editável
         edited_laudos = st.data_editor(
             df_laudos,
             use_container_width=True,
             num_rows="dynamic",
             key="editor_laudos"
         )
-        
-        # Se houve edição na tabela, salva
         if not edited_laudos.equals(df_laudos):
             st.session_state['log_laudos'] = edited_laudos.to_dict('records')
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
-
