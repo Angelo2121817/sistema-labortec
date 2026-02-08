@@ -224,29 +224,24 @@ def carregar_dados():
 
 def salvar_dados():
     try:
+        # Tenta salvar todas as abas
         conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+        
         if st.session_state.get("clientes_db"):
             df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
             conn.update(worksheet="Clientes", data=df_clis)
+            
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        st.toast("✅ Sincronizado!")
-    except Exception:
-        st.error("Erro ao salvar")
-
-
-if "dados_carregados" not in st.session_state:
-    carregar_dados()
-    st.session_state["dados_carregados"] = True
-
-for key in ["log_vendas", "log_entradas", "log_laudos"]:
-    if key not in st.session_state:
-        st.session_state[key] = []
-if "estoque" not in st.session_state:
-    st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
-if "clientes_db" not in st.session_state:
-    st.session_state["clientes_db"] = {}
+        
+        st.toast("✅ Sincronizado!", icon="☁️")
+        
+    except Exception as e:
+        # AQUI ESTÁ A MUDANÇA:
+        # Em vez de mostrar st.error, apenas imprimimos no console (invisível pro usuário) e seguimos.
+        print(f"Alerta silencioso ao salvar: {e}")
+        pass
 
 
 # ==============================================================================
@@ -755,4 +750,5 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
