@@ -65,7 +65,7 @@ def ler_pdf_antigo(f):
                 if stop_match and stop_match.start() < min_idx: min_idx = stop_match.start()
             return fragment[:min_idx].strip(" :/-|").strip()
         d['Nome'] = extract("Cliente", ["CNPJ", "CPF", "Endereço", "Data:", "Código:"])
-        d['CNPJ'] = (re.search(r'(\d{2}\.\d{3}\.\d{3}/\\d{4}-\d{2})', core) or [None])[0]
+        d['CNPJ'] = (re.search(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', core) or [None])[0]
         d['End'] = extract("Endereço", ["Bairro", "Cidade", "Cep"])
         d['Bairro'] = extract("Bairro", ["Cidade", "Cep"])
         d['Cidade'] = extract("Cidade", ["/", "-", "Cep"])
@@ -167,50 +167,105 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF
+# 5. GERADOR DE PDF (FIX DEFINITIVO: CABEÇALHO ESPAÇADO E LOGO PROTEGIDA)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
+        # 1. Logo à esquerda (Isolada)
         if os.path.exists("labortec.jpg"):
-            self.image("labortec.jpg", x=10, y=8, w=45)
-        self.set_font('Arial', 'B', 16); self.set_xy(60, 8); self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
-        self.set_xy(100, 8); titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO'); self.cell(100, 10, titulo_doc, 0, 1, 'R')
-        self.set_font('Arial', '', 8); self.set_xy(60, 18); self.cell(100, 4, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
-        self.set_xy(100, 18); self.cell(100, 4, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
-        self.set_xy(60, 22); self.cell(100, 4, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
-        self.set_xy(100, 22); vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema'); self.cell(100, 4, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
-        self.set_xy(60, 26); self.cell(100, 4, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
-        self.line(10, 35, 200, 35); self.ln(10)
+            self.image("labortec.jpg", x=10, y=8, w=48)
+        
+        # 2. Textos da Labortec (Totalmente à direita da logo)
+        # Usamos X=65 para garantir que nenhum texto toque na logo (que tem W=48)
+        self.set_font('Arial', 'B', 16)
+        self.set_xy(65, 10)
+        self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
+        
+        # 3. Título do Documento (Canto Superior Direito)
+        self.set_font('Arial', 'B', 16)
+        self.set_xy(110, 10)
+        titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO')
+        self.cell(90, 10, titulo_doc, 0, 1, 'R')
+        
+        # 4. Detalhes da Labortec (Abaixo do nome, à direita da logo)
+        self.set_font('Arial', '', 8)
+        self.set_xy(65, 20)
+        self.cell(100, 4, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
+        
+        # Data (Canto Direito)
+        self.set_xy(110, 20)
+        self.cell(90, 4, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
+        
+        # Contatos
+        self.set_xy(65, 24)
+        self.cell(100, 4, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
+        
+        # Vendedor (Canto Direito)
+        self.set_xy(110, 24)
+        vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema')
+        self.cell(90, 4, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
+        
+        # CNPJ
+        self.set_xy(65, 28)
+        self.cell(100, 4, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
+        
+        # 5. Linha Divisória (Abaixei para Y=38 para dar espaço)
+        self.line(10, 38, 200, 38)
+        self.ln(15) # Espaço seguro para o conteúdo começar
 
     def footer(self):
-        self.set_y(-25); self.set_font('Arial', 'I', 7)
+        self.set_y(-25)
+        self.set_font('Arial', 'I', 7)
         self.cell(0, 4, 'Obs.: FRETE NÃO INCLUSO. PROPOSTA VÁLIDA POR 5 DIAS.', 0, 1, 'C')
         self.cell(0, 4, 'PRAZO DE RETIRADA: 3 A 5 DIAS ÚTEIS APÓS CONFIRMAÇÃO.', 0, 0, 'C')
 
 def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
     pdf = PDF(); pdf.vendedor_nome = vendedor; pdf.titulo_doc = titulo; pdf.add_page()
+    
+    # Bloco Cliente (Fundo Cinza)
     pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 7, f" Cliente: {cliente}", 1, 1, 'L', fill=True)
+    pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, 'L', fill=True)
+    
+    # Dados do Cliente
     pdf.set_font('Arial', '', 9)
     pdf.cell(0, 6, f" Endereço: {dados_cli.get('End', '')}", 'LR', 1, 'L')
     pdf.cell(0, 6, f" Cidade: {dados_cli.get('Cidade', '')}/{dados_cli.get('UF', '')} - CEP: {dados_cli.get('CEP', '')}", 'LR', 1, 'L')
     pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", 'LRB', 1, 'L')
-    pdf.ln(4); pdf.cell(0, 7, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, 'L'); pdf.ln(5)
-    pdf.set_font('Arial', 'B', 8); pdf.set_fill_color(220, 220, 220)
-    w = [12, 12, 90, 25, 20, 31]; cols = ['Un', 'Qtd', 'Produto', 'Marca', 'NCM', 'Total']
-    for i, c in enumerate(cols): pdf.cell(w[i], 7, c, 1, 0, 'C', fill=True)
-    pdf.ln(); pdf.set_font('Arial', '', 8)
+    pdf.ln(5)
+    
+    # Bloco Condições de Pagamento
+    pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, 'L')
+    pdf.ln(6)
+    
+    # Tabela de Itens (Alinhamento Perfeito)
+    pdf.set_font('Arial', 'B', 8); pdf.set_fill_color(225, 225, 225)
+    # Larguras que somam 190mm (Margens de 10mm em cada lado da folha A4 de 210mm)
+    w = [15, 15, 85, 25, 20, 30] 
+    cols = ['Un', 'Qtd', 'Produto', 'Marca', 'NCM', 'Total']
+    for i, c in enumerate(cols): pdf.cell(w[i], 8, c, 1, 0, 'C', fill=True)
+    pdf.ln()
+    
+    pdf.set_font('Arial', '', 8)
     for r in itens:
-        pdf.cell(w[0], 6, str(r.get('Unidade', 'KG')), 1, 0, 'C')
-        pdf.cell(w[1], 6, str(r['Qtd']), 1, 0, 'C')
-        pdf.cell(w[2], 6, str(r['Produto'])[:55], 1, 0, 'L')
-        pdf.cell(w[3], 6, str(r.get('Marca', 'LABORTEC')), 1, 0, 'C')
-        pdf.cell(w[4], 6, str(r.get('NCM', '')), 1, 0, 'C')
-        pdf.cell(w[5], 6, f"{float(r['Total']):.2f}", 1, 1, 'R')
-    pdf.set_font('Arial', 'B', 10); pdf.cell(sum(w)-w[5], 8, "TOTAL GERAL: ", 0, 0, 'R'); pdf.cell(w[5], 8, f"R$ {total:,.2f}", 1, 1, 'R')
-    pdf.ln(20); y = pdf.get_y(); pdf.line(20, y, 90, y); pdf.line(120, y, 190, y)
-    pdf.set_font('Arial', '', 8); pdf.set_xy(20, y+2); pdf.cell(70, 4, 'Assinatura Cliente', 0, 0, 'C')
-    pdf.set_xy(120, y+2); pdf.cell(70, 4, 'Assinatura Labortec', 0, 1, 'C')
+        pdf.cell(w[0], 7, str(r.get('Unidade', 'KG')), 1, 0, 'C')
+        pdf.cell(w[1], 7, str(r['Qtd']), 1, 0, 'C')
+        pdf.cell(w[2], 7, str(r['Produto'])[:52], 1, 0, 'L')
+        pdf.cell(w[3], 7, str(r.get('Marca', 'LABORTEC')), 1, 0, 'C')
+        pdf.cell(w[4], 7, str(r.get('NCM', '')), 1, 0, 'C')
+        pdf.cell(w[5], 7, f"{float(r['Total']):.2f}", 1, 1, 'R')
+    
+    # Total Geral
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(sum(w)-w[5], 10, "TOTAL GERAL: ", 0, 0, 'R')
+    pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, 'R')
+    
+    # Assinaturas (Espaçamento Generoso)
+    pdf.ln(30)
+    y = pdf.get_y()
+    pdf.line(25, y, 90, y); pdf.line(120, y, 185, y)
+    pdf.set_font('Arial', '', 8); pdf.set_xy(25, y+2); pdf.cell(65, 4, 'Assinatura Cliente', 0, 0, 'C')
+    pdf.set_xy(120, y+2); pdf.cell(65, 4, 'Assinatura Labortec', 0, 1, 'C')
+    
     return pdf.output(dest='S').encode('latin-1')
 
 # ==============================================================================
@@ -318,17 +373,14 @@ elif menu == "📦 Produtos":
     if not ed.equals(st.session_state['estoque']): st.session_state['estoque'] = ed; salvar_dados()
 
 elif menu == "📋 Conferência Geral":
-    st.title("📋 Conferência Geral de Operações")
+    st.title("📋 Conferência Geral")
     tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
     with tab1:
         if st.session_state['log_vendas']: st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True)
-        else: st.info("Sem registros.")
     with tab2:
         if st.session_state['log_entradas']: st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True)
-        else: st.info("Sem registros.")
     with tab3:
         if st.session_state['log_laudos']: st.dataframe(pd.DataFrame(st.session_state['log_laudos']).iloc[::-1], use_container_width=True)
-        else: st.info("Sem registros.")
 
 elif menu == "📥 Entrada":
     st.title("📥 Entrada de Estoque")
