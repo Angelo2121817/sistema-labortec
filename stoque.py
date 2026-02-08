@@ -194,8 +194,7 @@ opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Naturez
 tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
 aplicar_tema(tema_sel)
 
-menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", "📦 Gestão de Produtos", "📋 Conferência Geral", "👥 Clientes"])
-
+menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", "📦 Gestão de Produtos", "📋 Conferência Geral", "👥 Clientes"])
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
@@ -303,3 +302,60 @@ elif menu == "📊 Dashboard":
     c1.metric("Estoque", len(st.session_state['estoque']))
     c2.metric("Vendas", len(st.session_state['log_vendas']))
     c3.metric("Clientes", len(st.session_state['clientes_db']))
+
+# ==============================================================================
+# TELA DE LAUDOS (ADICIONADA AGORA)
+# ==============================================================================
+elif menu == "🧪 Laudos":
+    st.title("🧪 Agendamento de Coletas (Laudos)")
+    
+    # Formulário de Agendamento
+    with st.form("form_laudo"):
+        c1, c2 = st.columns([2,1])
+        # Pega a lista de clientes cadastrados
+        lista_clientes = list(st.session_state['clientes_db'].keys())
+        
+        if not lista_clientes:
+            st.warning("⚠️ Cadastre clientes na aba 'Clientes' antes de agendar.")
+            cli_sel = None
+        else:
+            cli_sel = c1.selectbox("Selecione o Cliente:", lista_clientes)
+            
+        data_coleta = c2.date_input("Data Prevista:", format="DD/MM/YYYY")
+        obs = st.text_input("Observação (Ex: Coletar na saída da ETE)")
+        
+        if st.form_submit_button("💾 Agendar Coleta"):
+            if cli_sel:
+                novo_laudo = {
+                    "Cliente": cli_sel,
+                    "Data_Coleta": data_coleta.strftime("%d/%m/%Y"),
+                    "Obs": obs,
+                    "Status": "Pendente",
+                    "Agendado_Por": st.session_state['usuario_nome']
+                }
+                st.session_state['log_laudos'].append(novo_laudo)
+                salvar_dados()
+                st.success(f"Agendado para {cli_sel}!")
+                st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Próximas Coletas")
+
+    if st.session_state['log_laudos']:
+        df_laudos = pd.DataFrame(st.session_state['log_laudos'])
+        
+        # Tabela Editável
+        edited_laudos = st.data_editor(
+            df_laudos,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="editor_laudos"
+        )
+        
+        # Se houve edição na tabela, salva
+        if not edited_laudos.equals(df_laudos):
+            st.session_state['log_laudos'] = edited_laudos.to_dict('records')
+            salvar_dados()
+    else:
+        st.info("Nenhum laudo pendente.")
+
