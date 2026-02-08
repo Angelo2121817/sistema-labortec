@@ -21,6 +21,7 @@ def extrair_dados_cetesb(f):
 
         for i, line in enumerate(lines):
             cnpj_m = re.search(r"(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})", line)
+            if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
             if cnpj_m:
                 d["CNPJ"] = cnpj_m.group(1)
                 d["Nome"] = line.replace(d["CNPJ"], "").strip()
@@ -701,5 +702,6 @@ elif menu == "📥 Entrada":
                 st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
                 salvar_dados()
                 st.rerun()
+
 
 
