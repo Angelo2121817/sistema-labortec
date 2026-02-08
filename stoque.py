@@ -403,6 +403,24 @@ if menu == "📊 Dashboard":
     st.markdown("---")
     
     st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
+    # --- ALERTA GERAL (O ALTO-FALANTE) ---
+    if st.session_state['aviso_geral']:
+        st.markdown(f"""
+        <div style="
+            background-color: #ffebee; 
+            border: 2px solid #ff1744; 
+            border-radius: 10px; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        ">
+            <h3 style="color: #d50000; margin: 0;">📢 COMUNICADO DO COMANDO</h3>
+            <p style="font-size: 1.3em; font-weight: bold; color: #b71c1c; margin-top: 10px;">
+                {st.session_state['aviso_geral']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
@@ -717,6 +735,7 @@ elif menu == "📥 Entrada":
                 st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
                 salvar_dados()
                 st.rerun()
+
 
 
 
