@@ -65,7 +65,7 @@ def ler_pdf_antigo(f):
                 if stop_match and stop_match.start() < min_idx: min_idx = stop_match.start()
             return fragment[:min_idx].strip(" :/-|").strip()
         d['Nome'] = extract("Cliente", ["CNPJ", "CPF", "Endereço", "Data:", "Código:"])
-        d['CNPJ'] = (re.search(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', core) or [None])[0]
+        d['CNPJ'] = (re.search(r'(\d{2}\.\d{3}\.\d.3/\d{4}-\d{2})', core) or [None])[0]
         d['End'] = extract("Endereço", ["Bairro", "Cidade", "Cep"])
         d['Bairro'] = extract("Bairro", ["Cidade", "Cep"])
         d['Cidade'] = extract("Cidade", ["/", "-", "Cep"])
@@ -81,10 +81,6 @@ try:
 except:
     st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud.")
     st.stop()
-
-# Inicializar versão do Dashboard para forçar re-renderização
-if 'dash_version' not in st.session_state:
-    st.session_state['dash_version'] = 0
 
 # ==============================================================================
 # 2. SEGURANÇA E LOGIN
@@ -121,26 +117,33 @@ def verificar_senha():
 if not verificar_senha(): st.stop()
 
 # ==============================================================================
-# 3. MOTOR DE DADOS
+# 3. MOTOR DE DADOS (CACHE ZERO)
 # ==============================================================================
-def carregar_dados():
+def carregar_dados_bruto():
+    """Lê os dados diretamente da planilha sem usar cache do Streamlit."""
     try:
-        df_est = conn.read(worksheet="Estoque", ttl="0")
+        # Estoque
+        df_est = conn.read(worksheet="Estoque", ttl=0)
         if not df_est.empty: st.session_state['estoque'] = df_est
-        df_cli = conn.read(worksheet="Clientes", ttl="0")
+        
+        # Clientes
+        df_cli = conn.read(worksheet="Clientes", ttl=0)
         if not df_cli.empty: st.session_state['clientes_db'] = df_cli.set_index('Nome').to_dict('index')
+        
+        # Logs
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
-            try:
-                df = conn.read(worksheet=aba, ttl="0")
-                if not df.empty: 
-                    if aba == "Log_Laudos":
-                        if 'Data_Resultado' not in df.columns: df['Data_Resultado'] = 'Não definida'
-                        if 'Status' not in df.columns: df['Status'] = 'Pendente'
-                    st.session_state[aba.lower()] = df.to_dict('records')
-            except: st.session_state[aba.lower()] = []
-        st.session_state['dash_version'] += 1 # Incrementa versão ao carregar
+            df = conn.read(worksheet=aba, ttl=0)
+            if not df.empty:
+                if aba == "Log_Laudos":
+                    if 'Data_Resultado' not in df.columns: df['Data_Resultado'] = 'Não definida'
+                    if 'Status' not in df.columns: df['Status'] = 'Pendente'
+                st.session_state[aba.lower()] = df.to_dict('records')
+            else:
+                st.session_state[aba.lower()] = []
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return False
 
 def salvar_dados():
     try:
@@ -151,12 +154,11 @@ def salvar_dados():
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state['log_vendas']))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state['log_entradas']))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state['log_laudos']))
-        st.session_state['dash_version'] += 1 # Incrementa versão ao salvar
         st.toast("✅ Nuvem Atualizada!")
     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
 if 'dados_carregados' not in st.session_state:
-    carregar_dados()
+    carregar_dados_bruto()
     st.session_state['dados_carregados'] = True
 
 for key in ['log_vendas', 'log_entradas', 'log_laudos']:
@@ -244,7 +246,7 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     return pdf.output(dest='S').encode('latin-1')
 
 # ==============================================================================
-# MENU LATERAL E TEMAS
+# MENU LATERAL
 # ==============================================================================
 st.sidebar.title("🛠️ MENU")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
@@ -256,45 +258,90 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # PÁGINAS
 # ==============================================================================
 if menu == "📊 Dashboard":
-    # O container garante que o Dashboard seja reconstruído quando a versão muda
-    with st.container(key=f"dash_container_{st.session_state['dash_version']}"):
-        st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
-        if st.button("🔄 Sincronizar Agora"):
-            carregar_dados()
-            st.rerun()
-        st.markdown("---")
-        st.subheader("📡 Radar de Coletas Estratégicas")
+    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
+    
+    # Forçar recarregamento ao entrar no Dashboard
+    if st.button("🔄 Atualizar Dashboard (Forçar Leitura Nuvem)"):
+        carregar_dados_bruto()
+        st.rerun()
         
-        # Leitura direta do session_state garantida
-        laudos_atuais = st.session_state.get('log_laudos', [])
-        laudos_pendentes = [l for l in laudos_atuais if l.get('Status', 'Pendente') == 'Pendente']
-        
-        if not laudos_pendentes: st.success("✅ Nenhuma coleta pendente no radar.")
-        else:
-            try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
-            except: pass
-            cols_radar = st.columns(4)
-            for i, l in enumerate(laudos_pendentes[:8]): 
-                with cols_radar[i % 4]:
-                    data_res = l.get('Data_Resultado', 'Não definida')
-                    st.markdown(f"""
-                    <div class="coleta-card">
-                        <div class="coleta-cliente">🏢 {l['Cliente']}</div>
-                        <div class="prevista-label">Data Prevista Coleta:</div>
-                        <div class="neon-date">📅 {l['Data_Coleta']}</div>
-                        <div style="margin-top: 10px;">
-                            <div class="prevista-label">Previsão Resultado:</div>
-                            <div class="neon-result">🧪 {data_res}</div>
-                        </div>
+    st.markdown("---")
+    st.subheader("📡 Radar de Coletas Estratégicas")
+    
+    # Busca direta sem cache
+    laudos_atuais = st.session_state.get('log_laudos', [])
+    laudos_pendentes = [l for l in laudos_atuais if l.get('Status', 'Pendente') == 'Pendente']
+    
+    if not laudos_pendentes: 
+        st.success("✅ Nenhuma coleta pendente no radar.")
+    else:
+        try: laudos_pendentes.sort(key=lambda x: datetime.strptime(x['Data_Coleta'], "%d/%m/%Y"))
+        except: pass
+        cols_radar = st.columns(4)
+        for i, l in enumerate(laudos_pendentes[:8]): 
+            with cols_radar[i % 4]:
+                data_res = l.get('Data_Resultado', 'Não definida')
+                st.markdown(f"""
+                <div class="coleta-card">
+                    <div class="coleta-cliente">🏢 {l['Cliente']}</div>
+                    <div class="prevista-label">Data Prevista Coleta:</div>
+                    <div class="neon-date">📅 {l['Data_Coleta']}</div>
+                    <div style="margin-top: 10px;">
+                        <div class="prevista-label">Previsão Resultado:</div>
+                        <div class="neon-result">🧪 {data_res}</div>
                     </div>
-                    """, unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True); st.markdown("---")
-        st.subheader("📈 Métricas de Performance")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
-        c2.metric("📦 Mix de Produtos", len(st.session_state['estoque']))
-        c3.metric("💰 Volume de Vendas", len(st.session_state['log_vendas']))
-        st.caption(f"Última atualização do sistema: {obter_horario_br().strftime('%H:%M:%S')}")
+                </div>
+                """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True); st.markdown("---")
+    st.subheader("📈 Métricas de Performance")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("👥 Clientes Ativos", len(st.session_state['clientes_db']))
+    c2.metric("📦 Mix de Produtos", len(st.session_state['estoque']))
+    c3.metric("💰 Volume de Vendas", len(st.session_state['log_vendas']))
+    st.caption(f"Dados sincronizados às: {obter_horario_br().strftime('%H:%M:%S')}")
+
+elif menu == "🧪 Laudos":
+    st.title("🧪 Gestão de Laudos")
+    with st.expander("📅 Agendar Nova Coleta", expanded=True):
+        with st.form("f_laudo"):
+            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
+            c1, c2 = st.columns(2)
+            data_l = c1.date_input("Data da Coleta")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            if st.form_submit_button("Agendar"):
+                novo_laudo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'}
+                st.session_state['log_laudos'].append(novo_laudo)
+                salvar_dados()
+                carregar_dados_bruto() # Força leitura imediata
+                st.success("Agendado!")
+                st.rerun()
+
+    st.markdown("---"); st.subheader("📋 Laudos Pendentes (Edição de Previsão)")
+    laudos = st.session_state.get('log_laudos', [])
+    pendentes_indices = [i for i, l in enumerate(laudos) if l.get('Status', 'Pendente') == 'Pendente']
+    
+    if not pendentes_indices: 
+        st.info("Nenhum laudo pendente para edição.")
+    else:
+        df_p = pd.DataFrame([laudos[i] for i in pendentes_indices])
+        df_p['ID_Orig'] = pendentes_indices
+        cols_edit = ['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']
+        ed_p = st.data_editor(df_p[cols_edit], use_container_width=True, hide_index=True, disabled=['ID_Orig', 'Cliente', 'Data_Coleta'])
+        
+        if st.button("💾 ATUALIZAR E SINCRONIZAR DASHBOARD"):
+            # Atualiza a memória local
+            for _, row in ed_p.iterrows():
+                idx = int(row['ID_Orig'])
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            
+            # Salva na nuvem
+            salvar_dados()
+            # Limpa cache e recarrega tudo do zero
+            carregar_dados_bruto()
+            st.success("✅ Dados atualizados e Dashboard sincronizado!")
+            st.rerun()
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
@@ -351,40 +398,6 @@ elif menu == "👥 Clientes":
         if st.form_submit_button("SALVAR"):
             st.session_state['clientes_db'][nome] = {'CNPJ':cnpj, 'Tel':tel, 'End':end, 'Cidade':cid, 'UF':uf, 'CEP':cep}
             salvar_dados(); st.rerun()
-
-elif menu == "🧪 Laudos":
-    st.title("🧪 Gestão de Laudos")
-    with st.expander("📅 Agendar Nova Coleta", expanded=True):
-        with st.form("f_laudo"):
-            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-            c1, c2 = st.columns(2)
-            data_l = c1.date_input("Data da Coleta")
-            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
-            if st.form_submit_button("Agendar"):
-                st.session_state['log_laudos'].append({'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'})
-                salvar_dados(); st.success("Agendado!"); st.rerun()
-    st.markdown("---"); st.subheader("📋 Laudos Pendentes (Edição de Previsão)")
-    laudos = st.session_state.get('log_laudos', [])
-    for l in laudos:
-        if 'Data_Resultado' not in l: l['Data_Resultado'] = 'Não definida'
-        if 'Status' not in l: l['Status'] = 'Pendente'
-    pendentes = [i for i, l in enumerate(laudos) if l.get('Status', 'Pendente') == 'Pendente']
-    if not pendentes: st.info("Nenhum laudo pendente para edição.")
-    else:
-        df_p = pd.DataFrame([laudos[i] for i in pendentes])
-        df_p['ID_Orig'] = pendentes
-        cols_edit = ['ID_Orig', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']
-        ed_p = st.data_editor(df_p[cols_edit], use_container_width=True, hide_index=True, disabled=['ID_Orig', 'Cliente', 'Data_Coleta'])
-        if st.button("💾 ATUALIZAR DATAS/STATUS"):
-            # Atualiza o session_state diretamente
-            for _, row in ed_p.iterrows():
-                idx = int(row['ID_Orig'])
-                st.session_state['log_laudos'][idx]['Data_Resultado'] = row['Data_Resultado']
-                st.session_state['log_laudos'][idx]['Status'] = row['Status']
-            salvar_dados()
-            st.session_state['dash_version'] += 1 # Força mudança de versão para o Dashboard
-            st.success("Dados atualizados!")
-            st.rerun()
 
 elif menu == "📦 Produtos":
     st.title("📦 Produtos")
