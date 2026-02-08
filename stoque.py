@@ -25,12 +25,12 @@ def extrair_dados_cetesb(f):
                 d["CNPJ"] = cnpj_m.group(1)
                 d["Nome"] = line.replace(d["CNPJ"], "").strip()
 
-                if i + 1 < len(lines):
+                if i + 1 &lt; len(lines):
                     prox = lines[i + 1]
                     cad_m = re.search(r"(\d+-\d+-\d+)", prox)
                     d["End"] = prox.replace(cad_m.group(1), "").strip() if cad_m else prox
 
-                if i + 2 < len(lines):
+                if i + 2 &lt; len(lines):
                     addr_line = lines[i + 2]
                     cep_m = re.search(r"(\d{5}-\d{3})", addr_line)
                     if cep_m:
@@ -74,7 +74,7 @@ def ler_pdf_antigo(f):
             min_idx = len(fragment)
             for stop in stops:
                 stop_match = re.search(re.escape(stop), fragment, re.IGNORECASE)
-                if stop_match and stop_match.start() < min_idx:
+                if stop_match and stop_match.start() &lt; min_idx:
                     min_idx = stop_match.start()
             return fragment[:min_idx].strip(" :/-|").strip()
 
@@ -118,9 +118,9 @@ def obter_horario_br():
 
 def obter_saudacao():
     hora = obter_horario_br().hour
-    if 5 <= hora < 12:
+    if 5 &lt;= hora &lt; 12:
         return "Bom dia"
-    elif 12 <= hora < 18:
+    elif 12 &lt;= hora &lt; 18:
         return "Boa tarde"
     return "Boa noite"
 
@@ -356,7 +356,7 @@ st.sidebar.title("🛠️ MENU")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 tema_sel = st.sidebar.selectbox("Tema:", ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"])
 aplicar_tema(tema_sel)
-menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Produtos", "📋 Conferência Geral", "👥 Clientes"])
+menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada", "📦 Estoque", "📋 Conferência Geral", "👥 Clientes"])
 
 
 # ==============================================================================
@@ -366,7 +366,6 @@ if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
     
-    # TÍTULO CENTRALIZADO E SEM A PALAVRA "CARROSSEL"
     st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
@@ -377,7 +376,6 @@ if menu == "📊 Dashboard":
     else:
         # Monta os cards em HTML
         items_html = ""
-        # Multiplica para garantir efeito de loop
         loop_factor = 2 if len(ativos) > 4 else 8
         
         for l in ativos:
@@ -397,7 +395,6 @@ if menu == "📊 Dashboard":
             </div>
             """
 
-        # CSS e Estrutura do Carrossel Automático
         carousel_component = f"""
         <style>
             .carousel-wrapper {{
@@ -408,7 +405,6 @@ if menu == "📊 Dashboard":
             }}
             .carousel-track {{
                 display: flex;
-                /* Largura baseada no número de itens x2 para loop */
                 width: calc(300px * {len(ativos) * 2});
                 animation: scroll {max(20, len(ativos)*5)}s linear infinite;
             }}
@@ -437,10 +433,7 @@ if menu == "📊 Dashboard":
             .coleta-cliente {{ font-weight: bold; color: #1e3d59; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
             .prevista-label {{ font-size: 13px; color: #666; font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }}
             
-            /* DATA DA COLETA: Vermelho Terra */
             .neon-date {{ font-weight: bold; color: #d32f2f; font-size: 15px; }}
-            
-            /* RESULTADO: Verde Escuro Profissional (sem neon) */
             .neon-result {{ font-weight: bold; color: #1e7e34; font-size: 16px; }}
         </style>
         
@@ -454,7 +447,6 @@ if menu == "📊 Dashboard":
 
         components.html(carousel_component, height=200)
 
-    # Espaço para futuros widgets do dashboard
     st.markdown("---")
     st.info("Espaço livre para novos gráficos ou métricas...")
 
@@ -609,8 +601,8 @@ elif menu == "👥 Clientes":
             st.success("Lista atualizada!")
             st.rerun()
 
-elif menu == "📦 Produtos":
-    st.title("📦 Produtos")
+elif menu == "📦 Estoque":
+    st.title("📦 Estoque")
     ed = st.data_editor(st.session_state["estoque"], use_container_width=True, num_rows="dynamic")
     if not ed.equals(st.session_state["estoque"]):
         st.session_state["estoque"] = ed
