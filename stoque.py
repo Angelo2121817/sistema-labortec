@@ -159,55 +159,20 @@ def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _fix_date_br(val):
-    """Converte qualquer formato de data para DD/MM/AAAA"""
     if not val or pd.isna(val) or str(val).strip() == "":
         return ""
     try:
-        # Tenta vários formatos
-        for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']:
-            try:
-                return pd.to_datetime(val, format=fmt).strftime("%d/%m/%Y")
-            except:
-                continue
-        # Se nenhum formato funcionou, retorna como está
-        return str(val)
+        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y")
     except:
-        return str(val)
+        return val
 
-def _fix_date_br(val):
-    """Converte QUALQUER formato de data para DD/MM/AAAA (padrão brasileiro)"""
-    if not val or pd.isna(val) or str(val).strip() == "" or str(val).strip() == "Não definida":
+def _fix_datetime_br(val):
+    if not val or pd.isna(val) or str(val).strip() == "":
         return ""
-    
-    val_str = str(val).strip()
-    
-    # Se já está em formato DD/MM/AAAA, retorna como está
-    if len(val_str) == 10 and val_str[2] == '/' and val_str[5] == '/':
-        try:
-            dia, mes, ano = val_str.split('/')
-            if 1 <= int(dia) <= 31 and 1 <= int(mes) <= 12 and len(ano) == 4:
-                return val_str
-        except:
-            pass
-    
-    # Tenta converter de vários formatos
-    formatos = [
-        '%d/%m/%Y',      # DD/MM/AAAA
-        '%Y-%m-%d',      # AAAA-MM-DD (padrão Google Sheets)
-        '%m/%d/%Y',      # MM/DD/AAAA
-        '%d-%m-%Y',      # DD-MM-AAAA
-        '%Y/%m/%d',      # AAAA/MM/DD
-    ]
-    
-    for fmt in formatos:
-        try:
-            data_convertida = pd.to_datetime(val_str, format=fmt)
-            return data_convertida.strftime("%d/%m/%Y")
-        except:
-            continue
-    
-    # Se nenhum formato funcionou, retorna vazio
-    return ""
+    try:
+        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
+    except:
+        return val
 
 def carregar_dados():
     try:
@@ -237,11 +202,10 @@ def carregar_dados():
                     if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
                     if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
 
-                    # FORÇA CONVERSÃO PARA FORMATO BRASILEIRO
                     if "Data_Coleta" in df.columns:
-                        df["Data_Coleta"] = df["Data_Coleta"].apply(lambda x: _fix_date_br(x))
+                        df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
                     if "Data_Resultado" in df.columns:
-                        df["Data_Resultado"] = df["Data_Resultado"].apply(lambda x: _fix_date_br(x))
+                        df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
                     
                     for c in ["Cliente", "Status"]:
                         df[c] = df[c].fillna("").astype(str)
@@ -254,8 +218,7 @@ def carregar_dados():
             else:
                 st.session_state[aba.lower()] = []
         return True
-    except Exception as e:
-        st.error(f"Erro ao carregar: {e}")
+    except Exception:
         return False
 
 
@@ -502,28 +465,22 @@ elif menu == "🧪 Laudos":
     
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
-            if not st.session_state['clientes_db']:
-                st.warning("⚠️ Cadastre clientes primeiro!")
-            else:
-                cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-                c1, c2 = st.columns(2)
-                
-                # USA date_input do Streamlit (retorna objeto date)
-                data_l = c1.date_input("📅 Data da Coleta")
-                data_r = c2.date_input("📅 Previsão do Resultado", value=data_l + timedelta(days=7))
-                
-                if st.form_submit_button("✅ Agendar"):
-                    # CONVERTE PARA STRING NO FORMATO BRASILEIRO
-                    novo = {
-                        'Cliente': cli_l, 
-                        'Data_Coleta': data_l.strftime("%d/%m/%Y"),  # FORÇA DD/MM/AAAA
-                        'Data_Resultado': data_r.strftime("%d/%m/%Y"),  # FORÇA DD/MM/AAAA
-                        'Status': 'Pendente'
-                    }
-                    st.session_state['log_laudos'].append(novo)
-                    salvar_dados()
-                    st.success("✅ Laudo agendado com sucesso!")
-                    st.rerun()
+            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
+            c1, c2 = st.columns(2)
+            data_l = c1.date_input("Data da Coleta")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            
+            if st.form_submit_button("Agendar"):
+                novo = {
+                    'Cliente': cli_l, 
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
+                    'Status': 'Pendente'
+                }
+                st.session_state['log_laudos'].append(novo)
+                salvar_dados()
+                st.success("Agendado!")
+                st.rerun()
 
     st.markdown("---")
     st.subheader("📋 Editar Previsões e Status")
@@ -532,43 +489,30 @@ elif menu == "🧪 Laudos":
     if not laudos:
         st.info("Sem laudos registrados.")
     else:
-        # Cria DataFrame com ID
         df_p = pd.DataFrame(laudos)
         df_p['ID'] = range(len(laudos))
         
-        # Reordena colunas
-        df_display = df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']].copy()
-        
         ed_p = st.data_editor(
-            df_display,
+            df_p[['ID', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
             use_container_width=True, 
             hide_index=True,
-            disabled=['ID', 'Cliente', 'Data_Coleta'],
+            disabled=['ID', 'Cliente'],
             column_config={
-                "ID": st.column_config.NumberColumn("ID", width=50),
-                "Cliente": st.column_config.TextColumn("Cliente", width=200),
-                "Data_Coleta": st.column_config.TextColumn("Data Coleta (DD/MM/AAAA)", width=150),
-                "Data_Resultado": st.column_config.TextColumn("Prev. Resultado (DD/MM/AAAA)", width=150),
-                "Status": st.column_config.SelectboxColumn(
-                    "Status", 
-                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"],
-                    width=120
-                )
+                "Data_Coleta": st.column_config.TextColumn("Data Coleta (dd/mm/aaaa)"),
+                "Data_Resultado": st.column_config.TextColumn("Prev. Resultado (dd/mm/aaaa)"),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Análise", "Concluído", "Cancelado"])
             }
         )
 
         if st.button("💾 SALVAR ALTERAÇÕES"):
-            for idx_row, row in ed_p.iterrows():
-                id_laudo = int(row['ID'])
-                # Encontra o índice correto no session_state
-                if id_laudo < len(st.session_state['log_laudos']):
-                    # GARANTE QUE A DATA ESTÁ EM FORMATO BRASILEIRO
-                    data_resultado_corrigida = _fix_date_br(str(row['Data_Resultado']))
-                    st.session_state['log_laudos'][id_laudo]['Data_Resultado'] = data_resultado_corrigida
-                    st.session_state['log_laudos'][id_laudo]['Status'] = str(row['Status'])
+            for _, row in ed_p.iterrows():
+                idx = int(row['ID'])
+                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta'])
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado'])
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
             
             salvar_dados()
-            st.success("✅ Dados atualizados com sucesso!")
+            st.success("Dados atualizados!")
             st.rerun()
 
 elif menu == "💰 Vendas & Orçamentos":
@@ -747,9 +691,3 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
-
-
-
-
-
-
