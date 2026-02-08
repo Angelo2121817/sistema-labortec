@@ -402,168 +402,63 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
 
-# ==============================================================================
-# 6. DASHBOARD (COM ESTILO VISUAL "ELITE")
-# ==============================================================================
-elif menu == "📊 Dashboard":
+if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     
-    # --- ALERTA GERAL ---
+    # --- ALERTA GERAL (O ALTO-FALANTE) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
-        <div style="background-color: #fff3cd; border-left: 6px solid #ffc107; padding: 20px; border-radius: 5px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h3 style="color: #856404; margin: 0; display: flex; align-items: center;">📢 COMUNICADO DO COMANDO</h3>
-            <p style="font-size: 1.2em; font-weight: 500; color: #533f03; margin-top: 10px;">{st.session_state['aviso_geral']}</p>
+        <div style="background-color: #ffebee; border: 2px solid #ff1744; border-radius: 10px; padding: 15px; margin-bottom: 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="color: #d50000; margin: 0;">📢 COMUNICADO DO COMANDO</h3>
+            <p style="font-size: 1.3em; font-weight: bold; color: #b71c1c; margin-top: 10px;">{st.session_state['aviso_geral']}</p>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("<h3 style='text-align: center; color: #1e3d59; margin-bottom: 30px;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
-    # Pega apenas os pendentes
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
 
     if not ativos:
-        st.success("✅ Tudo limpo! Nenhuma missão pendente.")
+        st.success("✅ Tudo em dia! Nenhuma pendência no radar.")
     else:
         items_html = ""
-        # Loop tático para preencher o carrossel visualmente
+        # Multiplica itens se forem poucos para o carrossel não quebrar visualmente
         lista_loop = ativos * (4 if len(ativos) < 4 else 1)
         
         for l in lista_loop:
             cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
-            coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--/----"))
-            resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--/----"))
+            coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
+            resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
 
             items_html += f"""
             <div class="carousel-item">
-                <div class="card-header">🏢 {cliente}</div>
-                
-                <div class="info-row">
-                    <span class="label-icon">📅 Coleta:</span>
-                    <span class="tag-date">{coleta}</span>
+                <div class="coleta-cliente">🏢 {cliente}</div>
+                <div class="prevista-label">Coleta:</div>
+                <div class="neon-date">📅 {coleta}</div>
+                <div style="margin-top: 8px;">
+                    <div class="prevista-label">Resultado:</div>
+                    <div class="neon-result">🧪 {resultado}</div>
                 </div>
-                
-                <div class="info-row">
-                    <span class="label-icon">🧪 Previsão:</span>
-                    <span class="tag-result">{resultado}</span>
-                </div>
-                
-                <div class="status-badge">PENDENTE</div>
             </div>
             """
 
-        # CSS Turbinado (Estilo Elite)
         carousel_component = f"""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
-            
-            .carousel-wrapper {{ 
-                overflow: hidden; 
-                width: 100%; 
-                padding: 20px 0; 
-                background: transparent;
-            }}
-            
-            .carousel-track {{ 
-                display: flex; 
-                width: max-content; 
-                animation: scroll {max(25, len(ativos)*6)}s linear infinite; 
-            }}
-            
+            .carousel-wrapper {{ overflow: hidden; width: 100%; position: relative; padding: 10px 0; }}
+            .carousel-track {{ display: flex; width: max-content; animation: scroll {max(20, len(ativos)*5)}s linear infinite; }}
             .carousel-track:hover {{ animation-play-state: paused; }}
-            
             @keyframes scroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
-            
-            /* O CARTÃO DE ELITE */
-            .carousel-item {{ 
-                width: 300px; 
-                flex-shrink: 0; 
-                margin-right: 25px; 
-                background: #ffffff; 
-                border-radius: 12px; 
-                border-left: 8px solid #d32f2f; /* Vermelho Sangue */
-                box-shadow: 0 10px 20px rgba(0,0,0,0.15); /* Sombra Profunda */
-                height: 180px; 
-                display: flex; 
-                flex-direction: column; 
-                justify-content: space-between;
-                padding: 20px;
-                font-family: 'Roboto', sans-serif;
-                transition: transform 0.3s ease;
-                position: relative;
-                overflow: hidden;
-            }}
-            
-            .carousel-item:hover {{
-                transform: translateY(-5px); /* Levanta ao passar o mouse */
-                box-shadow: 0 15px 30px rgba(0,0,0,0.25);
-            }}
-
-            .card-header {{
-                font-size: 18px;
-                font-weight: 800;
-                color: #2c3e50;
-                margin-bottom: 15px;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                border-bottom: 1px solid #eee;
-                padding-bottom: 8px;
-            }}
-
-            .info-row {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 10px;
-            }}
-
-            .label-icon {{
-                font-size: 14px;
-                color: #7f8c8d;
-                font-weight: 600;
-            }}
-
-            /* TAGS DE DATA (Destaque Visual) */
-            .tag-date {{
-                background-color: #ffebee;
-                color: #c62828;
-                padding: 4px 10px;
-                border-radius: 20px;
-                font-weight: bold;
-                font-size: 14px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }}
-
-            .tag-result {{
-                background-color: #e8f5e9;
-                color: #2e7d32;
-                padding: 4px 10px;
-                border-radius: 20px;
-                font-weight: bold;
-                font-size: 14px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }}
-            
-            .status-badge {{
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                font-size: 10px;
-                background: #eee;
-                color: #999;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-weight: bold;
-                letter-spacing: 1px;
-            }}
-
+            .carousel-item {{ width: 280px; flex-shrink: 0; margin-right: 20px; background: white; padding: 15px; border-radius: 12px; border-left: 6px solid #ff4b4b; box-shadow: 0 4px 10px rgba(0,0,0,0.08); height: 170px; display: flex; flex-direction: column; justify-content: center; font-family: sans-serif; }}
+            .coleta-cliente {{ font-weight: bold; color: #1e3d59; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+            .prevista-label {{ font-size: 13px; color: #666; font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }}
+            .neon-date {{ font-weight: bold; color: #d32f2f; font-size: 15px; }}
+            .neon-result {{ font-weight: bold; color: #1e7e34; font-size: 16px; }}
         </style>
         <div class="carousel-wrapper"><div class="carousel-track">{items_html}</div></div>
         """
-        components.html(carousel_component, height=240)
+        components.html(carousel_component, height=200)
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
@@ -796,4 +691,3 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] += qtd
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
-
