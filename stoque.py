@@ -230,25 +230,11 @@ if "clientes_db" not in st.session_state:
 
 
 # ==============================================================================
-# 4. TEMAS E CSS (COM ANIMAÇÃO DE CARROSSEL)
+# 4. TEMAS E CSS
 # ==============================================================================
 def aplicar_tema(escolha):
     css = """
     <style>
-        @keyframes neonPulse {
-            0% { text-shadow: 0 0 5px #ff4b4b, 0 0 10px #ff4b4b; color: #ff4b4b; }
-            50% { text-shadow: 0 0 20px #ff4b4b, 0 0 30px #ff4b4b; color: #ff0000; }
-            100% { text-shadow: 0 0 5px #ff4b4b, 0 0 10px #ff4b4b; color: #ff4b4b; }
-        }
-        @keyframes neonPulseGreen {
-            0% { text-shadow: 0 0 5px #4bff4b, 0 0 10px #4bff4b; color: #4bff4b; }
-            50% { text-shadow: 0 0 20px #4bff4b, 0 0 30px #4bff4b; color: #00ff00; }
-            100% { text-shadow: 0 0 5px #4bff4b, 0 0 10px #4bff4b; color: #4bff4b; }
-        }
-        .neon-date { font-weight: bold; animation: neonPulse 2s infinite; font-size: 1.0em; display: inline-block; }
-        .neon-result { font-weight: bold; animation: neonPulseGreen 2s infinite; font-size: 1.0em; display: inline-block; }
-        .prevista-label { font-size: 0.85em; color: #555; font-weight: bold; margin-bottom: 2px; }
-
         .centered-title { text-align: center; color: #1e3d59; font-weight: bold; padding: 20px 0; font-size: 2.5em; }
     </style>
     """
@@ -376,6 +362,39 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # ==============================================================================
 # PÁGINAS
 # ==============================================================================
+if menu == "📊 Dashboard":
+    st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
+    st.markdown("---")
+    st.subheader("📡 Radar de Coletas e Resultados (Carrossel)")
+
+    laudos_atuais = st.session_state.get("log_laudos", [])
+    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
+
+    if not ativos:
+        st.success("✅ Tudo em dia!")
+    else:
+        # Monta os cards em HTML
+        items_html = ""
+        # Multiplica para garantir efeito de loop
+        loop_factor = 2 if len(ativos) > 4 else 8
+        
+        for l in ativos:
+            cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
+            coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
+            resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
+
+            items_html += f"""
+            <div class="carousel-item">
+                <div class="coleta-cliente">🏢 {cliente}</div>
+                <div class="prevista-label">Coleta:</div>
+                <div class="neon-date">📅 {coleta}</div>
+                <div style="margin-top: 8px;">
+                    <div class="prevista-label">Resultado:</div>
+                    <div class="neon-result">🧪 {resultado}</div>
+                </div>
+            </div>
+            """
+
         # CSS e Estrutura do Carrossel Automático
         carousel_component = f"""
         <style>
@@ -387,8 +406,9 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
             }}
             .carousel-track {{
                 display: flex;
+                /* Largura baseada no número de itens x2 para loop */
                 width: calc(300px * {len(ativos) * 2});
-                animation: scroll {max(20, len(ativos)*4)}s linear infinite; /* Ajustei para ficar um pouco mais lento e suave */
+                animation: scroll {max(20, len(ativos)*5)}s linear infinite;
             }}
             .carousel-track:hover {{
                 animation-play-state: paused;
@@ -404,7 +424,7 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
                 background: white;
                 padding: 15px;
                 border-radius: 12px;
-                border-left: 6px solid #ff4b4b; /* Borda um pouco mais grossa */
+                border-left: 6px solid #ff4b4b;
                 box-shadow: 0 4px 10px rgba(0,0,0,0.08);
                 height: 170px;
                 display: flex;
@@ -418,7 +438,7 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
             /* DATA DA COLETA: Vermelho Terra */
             .neon-date {{ font-weight: bold; color: #d32f2f; font-size: 15px; }}
             
-            /* MUDANÇA AQUI: DATA DO RESULTADO agora é Verde Escuro Profissional (sem neon) */
+            /* RESULTADO: Verde Escuro Profissional (sem neon) */
             .neon-result {{ font-weight: bold; color: #1e7e34; font-size: 16px; }}
         </style>
         
@@ -432,57 +452,9 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 
         components.html(carousel_component, height=200)
 
-        # CSS e Estrutura do Carrossel Automático
-        carousel_component = f"""
-        <style>
-            .carousel-wrapper {{
-                overflow: hidden;
-                width: 100%;
-                position: relative;
-                padding: 10px 0;
-            }}
-            .carousel-track {{
-                display: flex;
-                width: calc(300px * {len(ativos) * 2}); /* Espaço para duplicar */
-                animation: scroll {max(15, len(ativos)*3)}s linear infinite;
-            }}
-            .carousel-track:hover {{
-                animation-play-state: paused;
-            }}
-            @keyframes scroll {{
-                0% {{ transform: translateX(0); }}
-                100% {{ transform: translateX(calc(-300px * {len(ativos)})); }}
-            }}
-            .carousel-item {{
-                width: 280px;
-                flex-shrink: 0;
-                margin-right: 20px;
-                background: white;
-                padding: 15px;
-                border-radius: 12px;
-                border-left: 5px solid #ff4b4b;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                height: 170px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                font-family: sans-serif;
-            }}
-            .coleta-cliente {{ font-weight: bold; color: #1e3d59; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-            .prevista-label {{ font-size: 13px; color: #555; font-weight: bold; margin-bottom: 2px; }}
-            .neon-date {{ font-weight: bold; color: #ff4b4b; font-size: 15px; }}
-            .neon-result {{ font-weight: bold; color: #4bff4b; text-shadow: 0 0 2px green; font-size: 15px; }}
-        </style>
-        
-        <div class="carousel-wrapper">
-            <div class="carousel-track">
-                {items_html}
-                {items_html} <!-- Duplicado para loop infinito suave -->
-            </div>
-        </div>
-        """
-
-        components.html(carousel_component, height=200)
+    # Espaço para futuros widgets do dashboard
+    st.markdown("---")
+    st.info("Espaço livre para novos gráficos ou métricas...")
 
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
@@ -681,4 +653,3 @@ elif menu == "📥 Entrada":
                 st.session_state["log_entradas"].append({"Data": obter_horario_br().strftime("%d/%m/%Y %H:%M"), "Produto": p_ent, "Qtd": q_ent})
                 salvar_dados()
                 st.rerun()
-
