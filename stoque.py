@@ -398,8 +398,103 @@ def criar_pdf_nativo(vendedor, cliente, dados_cli, itens, total, condicoes, titu
     pdf.set_xy(110, y+2)
     pdf.cell(70, 4, 'Assinatura Labortec', 0, 1, 'C')
     return pdf.output(dest='S').encode('latin-1')
-
+def extrair_dados_cetesb(f):
+    """Extrai dados especificamente do layout de licenças da CETESB."""
+    try:
+        reader = PdfReader(f)
+        text = reader.pages[0].extract_text()
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        
+        d = {
+            'Nome': '', 'CNPJ': '', 'End': '', 'Bairro': '', 
+            'Cidade': '', 'CEP': '', 'UF': 'SP', 'Cod_Cli': '', 'Tel': ''
+        }
+        
+        for i, line in enumerate(lines):
+            # O bloco de dados começa onde tem o CNPJ
+            cnpj_m = re.search(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', line)
+            if cnpj_m:
+                d['CNPJ'] = cnpj_m.group(1)
+                d['Nome'] = line.replace(d['CNPJ'], '').strip()
+                
+                # Próxima linha: Logradouro
+                if i + 1 < len(lines):
+                    prox = lines[i+1]
+                    cad_m = re.search(r'(\d+-\d+-\d+)', prox)
+                    if cad_m:
+                        d['End'] = prox.replace(cad_m.group(1), '').strip()
+                    else:
+                        d['End'] = prox
+                
+                # Linha seguinte: Número + Bairro + CEP + Cidade
+                if i + 2 < len(lines):
+                    addr_line = lines[i+2]
+                    cep_m = re.search(r'(\d{5}-\d{3})', addr_line)
+                    if cep_m:
+                        d['CEP'] = cep_m.group(1)
+                        partes_antes = addr_line.split(d['CEP'])[0].strip()
+                        m_num_bai = re.match(r'(\d+)\s+(.*)', partes_antes)
+                        if m_num_bai:
+                            d['End'] = f"{d['End']}, {m_num_bai.group(1)}"
+                            d['Bairro'] = m_num_bai.group(2).strip()
+                        d['Cidade'] = addr_line.split(d['CEP'])[-1].strip()
+                break
+        return d
+    except Exception as e:
+        return None
 def ler_pdf_antigo(f):
+    try:
+        reader = PdfReader(f)
+        # Lê a primeira página para checar se é CETESB
+        texto_inicial = reader.pages[0].extract_text() or ""
+        
+        if "CETESB" in texto_inicial.upper():
+            return extrair_dados_cetesb(f)
+            
+        # Se não for CETESB, segue com a sua lógica original abaixo:
+        text = ""
+        for p in reader.pages:
+            t = p.extract_text()
+            if t: text += t + "\n"
+        clean = re.sub(r'\s+', ' ', text).strip()
+        idx_inicio = clean.lower().find("cliente")
+        core = clean[idx_inicio:] if idx_inicio != -1 else clean
+        d = {'Nome':'', 'Cod_Cli':'', 'End':'', 'CEP':'', 'Bairro':'', 'Cidade':'', 'UF':'', 'CNPJ':'', 'Tel':''}
+        def extract(key, stops):
+            try:
+                match = re.search(re.escape(key) + r'[:\s]*', core, re.IGNORECASE)
+                if not match: return ""
+                start_idx = match.end()
+                fragment = core[start_idx:]
+                min_idx = len(fragment)
+                for stop in stops:
+                    stop_match = re.search(re.escape(stop), fragment, re.IGNORECASE)
+                    if stop_match and stop_match.start() < min_idx: min_idx = stop_match.start()
+                return fragment[:min_idx].strip(" :/-|").strip()
+            except: return ""
+        d['Nome'] = extract("Cliente", ["CNPJ", "CPF", "Endereço", "Data:", "Código:"])
+        d['Nome'] = re.sub(r'\d{2}/\d{2}/\d{4}', '', d['Nome']).strip().split("Vendedor")[0].strip()
+        cm = re.search(r'Cód(?:igo)?[:\s]*(\d+)', core, re.IGNORECASE)
+        if cm: d['Cod_Cli'] = cm.group(1)
+        raw_end = extract("Endereço", ["Bairro", "Cidade", "Cep", "CNPJ", "Pagto"])
+        raw_bairro = extract("Bairro", ["Cidade", "Cep", "CNPJ", "Tel", "CPF"])
+        if not raw_bairro and " - " in raw_end:
+            partes = raw_end.split(" - ")
+            d['End'] = partes[0].strip(); d['Bairro'] = partes[1].strip()
+        else: d['End'] = raw_end; d['Bairro'] = raw_bairro
+        d['Cidade'] = extract("Cidade", ["/", "-", "Cep", "UF", "CNPJ", "Tel"])
+        um = re.search(r'Cidade.*?[:\s].*?[-/]\s*([A-Z]{2})', core, re.IGNORECASE)
+        if um: d['UF'] = um.group(1)
+        cpm = re.search(r'(\d{5}-\d{3})', core) or re.search(r'(\d{2}\.\d{3}-\d{3})', core)
+        if cpm: d['CEP'] = cpm.group(1)
+        cnm = re.search(r'(\d{2}\.\d{3}\.\d.3/\d{4}-\d{2})', core)
+        if cnm: d['CNPJ'] = cnm.group(1)
+        d['Tel'] = extract("Tel", ["Pagto", "Forma", "Venc", "Email", "Un", "Qtd"])
+        return d
+    except Exception as e: 
+        st.error(f"Erro: {e}")
+        return None
+
     try:
         reader = PdfReader(f)
         text = ""
@@ -879,6 +974,5 @@ else:
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
-
 
 
