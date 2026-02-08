@@ -158,6 +158,25 @@ def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+# FUNÇÕES AUXILIARES DE FORMATAÇÃO DE DATA
+def _fix_date_br(val):
+    """Converte para DD/MM/AAAA se for data, senão retorna o valor original"""
+    if not val or pd.isna(val) or str(val).strip() == "":
+        return ""
+    try:
+        # Tenta converter para datetime e depois formatar para BR
+        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y")
+    except:
+        return val # Retorna texto original (ex: 'Não definida')
+
+def _fix_datetime_br(val):
+    """Converte para DD/MM/AAAA HH:MM se for data, senão retorna original"""
+    if not val or pd.isna(val) or str(val).strip() == "":
+        return ""
+    try:
+        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
+    except:
+        return val
 
 def carregar_dados():
     try:
@@ -180,19 +199,28 @@ def carregar_dados():
             df = conn.read(worksheet=aba, ttl=0)
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
+                
+                # CORREÇÃO DE DATAS: Força o formato BR ao carregar
                 if aba == "Log_Laudos":
-                    if "Cliente" not in df.columns:
-                        df["Cliente"] = ""
-                    if "Data_Coleta" not in df.columns:
-                        df["Data_Coleta"] = ""
-                    if "Data_Resultado" not in df.columns:
-                        df["Data_Resultado"] = "Não definida"
-                    if "Status" not in df.columns:
-                        df["Status"] = "Pendente"
+                    if "Cliente" not in df.columns: df["Cliente"] = ""
+                    if "Status" not in df.columns: df["Status"] = "Pendente"
+                    if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
+                    if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
+
+                    # Aplica formatação BR nas datas
+                    if "Data_Coleta" in df.columns:
+                        df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
+                    if "Data_Resultado" in df.columns:
+                        df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
                     
-                    # Limpeza
-                    for c in ["Cliente", "Data_Coleta", "Data_Resultado", "Status"]:
+                    # Garante que campos vazios de texto sejam strings vazias
+                    for c in ["Cliente", "Status"]:
                         df[c] = df[c].fillna("").astype(str)
+
+                # Para Logs de Vendas e Entradas que têm hora
+                elif aba in ["Log_Vendas", "Log_Entradas"]:
+                    if "Data" in df.columns:
+                        df["Data"] = df["Data"].apply(_fix_datetime_br)
                     
                 st.session_state[aba.lower()] = df.to_dict("records")
             else:
@@ -366,7 +394,6 @@ if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Operacional</div>', unsafe_allow_html=True)
     st.markdown("---")
     
-    # TÍTULO CENTRALIZADO E SEM A PALAVRA "CARROSSEL"
     st.markdown("<h3 style='text-align: center; color: #1e3d59;'>📡 Radar de Coletas e Resultados</h3>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
@@ -375,13 +402,13 @@ if menu == "📊 Dashboard":
     if not ativos:
         st.success("✅ Tudo em dia!")
     else:
-        # Monta os cards em HTML
         items_html = ""
         # Multiplica para garantir efeito de loop
         loop_factor = 2 if len(ativos) > 4 else 8
         
         for l in ativos:
             cliente = html.escape(str(l.get("Cliente", "") or "Cliente não informado"))
+            # As datas já foram corrigidas na carga, então não precisamos mexer aqui
             coleta = html.escape(str(l.get("Data_Coleta", "") or "Data não informada"))
             resultado = html.escape(str(l.get("Data_Resultado", "") or "Não definida"))
 
@@ -397,7 +424,6 @@ if menu == "📊 Dashboard":
             </div>
             """
 
-        # CSS e Estrutura do Carrossel Automático
         carousel_component = f"""
         <style>
             .carousel-wrapper {{
@@ -408,7 +434,6 @@ if menu == "📊 Dashboard":
             }}
             .carousel-track {{
                 display: flex;
-                /* Largura baseada no número de itens x2 para loop */
                 width: calc(300px * {len(ativos) * 2});
                 animation: scroll {max(20, len(ativos)*5)}s linear infinite;
             }}
@@ -437,10 +462,7 @@ if menu == "📊 Dashboard":
             .coleta-cliente {{ font-weight: bold; color: #1e3d59; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
             .prevista-label {{ font-size: 13px; color: #666; font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }}
             
-            /* DATA DA COLETA: Vermelho Terra */
             .neon-date {{ font-weight: bold; color: #d32f2f; font-size: 15px; }}
-            
-            /* RESULTADO: Verde Escuro Profissional (sem neon) */
             .neon-result {{ font-weight: bold; color: #1e7e34; font-size: 16px; }}
         </style>
         
@@ -451,10 +473,8 @@ if menu == "📊 Dashboard":
             </div>
         </div>
         """
-
         components.html(carousel_component, height=200)
 
-    # Espaço para futuros widgets do dashboard
     st.markdown("---")
     st.info("Espaço livre para novos gráficos ou métricas...")
 
