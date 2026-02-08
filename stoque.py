@@ -138,39 +138,61 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF (CORRIGIDO: SÓ LABORTEC + LINHA AJUSTADA)
+# 5. GERADOR DE PDF (CORRIGIDO: ALINHAMENTO + CABEÇALHO LABORTEC)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        # 1. Logo (Se existir)
+        # 1. Logo
         if os.path.exists("labortec.jpg"): 
             self.image("labortec.jpg", x=10, y=8, w=45)
         
-        # 2. Título (Apenas Labortec agora)
+        # 2. Título (Só Labortec)
         self.set_font('Arial', 'B', 14)
-        self.set_xy(60, 15) # Posição do texto
+        self.set_xy(60, 15)
         self.cell(0, 5, 'LABORTEC CONSULTORIA', 0, 1, 'L')
         
-        # 3. Subtítulo (Endereço/CNPJ)
+        # 3. Subtítulo
         self.set_font('Arial', '', 9)
         self.set_xy(60, 22)
         self.cell(0, 5, 'Rua Alfredo Bruno, 22 - Campinas/SP', 0, 1, 'L')
         self.set_xy(60, 27)
         self.cell(0, 5, 'CNPJ: 03.763.197/0001-09 | Tel: (19) 3238-9320', 0, 1, 'L')
 
-        # 4. Linha Separadora (Abaixei para 45 para não riscar o logo)
-        self.set_draw_color(0, 0, 0) # Cor preta
-        self.set_line_width(0.5)
-        self.line(10, 45, 200, 45) 
-        self.ln(35) # Espaço para começar o conteúdo abaixo da linha
+        # 4. Linha Divisória (Abaixei para 45 para não cortar o logo)
+        self.line(10, 45, 200, 45)
+        self.ln(35) # Espaço seguro para começar o texto
+
+def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, titulo):
+    pdf = PDF()
+    pdf.add_page()
     
-    # Tabela
+    # Título do Doc
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, titulo, 0, 1, 'C')
+    
+    # Dados Gerais
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(0, 5, f"Data: {datetime.now().strftime('%d/%m/%Y')} | Vendedor: {vendedor}", 0, 1, 'R')
+    pdf.ln(5)
+    
+    # Dados Cliente
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 6, f" CLIENTE: {cliente}", 1, 1, 'L')
+    pdf.set_font('Arial', '', 9)
+    # Tenta pegar endereço e telefone, se não tiver, deixa em branco
+    end_cli = dados_cli.get('End', '')
+    tel_cli = dados_cli.get('Tel', '')
+    pdf.cell(0, 5, f" Endereço: {end_cli} | Tel: {tel_cli}", 0, 1, 'L')
+    pdf.ln(5)
+    
+    # Cabeçalho da Tabela
     pdf.set_font('Arial', 'B', 8)
-    w = [15, 90, 20, 30, 30]
+    w = [15, 90, 20, 30, 30] # Largura das colunas
     cols = ['Qtd', 'Produto', 'Cod', 'Preço Unit.', 'Total']
     for i, c in enumerate(cols): pdf.cell(w[i], 7, c, 1, 0, 'C')
     pdf.ln()
     
+    # Itens da Tabela
     pdf.set_font('Arial', '', 8)
     for r in itens:
         pdf.cell(w[0], 6, str(r['Qtd']), 1, 0, 'C')
@@ -180,9 +202,12 @@ class PDF(FPDF):
         pdf.cell(w[4], 6, f"R$ {float(r['Total']):.2f}", 1, 0, 'R')
         pdf.ln()
 
+    # Total Geral
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(sum(w)-30, 10, "TOTAL GERAL:", 0, 0, 'R')
     pdf.cell(30, 10, f"R$ {total:,.2f}", 1, 1, 'R')
+    
+    # ESTA É A LINHA QUE ESTAVA DANDO ERRO (Agora está alinhada dentro da função)
     return pdf.output(dest='S').encode('latin-1')
 
 # ==============================================================================
@@ -421,4 +446,5 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
 
