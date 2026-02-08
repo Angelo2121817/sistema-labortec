@@ -167,51 +167,53 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF (FIX DEFINITIVO: CABEÇALHO ESPAÇADO E LOGO PROTEGIDA)
+# 5. GERADOR DE PDF (FIX: CONTEÚDO DESLOCADO 1 POLEGADA PARA BAIXO)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        # 1. Logo à esquerda (Isolada)
+        # 1. Logo à esquerda (Mantida no topo)
         if os.path.exists("labortec.jpg"):
             self.image("labortec.jpg", x=10, y=8, w=48)
         
+        # Deslocamento de ~1 polegada (25mm) para o restante do cabeçalho
+        offset_y = 25 
+        
         # 2. Textos da Labortec (Totalmente à direita da logo)
-        # Usamos X=65 para garantir que nenhum texto toque na logo (que tem W=48)
         self.set_font('Arial', 'B', 16)
-        self.set_xy(65, 10)
+        self.set_xy(65, 10 + offset_y)
         self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
         
         # 3. Título do Documento (Canto Superior Direito)
         self.set_font('Arial', 'B', 16)
-        self.set_xy(110, 10)
+        self.set_xy(110, 10 + offset_y)
         titulo_doc = getattr(self, 'titulo_doc', 'ORÇAMENTO')
         self.cell(90, 10, titulo_doc, 0, 1, 'R')
         
-        # 4. Detalhes da Labortec (Abaixo do nome, à direita da logo)
+        # 4. Detalhes da Labortec
         self.set_font('Arial', '', 8)
-        self.set_xy(65, 20)
+        self.set_xy(65, 20 + offset_y)
         self.cell(100, 4, 'Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235', 0, 0, 'L')
         
-        # Data (Canto Direito)
-        self.set_xy(110, 20)
+        # Data
+        self.set_xy(110, 20 + offset_y)
         self.cell(90, 4, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, 'R')
         
         # Contatos
-        self.set_xy(65, 24)
+        self.set_xy(65, 24 + offset_y)
         self.cell(100, 4, 'labortecconsultoria@gmail.com | Tel.: (19) 3238-9320', 0, 0, 'L')
         
-        # Vendedor (Canto Direito)
-        self.set_xy(110, 24)
+        # Vendedor
+        self.set_xy(110, 24 + offset_y)
         vendedor_nome = getattr(self, 'vendedor_nome', 'Sistema')
         self.cell(90, 4, f"Vendedor: {vendedor_nome}", 0, 1, 'R')
         
         # CNPJ
-        self.set_xy(65, 28)
+        self.set_xy(65, 28 + offset_y)
         self.cell(100, 4, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
         
-        # 5. Linha Divisória (Abaixei para Y=38 para dar espaço)
-        self.line(10, 38, 200, 38)
-        self.ln(15) # Espaço seguro para o conteúdo começar
+        # 5. Linha Divisória (Deslocada)
+        self.line(10, 38 + offset_y, 200, 38 + offset_y)
+        self.set_y(45 + offset_y) # Espaço seguro para o conteúdo começar
 
     def footer(self):
         self.set_y(-25)
@@ -222,7 +224,7 @@ class PDF(FPDF):
 def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
     pdf = PDF(); pdf.vendedor_nome = vendedor; pdf.titulo_doc = titulo; pdf.add_page()
     
-    # Bloco Cliente (Fundo Cinza)
+    # Bloco Cliente
     pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(240, 240, 240)
     pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, 'L', fill=True)
     
@@ -233,13 +235,12 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", 'LRB', 1, 'L')
     pdf.ln(5)
     
-    # Bloco Condições de Pagamento
+    # Bloco Condições
     pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, 'L')
     pdf.ln(6)
     
-    # Tabela de Itens (Alinhamento Perfeito)
+    # Tabela de Itens
     pdf.set_font('Arial', 'B', 8); pdf.set_fill_color(225, 225, 225)
-    # Larguras que somam 190mm (Margens de 10mm em cada lado da folha A4 de 210mm)
     w = [15, 15, 85, 25, 20, 30] 
     cols = ['Un', 'Qtd', 'Produto', 'Marca', 'NCM', 'Total']
     for i, c in enumerate(cols): pdf.cell(w[i], 8, c, 1, 0, 'C', fill=True)
@@ -259,7 +260,7 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     pdf.cell(sum(w)-w[5], 10, "TOTAL GERAL: ", 0, 0, 'R')
     pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, 'R')
     
-    # Assinaturas (Espaçamento Generoso)
+    # Assinaturas
     pdf.ln(30)
     y = pdf.get_y()
     pdf.line(25, y, 90, y); pdf.line(120, y, 185, y)
