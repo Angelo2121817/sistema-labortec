@@ -776,18 +776,5 @@ elif menu == "📥 Entrada":
             salvar_dados()
             st.success("Entrada registrada!")
             st.rerun()
-            st.subheader("📥 Entradas vs Saídas (Quantidade Total)")
-
-entradas_df = pd.DataFrame(st.session_state["log_entradas"])
-vendas_df = pd.DataFrame(st.session_state["log_vendas"])
-
-total_entrada = entradas_df["Qtd"].sum() if not entradas_df.empty else 0
-total_saida = vendas_df["Qtd"].sum() if not vendas_df.empty else 0
-
-comparativo_df = pd.DataFrame({
-    "Tipo": ["Entradas", "Saídas"],
-    "Quantidade": [total_entrada, total_saida]
-})
-
-st.bar_chart(comparativo_df.set_index("Tipo"))
+        
 
