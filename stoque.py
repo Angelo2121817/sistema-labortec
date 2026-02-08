@@ -4,29 +4,6 @@ Iniciar teste gratuito
 
 Compartilhar
 Lite
-Concluí a adaptação do seu código para extrair os dados das licenças da CETESB.
-O que foi alterado:
-Nova Função extrair_dados_cetesb: Criei uma lógica específica para o layout da CETESB. Como o texto extraído de PDFs desse tipo costuma vir "embaralhado" (rótulos primeiro e valores depois), utilizei uma técnica de busca por linhas e âncoras (como o CNPJ e o CEP) para capturar exatamente o que você precisa.
-Integração Inteligente: Atualizei a sua função ler_pdf_antigo para que ela detecte automaticamente se o PDF é da CETESB. Se for, ela usa a nova lógica; se não for, ela continua usando a sua lógica original para outros tipos de documentos.
-Campos Extraídos:
-Nome: Capturado da linha do CNPJ.
-CNPJ: Capturado via Regex.
-Endereço: Agora combina o Logradouro com o Número (ex: "RUA WALMYR DE OLIVEIRA VERDI, 200").
-Bairro: Capturado da linha de endereço.
-Cidade: Capturada após o CEP.
-Como usar:
-Basta substituir a função ler_pdf_antigo no seu script original pelo bloco de código que enviei no arquivo anexo. O restante do seu sistema (Streamlit, salvamento em JSON, etc.) continuará funcionando normalmente, mas agora com suporte total aos PDFs da CETESB.
-O arquivo codigo_atualizado.py contém as funções prontas para você copiar e colar no seu projeto.
-codigo_atualizado.py
-Código · 5.14 KB
-Ver todos os arquivos nesta tarefa
-Como foi este resultado?
-Gerar um script de teste para o código atualizado.
-Lite
-Vou criar um script de teste para validar a extração dos dados do PDF da CETESB usando a nova lógica que desenvolvemos. Esse script permitirá que você verifique o funcionamento sem precisar rodar toda a interface do Streamlit.
-Finalize a adaptação do código para extrair dados específicos de PDFs CETESB usando busca por linhas e âncoras, aumentando a precisão. Próximo passo: criar um script de teste para validação.
-
-Lite
 Aqui está o script de teste solicitado.
 Ele contém exatamente a mesma lógica de extração que inserimos no seu código principal. Ao executá-lo, ele lerá o PDF da CETESB e imprimirá os dados formatados no console, permitindo que você valide a extração de forma rápida e independente.
 Como usar o script de teste:
@@ -276,6 +253,24 @@ Agora, quando você for em Clientes > Importar Dados de Licença, o sistema esta
 codigo_pronto_cetesb.py
 Código · 30.74 KB
 Ver todos os arquivos nesta tarefa
+Como foi este resultado?
+deu erro site nem abre =File "/mount/src/sistema-labortec/stoque.py", line 21   Código · 5.14 KB          ^ SyntaxError: invalid character '·' (U+00B7)
+Lite
+Sinto muito pelo erro! Esse problema ocorreu porque alguns caracteres invisíveis ou símbolos de formatação (como esse ponto médio ·) foram copiados junto com o código, o que causa erro de sintaxe no Python.
+Vou limpar o código agora mesmo, remover qualquer caractere estranho e te entregar o arquivo stoque.py totalmente limpo e pronto para rodar. Aguarde um instante.
+Atualizei o código com as funções específicas para extrair dados da CETESB. Corrigi caracteres inválidos que causavam erro de sintaxe, garantindo funcionamento adequado.
+
+Lite
+Corrigi o erro! O problema era um caractere especial (·) que acabou entrando no código durante a cópia e o Python não o reconhece, causando o erro de sintaxe.
+Limpei o arquivo completamente, removi qualquer caractere invisível ou símbolo estranho e gerei o novo arquivo stoque_limpo.py.
+Como resolver agora:
+Baixe o arquivo anexo stoque_limpo.py.
+Copie todo o conteúdo dele.
+Substitua o conteúdo do seu arquivo no Streamlit Cloud (ou onde seu código estiver hospedado).
+Isso deve fazer o site abrir normalmente e com a função da CETESB funcionando! Se precisar de mais qualquer ajuste, estou aqui.
+stoque_limpo.py
+Código · 30.74 KB
+Ver todos os arquivos nesta tarefa
 Tarefa concluída
 Como foi este resultado?
 Sugestões de acompanhamento
@@ -283,7 +278,7 @@ Sugestões de acompanhamento
 
 GmailGoogle Drive
 
-codigo_pronto_cetesb.py
+stoque_limpo.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
