@@ -307,34 +307,21 @@ elif menu == "📦 Gestão de Produtos":
         salvar_dados()
 
 # ==============================================================================
-# 5. CLIENTES (COMPLETO: 8 CAMPOS + CORREÇÃO DE CRASH)
+# 5. CLIENTES (COM IMPORTADOR DE PDF + EDIÇÃO BLINDADA)
 # ==============================================================================
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
     
-    # 1. Inicializa TODAS as variáveis de memória (8 Campos)
+    # 1. Inicializa variáveis
     campos = ['form_nome', 'form_tel', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod']
     for campo in campos:
         if campo not in st.session_state: st.session_state[campo] = ""
 
-    # 2. Funções de Gatilho (Callbacks) - O SEGREDO ANTI-CRASH
-    def preparar_edicao(k, d):
-        # Carrega TODOS os dados do cliente para o formulário
-        st.session_state['form_nome'] = str(k)
-        st.session_state['form_tel'] = str(d.get('Tel', ''))
-        st.session_state['form_end'] = str(d.get('End', ''))
-        st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
-        st.session_state['form_cid'] = str(d.get('Cidade', ''))
-        st.session_state['form_uf'] = str(d.get('UF', ''))
-        st.session_state['form_cep'] = str(d.get('CEP', ''))
-        st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-
+    # --- FUNÇÕES DE CONTROLE ---
     def limpar_campos():
-        # Zera tudo
         for c in campos: st.session_state[c] = ""
 
     def salvar_no_callback():
-        # Esta função roda ANTES da tela atualizar, evitando o erro
         nome = st.session_state['form_nome']
         if nome:
             st.session_state['clientes_db'][nome] = {
@@ -347,20 +334,53 @@ elif menu == "👥 Clientes":
                 'Cod_Cli': st.session_state['form_cod']
             }
             salvar_dados()
-            st.toast(f"Cliente {nome} salvo/atualizado!", icon="✅")
-            limpar_campos() # Limpa sem erro agora
+            st.toast(f"Cliente {nome} salvo!", icon="✅")
+            limpar_campos()
         else:
-            st.toast("Erro: O nome é obrigatório!", icon="❌")
+            st.toast("Erro: Nome obrigatório!", icon="❌")
 
     def excluir_cliente(nome):
         if nome in st.session_state['clientes_db']:
             del st.session_state['clientes_db'][nome]
             salvar_dados()
-            st.toast("Cliente removido.", icon="🗑️")
+            st.toast("Removido.", icon="🗑️")
 
-    # 3. Formulário Completo (Agora com todos os campos)
+    def preparar_edicao(k, d):
+        st.session_state['form_nome'] = str(k)
+        st.session_state['form_tel'] = str(d.get('Tel', ''))
+        st.session_state['form_end'] = str(d.get('End', ''))
+        st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
+        st.session_state['form_cid'] = str(d.get('Cidade', ''))
+        st.session_state['form_uf'] = str(d.get('UF', ''))
+        st.session_state['form_cep'] = str(d.get('CEP', ''))
+        st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
+
+    # --- IMPORTADOR DE PDF (RESGATADO) ---
+    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
+        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
+        if arquivo_pdf is not None:
+            if st.button("🔄 Processar PDF e Preencher Formulário"):
+                # Tenta ler usando a função global (se ela existir no topo do código)
+                try:
+                    dados_lidos = ler_pdf_antigo(arquivo_pdf)
+                    if dados_lidos:
+                        st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
+                        st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
+                        st.session_state['form_end'] = str(dados_lidos.get('End', ''))
+                        st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
+                        st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
+                        st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
+                        st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
+                        st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
+                        st.success("Dados extraídos! Confira abaixo e clique em SALVAR.")
+                    else:
+                        st.error("Não foi possível ler os dados desse PDF.")
+                except NameError:
+                    st.error("⚠️ As funções de leitura de PDF sumiram do topo do código. Me avise para repor!")
+
+    # --- FORMULÁRIO ---
     with st.form("form_cliente"):
-        st.write("📝 **Dados Cadastrais Completos**")
+        st.write("📝 **Dados Cadastrais**")
         
         c1, c2 = st.columns([3, 1])
         c1.text_input("Nome / Razão Social", key="form_nome")
@@ -370,47 +390,37 @@ elif menu == "👥 Clientes":
         c3.text_input("CNPJ", key="form_cnpj")
         c4.text_input("Telefone", key="form_tel")
         
-        st.text_input("Endereço (Rua, Nº, Bairro)", key="form_end")
+        st.text_input("Endereço", key="form_end")
         
         c5, c6, c7 = st.columns([2, 1, 1])
         c5.text_input("Cidade", key="form_cid")
-        c6.text_input("Estado (UF)", key="form_uf")
+        c6.text_input("UF", key="form_uf")
         c7.text_input("CEP", key="form_cep")
         
-        # O botão chama a função de salvar DIRETAMENTE
         st.form_submit_button("💾 SALVAR DADOS", on_click=salvar_no_callback)
 
-    # Botão Cancelar fora do form
     st.button("🧹 Limpar / Cancelar", on_click=limpar_campos)
 
     st.markdown("---")
     st.subheader("📇 Carteira de Clientes")
     
-    # 4. Listagem
+    # --- LISTAGEM ---
     if st.session_state['clientes_db']:
-        # Filtro de busca
-        busca = st.text_input("🔍 Buscar cliente...", placeholder="Digite o nome...")
-        lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
+        busca = st.text_input("🔍 Buscar...", placeholder="Nome da empresa...")
+        lista = sorted(list(st.session_state['clientes_db'].keys()))
         
-        if busca:
-            lista_clientes = [k for k in lista_clientes if busca.lower() in k.lower()]
+        if busca: lista = [k for k in lista if busca.lower() in k.lower()]
 
-        for k in lista_clientes:
-            dados = st.session_state['clientes_db'][k]
-            
-            with st.expander(f"🏢 {k} (Cód: {dados.get('Cod_Cli', '-')})"):
+        for k in lista:
+            d = st.session_state['clientes_db'][k]
+            with st.expander(f"🏢 {k}"):
                 col_a, col_b = st.columns(2)
-                col_a.write(f"📍 {dados.get('End', '')} - {dados.get('Cidade', '')}/{dados.get('UF', '')}")
-                col_b.write(f"📞 {dados.get('Tel', '')} | CNPJ: {dados.get('CNPJ', '')}")
+                col_a.write(f"📍 {d.get('End', '')}")
+                col_b.write(f"📞 {d.get('Tel', '')} | CNPJ: {d.get('CNPJ', '')}")
                 
                 c_edit, c_del = st.columns([1, 1])
-                
-                # Botões de Ação
-                c_edit.button("✏️ EDITAR", key=f"edit_{k}", 
-                              on_click=preparar_edicao, args=(k, dados))
-                
-                c_del.button("🗑️ EXCLUIR", key=f"del_{k}", 
-                             on_click=excluir_cliente, args=(k,))
+                c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
+                c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
     else:
         st.info("Nenhum cliente cadastrado.")
 # ==============================================================================
@@ -503,6 +513,7 @@ elif menu == "🧪 Laudos":
             salvar_dados()
     else:
         st.info("Nenhum laudo pendente.")
+
 
 
 
