@@ -167,7 +167,7 @@ def aplicar_tema(escolha):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. GERADOR DE PDF (FIX: DADOS LABORTEC AUMENTADOS EM 20%)
+# 5. GERADOR DE PDF (FIX: DADOS LABORTEC SUBIDOS EM 15MM)
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
@@ -175,13 +175,11 @@ class PDF(FPDF):
         if os.path.exists("labortec.jpg"):
             self.image("labortec.jpg", x=10, y=8, w=48)
         
-        # Deslocamento de ~1 polegada (25mm) para o restante do cabeçalho
-        offset_y = 25 
+        # Deslocamento original era 25mm (1 polegada). 
+        # Usuário pediu para subir 15mm, então o novo offset é 10mm (25 - 15 = 10)
+        offset_y = 10 
         
         # 2. Textos da Labortec (Aumentados em 20%)
-        # Original B 16 -> Novo B 19.2 (usando 19)
-        # Original 8 -> Novo 9.6 (usando 10)
-        
         self.set_font('Arial', 'B', 19)
         self.set_xy(65, 10 + offset_y)
         self.cell(100, 10, 'LABORTEC', 0, 0, 'L')
@@ -214,7 +212,7 @@ class PDF(FPDF):
         self.set_xy(65, 30 + offset_y)
         self.cell(100, 5, 'C.N.P.J.: 03.763.197/0001-09', 0, 1, 'L')
         
-        # 5. Linha Divisória
+        # 5. Linha Divisória (Ajustada para o novo offset)
         self.line(10, 40 + offset_y, 200, 40 + offset_y)
         self.set_y(48 + offset_y)
 
