@@ -4,3 +4,4 @@ pypdf
 fpdf
 gspread
 oauth2client
+st-gsheets-connection
