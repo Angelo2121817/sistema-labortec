@@ -5,185 +5,277 @@ import re
 import os
 from pypdf import PdfReader
 from fpdf import FPDF
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import os
 import json
 
-# --- CONFIGURAÇÃO INICIAL ---
-st.set_page_config(page_title="Sistema Integrado v56", layout="wide", page_icon="🧪")
+# --- CONFIGURAÇÃO INICIAL (ÍCONE DE QUÍMICA 🧪) ---
+st.set_page_config(page_title="Sistema Integrado v55", layout="wide", page_icon="🧪")
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
-SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# --- ARQUIVO DE BANCO DE DADOS ---
+DB_FILE = "dados_sistema.json"
 
-def conectar_gsheets():
-    """Conecta ao Google Sheets usando st.secrets (Nuvem) ou arquivo local (Teste)"""
-    try:
-        # Tenta pegar dos segredos do Streamlit (Nuvem)
-        if "gcp_service_account" in st.secrets:
-            creds_dict = dict(st.secrets["gcp_service_account"])
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
-        # Senão, tenta arquivo local (apenas para teste no seu PC antes de subir)
-        else:
-            creds = ServiceAccountCredentials.from_json_keyfile_name("sua-chave-aqui.json", SCOPE)
-        
-        client = gspread.authorize(creds)
-        # Abre a planilha pelo nome (tem que ser exato)
-        sh = client.open("sistema_labortec_db")
-        return sh
-    except Exception as e:
-        st.error(f"Erro Crítico de Conexão com Google Sheets: {e}")
-        st.stop()
-
-# --- FUNÇÕES DE PERSISTÊNCIA NA NUVEM ---
+# --- FUNÇÕES DE PERSISTÊNCIA ---
 def carregar_dados():
-    sh = conectar_gsheets()
-    
-    # Função auxiliar para ler aba ou criar se não existir
-    def ler_aba(nome_aba, colunas_padrao):
+    if os.path.exists(DB_FILE):
         try:
-            worksheet = sh.worksheet(nome_aba)
-            dados = worksheet.get_all_records()
-            if not dados: return pd.DataFrame(columns=colunas_padrao)
-            return pd.DataFrame(dados)
-        except gspread.WorksheetNotFound:
-            # Cria a aba se não existir
-            worksheet = sh.add_worksheet(title=nome_aba, rows=100, cols=20)
-            worksheet.append_row(colunas_padrao) # Cabeçalho
-            return pd.DataFrame(columns=colunas_padrao)
-
-    # Carrega (ou cria) as abas
-    st.session_state['estoque'] = ler_aba("Estoque", ['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Inicial', 'Estoque_Minimo'])
-    
-    df_vendas = ler_aba("Log_Vendas", ['Data', 'Cliente', 'Cod', 'Produto', 'Qtd'])
-    st.session_state['log_vendas'] = df_vendas.to_dict('records')
-    
-    df_entradas = ler_aba("Log_Entradas", ['Data', 'Produto', 'Cod', 'Qtd'])
-    st.session_state['log_entradas'] = df_entradas.to_dict('records')
-    
-    df_laudos = ler_aba("Log_Laudos", ['Cliente', 'Data_Coleta', 'Data_Registro'])
-    st.session_state['log_laudos'] = df_laudos.to_dict('records')
-    
-    # Clientes (Armazenado como JSON string na celula A1 da aba Clientes_JSON para flexibilidade ou Tabela)
-    # Vamos usar tabela para facilitar visualização no sheets
-    df_cli = ler_aba("Clientes", ['Nome', 'Cod_Cli', 'CNPJ', 'End', 'Bairro', 'Cidade', 'UF', 'CEP', 'Tel', 'Tabela'])
-    clientes_dict = {}
-    for _, row in df_cli.iterrows():
-        clientes_dict[row['Nome']] = row.to_dict()
-    st.session_state['clientes_db'] = clientes_dict
-
-    # Tabelas Preço (Um pouco mais complexo, vamos salvar simplificado na aba Tabelas)
-    # Estratégia: Aba 'Precos' -> Colunas: Tabela, Cod, Preco
-    df_precos = ler_aba("Precos", ['Tabela_Nome', 'Cod', 'Preco'])
-    
-    # Reconstrói dicionário
-    tabelas_rec = {'PADRAO':{}, '0614':{}, 'REVENDA':{}} # Garante básicos
-    for _, row in df_precos.iterrows():
-        nome_tab = row['Tabela_Nome']
-        if nome_tab not in tabelas_rec: tabelas_rec[nome_tab] = {}
-        tabelas_rec[nome_tab][str(row['Cod'])] = float(row['Preco'])
-    st.session_state['tabelas_precos'] = tabelas_rec
-
-    return True
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+            if "estoque" in dados: st.session_state['estoque'] = pd.DataFrame(dados["estoque"])
+            if "log_vendas" in dados: st.session_state['log_vendas'] = dados["log_vendas"]
+            if "log_entradas" in dados: st.session_state['log_entradas'] = dados["log_entradas"]
+            if "log_laudos" in dados: st.session_state['log_laudos'] = dados["log_laudos"]
+            if "clientes_db" in dados: st.session_state['clientes_db'] = dados["clientes_db"]
+            if "tabelas_precos" in dados: st.session_state['tabelas_precos'] = dados["tabelas_precos"]
+            if "tema_atual" in dados: st.session_state['tema_atual'] = dados["tema_atual"]
+            return True
+        except: return False
+    return False
 
 def salvar_dados():
-    sh = conectar_gsheets()
-    
-    # 1. Salvar Estoque
-    ws_estoque = sh.worksheet("Estoque")
-    ws_estoque.clear()
-    ws_estoque.update([st.session_state['estoque'].columns.values.tolist()] + st.session_state['estoque'].values.tolist())
-    
-    # 2. Salvar Logs (Vendas, Entradas, Laudos)
-    ws_vendas = sh.worksheet("Log_Vendas")
-    ws_vendas.clear()
-    if st.session_state['log_vendas']:
-        df = pd.DataFrame(st.session_state['log_vendas'])
-        ws_vendas.update([df.columns.values.tolist()] + df.values.tolist())
-    else: ws_vendas.append_row(['Data', 'Cliente', 'Cod', 'Produto', 'Qtd'])
-
-    ws_entradas = sh.worksheet("Log_Entradas")
-    ws_entradas.clear()
-    if st.session_state['log_entradas']:
-        df = pd.DataFrame(st.session_state['log_entradas'])
-        ws_entradas.update([df.columns.values.tolist()] + df.values.tolist())
-    else: ws_entradas.append_row(['Data', 'Produto', 'Cod', 'Qtd'])
-
-    ws_laudos = sh.worksheet("Log_Laudos")
-    ws_laudos.clear()
-    if st.session_state['log_laudos']:
-        df = pd.DataFrame(st.session_state['log_laudos'])
-        ws_laudos.update([df.columns.values.tolist()] + df.values.tolist())
-    else: ws_laudos.append_row(['Cliente', 'Data_Coleta', 'Data_Registro'])
-
-    # 3. Salvar Clientes
-    ws_cli = sh.worksheet("Clientes")
-    ws_cli.clear()
-    lista_cli = []
-    colunas_cli = ['Nome', 'Cod_Cli', 'CNPJ', 'End', 'Bairro', 'Cidade', 'UF', 'CEP', 'Tel', 'Tabela']
-    for nome, dados in st.session_state['clientes_db'].items():
-        row = dados.copy()
-        row['Nome'] = nome
-        lista_cli.append([row.get(c, '') for c in colunas_cli])
-    ws_cli.update([colunas_cli] + lista_cli)
-
-    # 4. Salvar Preços (Flat)
-    ws_precos = sh.worksheet("Precos")
-    ws_precos.clear()
-    lista_precos = []
-    for tab_nome, itens in st.session_state['tabelas_precos'].items():
-        for cod, preco in itens.items():
-            lista_precos.append([tab_nome, cod, preco])
-    ws_precos.update([['Tabela_Nome', 'Cod', 'Preco']] + lista_precos)
+    dados = {
+        "estoque": st.session_state['estoque'].to_dict('records'),
+        "log_vendas": st.session_state.get('log_vendas', []),
+        "log_entradas": st.session_state.get('log_entradas', []),
+        "log_laudos": st.session_state.get('log_laudos', []),
+        "clientes_db": st.session_state.get('clientes_db', {}),
+        "tabelas_precos": st.session_state.get('tabelas_precos', {}),
+        "tema_atual": st.session_state.get('tema_selecionado_box', "⚪ Padrão (Clean)")
+    }
+    try:
+        with open(DB_FILE, "w", encoding="utf-8") as f: json.dump(dados, f, indent=4, ensure_ascii=False)
+    except: pass
 
 # --- INICIALIZAÇÃO ---
 if 'dados_carregados' not in st.session_state:
-    with st.spinner("Conectando ao QG (Google Sheets)..."):
-        carregar_dados()
+    sucesso = carregar_dados()
     st.session_state['dados_carregados'] = True
+    if not sucesso:
+        st.session_state['estoque'] = pd.DataFrame({
+            'Cod': ['2259', '0002', '0001'],
+            'Produto': ['POLITEC LBC-100 (POLIMERO FLOCULANTE)', 'PPT ING-100 (LIQUIDO CORROSIVO)', 'PPT ORG-100 (PRECIPITADOR)'],
+            'Marca': ['LABORTEC', 'LABORTEC', 'LABORTEC'],
+            'NCM': ['39069019', '28274921', '29302021'],
+            'Unidade': ['KG', 'KG', 'KG'],
+            'Preco_Base': [42.90, 7.43, 13.99],
+            'Saldo': [1000.0, 2000.0, 1500.0],
+            'Estoque_Inicial': [1000.0, 2000.0, 1500.0],
+            'Estoque_Minimo': [100.0, 50.0, 50.0]
+        })
+        st.session_state['tabelas_precos'] = {
+            'PADRAO': {'2259': 42.90, '0002': 7.43, '0001': 13.99},
+            '0614': {'2259': 38.00, '0002': 6.50, '0001': 12.00},
+            'REVENDA': {'2259': 35.00, '0002': 5.00, '0001': 10.00}
+        }
+        st.session_state['clientes_db'] = {
+            'METALURGICA RAMASSOL IMPERIAL LTDA': {
+                'Cod_Cli': '00442', 'CNPJ': '02.969.334/0001-01', 
+                'End': 'AVENIDA PINO VENDRAMINI, 20-90', 'Bairro': 'JD. SÃO BERNARDO', 
+                'Cidade': 'MIRASSOL', 'UF': 'SP', 'CEP': '15130-000', 'Tel': '(17)3253-9500',
+                'Tabela': '0614'
+            }
+        }
+        st.session_state['log_vendas'] = []
+        st.session_state['log_entradas'] = []
+        st.session_state['log_laudos'] = []
+
+if 'Estoque_Inicial' not in st.session_state['estoque'].columns:
+    st.session_state['estoque']['Estoque_Inicial'] = st.session_state['estoque']['Saldo']
+if 'Estoque_Minimo' not in st.session_state['estoque'].columns:
+    st.session_state['estoque']['Estoque_Minimo'] = 0.0
+if 'log_laudos' not in st.session_state:
+    st.session_state['log_laudos'] = []
 
 if 'pdf_gerado' not in st.session_state: st.session_state['pdf_gerado'] = None
 if 'nome_arquivo_pdf' not in st.session_state: st.session_state['nome_arquivo_pdf'] = "documento.pdf"
 
-# --- GERENCIADOR DE TEMAS ---
+# --- GERENCIADOR DE TEMAS (AGRESSIVO) ---
 def aplicar_tema(escolha):
+    # CSS BASE GLOBAL
     css = """
     <style>
+        /* Ajuste de Impressão */
         @media print {
             header, footer, aside, .stApp > header, .stApp > footer { display: none !important; }
             [data-testid="stSidebar"], [data-testid="stHeader"], .block-container button, .stDataEditor, .stFileUploader, .stExpander, .stAlert, .stMetric, .stForm, .stSelectbox, .stTextInput, .stNumberInput, .stCheckbox, .stRadio, .stImage { display: none !important; }
             .proposta-final { display: none !important; }
             body { background-color: white !important; }
         }
-        [data-testid="stSidebar"] .block-container { text-align: center; align-items: center; }
-        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { text-align: center !important; width: 100%; }
-        [data-testid="stSidebar"] div[data-baseweb="select"] { margin: 0 auto; }
-        [data-testid="stSidebar"] .stRadio > div { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        
+        /* CENTRALIZAÇÃO TOTAL DO MENU LATERAL (SIDEBAR) */
+        [data-testid="stSidebar"] .block-container {
+            text-align: center;
+            align-items: center;
+        }
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+            text-align: center !important;
+            width: 100%;
+        }
+        [data-testid="stSidebar"] div[data-baseweb="select"] {
+            margin: 0 auto;
+        }
+        [data-testid="stSidebar"] .stRadio > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ANIMAÇÃO DE PISCAR */
         @keyframes blinker { 50% { opacity: 0; } }
         .blink-text { animation: blinker 1.5s linear infinite; color: #FF4B4B; font-weight: bold; }
-        .scroll-container { height: 200px; overflow: hidden; position: relative; border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 10px; padding: 10px; background-color: rgba(255, 255, 255, 0.05); }
-        .scroll-content { animation: scroll-up 15s linear infinite; position: absolute; width: 100%; }
+        
+        /* SCROLL CONTAINER */
+        .scroll-container {
+            height: 200px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(128, 128, 128, 0.2);
+            border-radius: 10px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .scroll-content {
+            animation: scroll-up 15s linear infinite;
+            position: absolute;
+            width: 100%;
+        }
         .scroll-content:hover { animation-play-state: paused; }
-        @keyframes scroll-up { 0% { top: 100%; } 100% { top: -150%; } }
-        .laudo-card { padding: 8px; margin-bottom: 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.2); font-size: 14px; }
-        .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] { border-radius: 5px; }
+        @keyframes scroll-up {
+            0% { top: 100%; }
+            100% { top: -150%; }
+        }
+        .laudo-card {
+            padding: 8px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+            font-size: 14px;
+        }
     """
-    if escolha == "⚪ Padrão (Clean)":
-        css += """ .stApp { background-color: #FFFFFF !important; color: #000000 !important; } [data-testid="stSidebar"] { background-color: #F0F2F6 !important; border-right: 1px solid #D6D6D6; } h1, h2, h3, p, label, .stMarkdown, div { color: #000000 !important; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #CED4DA !important; } [data-testid="stDataFrame"], [data-testid="stDataEditor"] { background-color: #FFFFFF !important; color: #000000 !important; } """
-    elif escolha == "🔵 Azul Labortec":
-        css += """ .stApp { background-color: #F0F8FF !important; color: #002B4E !important; } [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #B0C4DE; } h1, h2, h3, label, p { color: #002B4E !important; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #002B4E !important; border: 1px solid #B0C4DE !important; } button[kind="primary"] { background-color: #0056b3 !important; border: none; color: white !important; } """
-    elif escolha == "🟠 Metal Industrial":
-        css += """ .stApp { background-color: #2C2C2C !important; color: #E0E0E0 !important; } [data-testid="stSidebar"] { background-color: #1F1F1F !important; border-right: 3px solid #FF8C00; } h1, h2, h3 { color: #FF8C00 !important; font-family: 'Courier New', monospace; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #333 !important; color: #FF8C00 !important; border: 1px solid #FF8C00 !important; } button { border-radius: 0px !important; border: 1px solid #FF8C00 !important; } """
-    elif escolha == "🌿 Verde Natureza":
-        css += """ .stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; } [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #8BC34A; } h1, h2, h3, label, p { color: #1B5E20 !important; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #1B5E20 !important; border: 1px solid #8BC34A !important; } button[kind="primary"] { background-color: #4CAF50 !important; border: none; color: white !important; } """
-    elif escolha == "🍇 Roxo Executivo":
-        css += """ .stApp { background-color: #FAF5FB !important; color: #4A148C !important; } [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #BA68C8; } h1, h2, h3, label, p { color: #4A148C !important; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #4A148C !important; border: 1px solid #CE93D8 !important; } button[kind="primary"] { background-color: #8E24AA !important; border: none; color: white !important; } """
-    elif escolha == "🌃 Cyber Dark":
-        css += """ .stApp { background-color: #000000 !important; color: #00FFFF !important; } [data-testid="stSidebar"] { background-color: #050505 !important; border-right: 1px solid #00FFFF; } h1, h2, h3 { color: #00FFFF !important; text-shadow: 0 0 5px #00FFFF; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #111 !important; color: #00FFFF !important; border: 1px solid #00FFFF !important; } p, label, .stMarkdown { color: #E0FFFF !important; } button { border: 1px solid #00FFFF !important; color: #00FFFF !important; background-color: #000 !important; } button:hover { background-color: #00FFFF !important; color: #000 !important; } """
-    elif escolha == "☕ Coffee (Sépia)":
-        css += """ .stApp { background-color: #FFF8E1 !important; color: #3E2723 !important; } [data-testid="stSidebar"] { background-color: #FAEBD7 !important; border-right: 1px solid #D7CCC8; } h1, h2, h3, label, p { color: #3E2723 !important; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #3E2723 !important; border: 1px solid #8D6E63 !important; } button[kind="primary"] { background-color: #6D4C41 !important; border: none; color: white !important; } """
-    elif escolha == "⚫ Dark Mode (Noturno)":
-        css += """ .stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } [data-testid="stSidebar"] { background-color: #262730 !important; } .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div, .stDataEditor { background-color: #1c1e24 !important; color: white !important; border: 1px solid #444 !important; } h1, h2, h3, p, label, .stMarkdown { color: #FAFAFA !important; } """
     
+    # --- TEMAS CLAROS (FORÇA BRUTA BRANCA) ---
+    # Aqui usamos !important em tudo para vencer o Modo Escuro do Windows
+    
+    if escolha == "⚪ Padrão (Clean)":
+        css += """
+            /* Fundo e Texto */
+            .stApp { background-color: #FFFFFF !important; color: #000000 !important; }
+            [data-testid="stSidebar"] { background-color: #F0F2F6 !important; border-right: 1px solid #D6D6D6; }
+            h1, h2, h3, p, label, .stMarkdown, div { color: #000000 !important; }
+            
+            /* Inputs e Selects */
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #FFFFFF !important; 
+                color: #000000 !important; 
+                border-color: #CCCCCC !important;
+            }
+            /* Data Editor (Tabelas) */
+            [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+                background-color: #FFFFFF !important;
+                color: #000000 !important;
+            }
+        """
+        
+    elif escolha == "🔵 Azul Labortec":
+        css += """
+            .stApp { background-color: #F0F8FF !important; color: #002B4E !important; }
+            [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #B0C4DE; }
+            h1, h2, h3, label, p { color: #002B4E !important; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #FFFFFF !important; 
+                color: #002B4E !important; 
+                border: 1px solid #B0C4DE !important;
+            }
+            button[kind="primary"] { background-color: #0056b3 !important; border: none; color: white !important; }
+        """
+        
+    elif escolha == "🌿 Verde Natureza":
+        css += """
+            .stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }
+            [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #8BC34A; }
+            h1, h2, h3, label, p { color: #1B5E20 !important; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #FFFFFF !important; 
+                color: #1B5E20 !important; 
+                border: 1px solid #8BC34A !important;
+            }
+            button[kind="primary"] { background-color: #4CAF50 !important; border: none; color: white !important; }
+        """
+        
+    elif escolha == "🍇 Roxo Executivo":
+        css += """
+            .stApp { background-color: #FAF5FB !important; color: #4A148C !important; }
+            [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #BA68C8; }
+            h1, h2, h3, label, p { color: #4A148C !important; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #FFFFFF !important; 
+                color: #4A148C !important; 
+                border: 1px solid #CE93D8 !important;
+            }
+            button[kind="primary"] { background-color: #8E24AA !important; border: none; color: white !important; }
+        """
+        
+    elif escolha == "☕ Coffee (Sépia)":
+        css += """
+            .stApp { background-color: #FFF8E1 !important; color: #3E2723 !important; }
+            [data-testid="stSidebar"] { background-color: #FAEBD7 !important; border-right: 1px solid #D7CCC8; }
+            h1, h2, h3, label, p { color: #3E2723 !important; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #FFFFFF !important; 
+                color: #3E2723 !important; 
+                border: 1px solid #8D6E63 !important;
+            }
+            button[kind="primary"] { background-color: #6D4C41 !important; border: none; color: white !important; }
+        """
+
+    # --- TEMAS ESCUROS (MANTÉM O DARK) ---
+
+    elif escolha == "⚫ Dark Mode (Noturno)":
+        css += """
+            .stApp { background-color: #0E1117 !important; color: #FAFAFA !important; }
+            [data-testid="stSidebar"] { background-color: #262730 !important; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div, .stDataEditor { 
+                background-color: #1c1e24 !important; 
+                color: white !important; 
+                border: 1px solid #444 !important; 
+            }
+            h1, h2, h3, p, label, .stMarkdown { color: #FAFAFA !important; }
+        """
+        
+    elif escolha == "🟠 Metal Industrial":
+        css += """
+            .stApp { background-color: #2C2C2C !important; color: #E0E0E0 !important; }
+            [data-testid="stSidebar"] { background-color: #1F1F1F !important; border-right: 3px solid #FF8C00; }
+            h1, h2, h3 { color: #FF8C00 !important; font-family: 'Courier New', monospace; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #333 !important; 
+                color: #FF8C00 !important; 
+                border: 1px solid #FF8C00 !important;
+            }
+            button { border-radius: 0px !important; border: 1px solid #FF8C00 !important; }
+        """
+        
+    elif escolha == "🌃 Cyber Dark":
+        css += """
+            .stApp { background-color: #000000 !important; color: #00FFFF !important; }
+            [data-testid="stSidebar"] { background-color: #050505 !important; border-right: 1px solid #00FFFF; }
+            h1, h2, h3 { color: #00FFFF !important; text-shadow: 0 0 5px #00FFFF; }
+            
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div { 
+                background-color: #111 !important; 
+                color: #00FFFF !important; 
+                border: 1px solid #00FFFF !important;
+            }
+            p, label, .stMarkdown { color: #E0FFFF !important; }
+            button { border: 1px solid #00FFFF !important; color: #00FFFF !important; background-color: #000 !important; }
+            button:hover { background-color: #00FFFF !important; color: #000 !important; }
+        """
+        
     css += "</style>"
     st.markdown(css, unsafe_allow_html=True)
 
@@ -351,6 +443,7 @@ if page == "📊 DASHBOARD":
     st.markdown("<h1 style='text-align: center;'>⚗️ Central de Inteligência: Labortec & Metal Química</h1>", unsafe_allow_html=True)
     st.markdown("---")
     
+    # 1. Painel de Laudos (Com Pisca ou Scroll)
     st.markdown("<h3 style='text-align: center;'>📅 Próximas Coletas de Efluente para Análise</h3>", unsafe_allow_html=True)
     laudos = st.session_state.get('log_laudos', [])
     
@@ -762,5 +855,4 @@ else:
                     st.success("Baixado!")
                 else: st.success("Venda Independente Registrada (Sem baixa no estoque Metal Química).")
         if st.session_state['pdf_gerado']:
-
             st.download_button("📥 PDF", st.session_state['pdf_gerado'], st.session_state.get('name', 'doc.pdf'), "application/pdf")
