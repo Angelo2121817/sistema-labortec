@@ -172,16 +172,15 @@ def carregar_dados():
             else: st.session_state["clientes_db"] = {}
 
         # Carrega Logs e Aviso
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: # <--- Adicionei Avisos aqui
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
             try:
                 df = conn.read(worksheet=aba, ttl=0)
             except:
-                df = pd.DataFrame() # Se a aba não existir, cria vazia
+                df = pd.DataFrame() 
 
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
                 
-                # Lógica Específica para cada aba
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
@@ -192,6 +191,24 @@ def carregar_dados():
                     for c in ["Cliente", "Status"]: df[c] = df[c].fillna("").astype(str)
                     st.session_state['log_laudos'] = df.to_dict("records")
 
+                elif aba in ["Log_Vendas", "Log_Entradas"]:
+                    if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
+                    st.session_state[aba.lower()] = df.to_dict("records")
+                
+                # --- AQUI ESTAVA FALTANDO A LÓGICA DO AVISO ---
+                elif aba == "Avisos":
+                    if "Mensagem" in df.columns and len(df) > 0:
+                        # Pega a primeira linha da coluna Mensagem
+                        st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
+                    else:
+                        st.session_state['aviso_geral'] = ""
+            else:
+                # Se a aba estiver vazia
+                if aba == "Avisos": st.session_state['aviso_geral'] = ""
+                else: st.session_state[aba.lower()] = []
+        return True
+    except Exception as e:
+        return False
                 elif aba in ["Log_Vendas", "Log_Entradas"]:
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
@@ -939,6 +956,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
