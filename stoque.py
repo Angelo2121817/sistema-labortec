@@ -592,88 +592,76 @@ elif menu == "📋 Conferência Geral":
                         st.write(f"✅ **{item.get('Cliente')}** - Arquivado em: {item.get('Data_Arquivamento','?')}")
 
 elif menu == "📦 Estoque":
-    st.title("📦 Estoque Geral & Cadastro")
+    st.title("📦 Estoque & Inventário")
 
-    # --- 1. FORMULÁRIO DE CADASTRO ---
-    with st.expander("➕ CADASTRAR NOVO PRODUTO", expanded=False):
-        with st.form("form_novo_prod", clear_on_submit=True):
-            st.write("📝 **Ficha do Produto**")
-            c1, c2 = st.columns([1, 4])
-            cod_novo = c1.text_input("Código (SKU)", placeholder="Ex: 1001")
-            nome_novo = c2.text_input("Descrição do Produto", placeholder="Ex: REVELADOR RAIO-X")
-            
-            c3, c4, c5 = st.columns(3)
-            marca_novo = c3.text_input("Marca", value="LABORTEC")
-            ncm_novo = c4.text_input("NCM")
-            unid_novo = c5.selectbox("Unidade", ["KG", "L", "UN", "M", "CX", "GALÃO"])
-            
-            c6, c7, c8 = st.columns(3)
-            preco_novo = c6.number_input("💲 Preço Base (R$)", min_value=0.0, step=1.0)
-            saldo_novo = c7.number_input("📦 Estoque Inicial", min_value=0.0, step=1.0)
-            min_novo = c8.number_input("🚨 Estoque Mínimo", min_value=0.0, step=1.0)
-            
-            if st.form_submit_button("💾 SALVAR NOVO PRODUTO"):
-                if cod_novo and nome_novo:
-                    codigos_existentes = st.session_state['estoque']['Cod'].astype(str).values
-                    if str(cod_novo) in codigos_existentes:
-                        st.error(f"⛔ ERRO: O código {cod_novo} já pertence a outro produto!")
-                    else:
-                        novo_item = {
-                            "Cod": cod_novo, "Produto": nome_novo, "Marca": marca_novo,
-                            "NCM": ncm_novo, "Unidade": unid_novo, "Preco_Base": preco_novo,
-                            "Saldo": saldo_novo, "Estoque_Minimo": min_novo
-                        }
-                        st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo_item])], ignore_index=True)
-                        salvar_dados()
-                        st.success(f"✅ Produto '{nome_novo}' firmado no sistema!")
-                        st.rerun()
-                else:
-                    st.warning("⚠️ Código e Nome são obrigatórios.")
+    # --- 1. BARRA DE COMANDO COMPACTA (LINHA ÚNICA) ---
+    c_busca, c_ferramentas = st.columns([4, 1])
+    
+    with c_busca:
+        busca = st.text_input("Filtrar:", placeholder="🔍 Pesquisar por nome ou SKU...", label_visibility="collapsed")
+    
+    with c_ferramentas:
+        # O Popover esconde a bagunça e libera espaço na tela
+        with st.popover("🛠️ GERENCIAR", use_container_width=True):
+            st.markdown("### ➕ Adicionar Produto")
+            with st.form("form_add_compacto", clear_on_submit=True):
+                c1, c2 = st.columns([1, 2])
+                cod_n = c1.text_input("Código")
+                nome_n = c2.text_input("Nome")
+                
+                c3, c4, c5 = st.columns(3)
+                preco_n = c3.number_input("Preço", min_value=0.0)
+                saldo_n = c4.number_input("Saldo", min_value=0.0)
+                unid_n = c5.selectbox("Unid", ["KG", "L", "UN", "CX"])
+                
+                if st.form_submit_button("💾 FIRMAR CADASTRO"):
+                    if cod_n and nome_n:
+                        if str(cod_n) in st.session_state['estoque']['Cod'].astype(str).values:
+                            st.error("⛔ Código já existe!")
+                        else:
+                            novo = {"Cod": cod_n, "Produto": nome_n, "Marca": "LABORTEC", "NCM": "-", "Unidade": unid_n, "Preco_Base": preco_n, "Saldo": saldo_n, "Estoque_Minimo": 0.0}
+                            st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
+                            salvar_dados()
+                            st.success("✅ Firmado!")
+                            st.rerun()
+                    else: st.warning("Preencha os campos.")
 
-    st.markdown("---")
-    
-    # --- 2. FERRAMENTA DE EXCLUSÃO (NOVIDADE TÁTICA) ---
-    with st.expander("🗑️ REMOVER PRODUTO DO ESTOQUE", expanded=False):
-        st.warning("Cuidado: A exclusão é permanente.")
-        opcoes_delete = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1).tolist()
-        produto_para_deletar = st.selectbox("Selecione o produto para APAGAR:", [""] + opcoes_delete)
-        
-        if produto_para_deletar != "" and st.button("💣 EXCLUIR DEFINITIVAMENTE", type="secondary"):
-            cod_del = produto_para_deletar.split(" - ")[0]
-            # Filtra o estoque removendo o código selecionado
-            st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(cod_del)]
-            salvar_dados()
-            st.success(f"💥 Produto {cod_del} removido com sucesso!")
-            st.rerun()
+            st.markdown("---")
+            st.markdown("### 🗑️ Remover Produto")
+            opcoes_del = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1).tolist()
+            alvo = st.selectbox("Apagar qual?", [""] + opcoes_del)
+            if alvo != "" and st.button("💣 CONFIRMAR EXCLUSÃO", type="primary"):
+                c_alvo = alvo.split(" - ")[0]
+                st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(c_alvo)]
+                salvar_dados()
+                st.success("💥 Removido!")
+                st.rerun()
 
-    st.markdown("---")
-    
-    # --- 3. TABELA DE CONSULTA E EDIÇÃO ---
-    st.subheader("📦 Lista de Produtos Cadastrados")
-    
-    busca = st.text_input("🔍 Pesquisar na lista...", placeholder="Digite nome ou código...")
+    # --- 2. TABELA DE ESTOQUE (DOMINANDO A TELA) ---
     df_exibir = st.session_state['estoque'].copy()
 
-    if busca:
-        df_exibir = df_exibir[
-            df_exibir['Produto'].str.contains(busca, case=False) | 
-            df_exibir['Cod'].astype(str).str.contains(busca)
-        ]
+    # Blindagem para não dar pau na matemática
+    for col in ["Saldo", "Estoque_Minimo", "Preco_Base"]:
+        if col in df_exibir.columns:
+            df_exibir[col] = pd.to_numeric(df_exibir[col], errors='coerce').fillna(0.0)
 
-    # Estilo visual
-    def estilo_saldo(val): return 'background-color: #d4edda; color: #155724; font-weight: 900;'
-    try: df_styled = df_exibir.style.map(estilo_saldo, subset=["Saldo"])
+    if busca:
+        df_exibir = df_exibir[df_exibir['Produto'].str.contains(busca, case=False) | df_exibir['Cod'].astype(str).str.contains(busca)]
+
+    # Visual tático (Verde para saldo positivo)
+    def style_saldo(v): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
+    try: df_styled = df_exibir.style.map(style_saldo, subset=["Saldo"])
     except: df_styled = df_exibir
 
     ed = st.data_editor(
         df_styled, 
         use_container_width=True, 
         hide_index=True,
-        key="editor_estoque_v99",
+        key="estoque_v_elite",
         column_config={
             "Saldo": st.column_config.NumberColumn("✅ SALDO", format="%.2f"),
-            "Estoque_Minimo": st.column_config.NumberColumn("🚨 Mínimo", format="%.0f"),
-            "Preco_Base": st.column_config.NumberColumn("💲 Preço", format="%.2f"),
+            "Preco_Base": st.column_config.NumberColumn("💲 PREÇO", format="%.2f"),
+            "Produto": st.column_config.TextColumn("DESCRIÇÃO", width="large")
         }
     )
     
@@ -923,6 +911,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
