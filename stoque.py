@@ -157,11 +157,13 @@ def _fix_datetime_br(val):
 
 def carregar_dados():
     try:
+        # Carrega Estoque
         df_est = conn.read(worksheet="Estoque", ttl=0)
         if isinstance(df_est, pd.DataFrame) and not df_est.empty:
             df_est = _normalizar_colunas(df_est)
             st.session_state["estoque"] = df_est
 
+        # Carrega Clientes
         df_cli = conn.read(worksheet="Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
             df_cli = _normalizar_colunas(df_cli)
@@ -169,10 +171,17 @@ def carregar_dados():
             if "Nome" in df_cli.columns: st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
             else: st.session_state["clientes_db"] = {}
 
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
-            df = conn.read(worksheet=aba, ttl=0)
+        # Carrega Logs e Aviso
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: # <--- Adicionei Avisos aqui
+            try:
+                df = conn.read(worksheet=aba, ttl=0)
+            except:
+                df = pd.DataFrame() # Se a aba não existir, cria vazia
+
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
+                
+                # Lógica Específica para cada aba
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
@@ -181,27 +190,25 @@ def carregar_dados():
                     if "Data_Coleta" in df.columns: df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
                     if "Data_Resultado" in df.columns: df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
                     for c in ["Cliente", "Status"]: df[c] = df[c].fillna("").astype(str)
+                    st.session_state['log_laudos'] = df.to_dict("records")
+
                 elif aba in ["Log_Vendas", "Log_Entradas"]:
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
-                st.session_state[aba.lower()] = df.to_dict("records")
+                    st.session_state[aba.lower()] = df.to_dict("records")
+                
+                # --- NOVA LÓGICA DO AVISO ---
+                elif aba == "Avisos":
+                    if "Mensagem" in df.columns and len(df) > 0:
+                        st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
+                    else:
+                        st.session_state['aviso_geral'] = ""
             else:
-                st.session_state[aba.lower()] = []
+                if aba == "Avisos": st.session_state['aviso_geral'] = ""
+                else: st.session_state[aba.lower()] = []
+        
         return True
-    except Exception: return False
-
-def salvar_dados():
-    try:
-        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
-        if st.session_state.get("clientes_db"):
-            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
-            conn.update(worksheet="Clientes", data=df_clis)
-        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
-        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
-        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        st.toast("✅ Sincronizado!", icon="☁️")
     except Exception as e:
-        print(f"Erro silencioso ao salvar: {e}")
-        pass
+        return False
 
 if "dados_carregados" not in st.session_state:
     carregar_dados()
@@ -932,6 +939,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
