@@ -174,6 +174,7 @@ def carregar_dados():
         # Carrega Logs e Aviso
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
             try:
+                # ttl=0 garante que ele não pegue dado velho do cache
                 df = conn.read(worksheet=aba, ttl=0)
             except:
                 df = pd.DataFrame() 
@@ -194,6 +195,21 @@ def carregar_dados():
                 elif aba in ["Log_Vendas", "Log_Entradas"]:
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
+                
+                # --- LÓGICA DE AVISO (MODO BRUTO) ---
+                elif aba == "Avisos":
+                    # Se tiver qualquer dado, pega a primeira célula da primeira linha
+                    try:
+                        st.session_state['aviso_geral'] = str(df.iloc[0].values[0])
+                    except:
+                        st.session_state['aviso_geral'] = ""
+            else:
+                if aba == "Avisos": st.session_state['aviso_geral'] = ""
+                else: st.session_state[aba.lower()] = []
+        return True
+    except Exception as e:
+        st.error(f"Erro no Carregamento: {e}") # Mostra erro se houver
+        return False
                 
                 elif aba == "Avisos":
                     if "Mensagem" in df.columns and len(df) > 0:
@@ -967,6 +983,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
