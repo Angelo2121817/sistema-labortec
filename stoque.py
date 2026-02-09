@@ -756,12 +756,38 @@ elif menu == "📋 Conferência Geral":
 elif menu == "📦 Estoque":
     st.title("📦 Estoque & Inventário")
 
-    # --- 1. BARRA DE COMANDO COMPACTA (LINHA ÚNICA) ---
-    c_busca, c_ferramentas = st.columns([4, 1])
+    # =========================================================
+    # ÁREA DO MENU SUPERIOR (BUSCA + RELATÓRIO + FERRAMENTAS)
+    # =========================================================
+    # Dividi em 3 colunas: Busca (grande), Relatório (médio), Ferramentas (pequeno)
+    c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
     
     with c_busca:
         busca = st.text_input("Filtrar:", placeholder="🔍 Pesquisar por nome ou SKU...", label_visibility="collapsed")
     
+    # --- AQUI ESTÁ O NOVO BOTÃO DE RELATÓRIO ---
+    with c_relat:
+        # Primeiro verificamos se o usuário quer baixar
+        # Se ele clicar em "📄 Gerar PDF", o botão de download aparece logo abaixo
+        if st.button("📄 Gerar PDF", use_container_width=True):
+            if not st.session_state['estoque'].empty:
+                try:
+                    # Chama a função nova que criamos no Passo 1
+                    pdf_bytes = gerar_pdf_estoque(st.session_state['usuario_nome'], st.session_state['estoque'])
+                    
+                    # Cria um botão de download temporário
+                    st.download_button(
+                        label="⬇️ BAIXAR",
+                        data=pdf_bytes,
+                        file_name=f"Estoque_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
+                except Exception as e:
+                    st.error(f"Erro ao gerar: {e}")
+            else:
+                st.warning("Estoque vazio.")
+
     with c_ferramentas:
         # O Popover esconde a bagunça e libera espaço na tela
         with st.popover("🛠️ GERENCIAR", use_container_width=True):
@@ -799,7 +825,7 @@ elif menu == "📦 Estoque":
                 st.success("💥 Removido!")
                 st.rerun()
 
-    # --- 2. TABELA DE ESTOQUE (DOMINANDO A TELA) ---
+    # --- 2. TABELA DE ESTOQUE (IGUAL A ANTES) ---
     df_exibir = st.session_state['estoque'].copy()
 
     # Blindagem para não dar pau na matemática
@@ -1073,6 +1099,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
