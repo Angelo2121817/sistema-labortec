@@ -172,16 +172,15 @@ def carregar_dados():
             else: st.session_state["clientes_db"] = {}
 
         # Carrega Logs e Aviso
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: # <--- Adicionei Avisos aqui
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
             try:
                 df = conn.read(worksheet=aba, ttl=0)
             except:
-                df = pd.DataFrame() # Se a aba não existir, cria vazia
+                df = pd.DataFrame()
 
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
                 
-                # Lógica Específica para cada aba
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
@@ -196,7 +195,6 @@ def carregar_dados():
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
                 
-                # --- NOVA LÓGICA DO AVISO ---
                 elif aba == "Avisos":
                     if "Mensagem" in df.columns and len(df) > 0:
                         st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
@@ -208,6 +206,34 @@ def carregar_dados():
         
         return True
     except Exception as e:
+        return False
+
+def salvar_dados():
+    """Salva TODOS os dados no Google Sheets"""
+    try:
+        if not st.session_state['estoque'].empty:
+            conn.update(worksheet="Estoque", data=st.session_state['estoque'])
+        
+        if st.session_state['clientes_db']:
+            df_cli = pd.DataFrame.from_dict(st.session_state['clientes_db'], orient='index')
+            df_cli.insert(0, 'Nome', df_cli.index)
+            conn.update(worksheet="Clientes", data=df_cli)
+        
+        if st.session_state['log_vendas']:
+            conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state['log_vendas']))
+        
+        if st.session_state['log_entradas']:
+            conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state['log_entradas']))
+        
+        if st.session_state['log_laudos']:
+            conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state['log_laudos']))
+        
+        df_aviso = pd.DataFrame({'Mensagem': [st.session_state['aviso_geral']]})
+        conn.update(worksheet="Avisos", data=df_aviso)
+        
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
         return False
 
 def salvar_dados():
@@ -1020,6 +1046,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
