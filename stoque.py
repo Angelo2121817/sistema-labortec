@@ -398,7 +398,17 @@ opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Naturez
 tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
 aplicar_tema(tema_sel)
 
-menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", "📦 Estoque", "📋 Conferência Geral", "👥 Clientes"])
+# Adicione "🛠️ Admin / Backup" no final da lista
+menu = st.sidebar.radio("Navegar:", [
+    "📊 Dashboard", 
+    "🧪 Laudos", 
+    "💰 Vendas & Orçamentos", 
+    "📥 Entrada de Estoque", 
+    "📦 Estoque", 
+    "📋 Conferência Geral", 
+    "👥 Clientes",
+    "🛠️ Admin / Backup"  # <--- ADICIONE ISSO AQUI
+])
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
@@ -793,5 +803,6 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] = atual + float(qtd)
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+
 
 
