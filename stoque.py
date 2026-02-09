@@ -94,7 +94,7 @@ def ler_pdf_antigo(f):
 # ==============================================================================
 # 1. CONFIGURAÇÃO E CONEXÃO
 # ==============================================================================
-st.set_page_config(page_title="Sistema Integrado v80", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v81", layout="wide", page_icon="🧪")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
@@ -172,16 +172,15 @@ def carregar_dados():
             else: st.session_state["clientes_db"] = {}
 
         # Carrega Logs e Aviso
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: # <--- Adicionei Avisos aqui
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
             try:
                 df = conn.read(worksheet=aba, ttl=0)
             except:
-                df = pd.DataFrame() # Se a aba não existir, cria vazia
+                df = pd.DataFrame() 
 
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
                 
-                # Lógica Específica para cada aba
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
@@ -196,7 +195,7 @@ def carregar_dados():
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
                 
-                # --- NOVA LÓGICA DO AVISO ---
+                # CARREGA AVISO (AQUI ESTÁ A MÁGICA)
                 elif aba == "Avisos":
                     if "Mensagem" in df.columns and len(df) > 0:
                         st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
@@ -205,10 +204,31 @@ def carregar_dados():
             else:
                 if aba == "Avisos": st.session_state['aviso_geral'] = ""
                 else: st.session_state[aba.lower()] = []
-        
         return True
     except Exception as e:
         return False
+
+def salvar_dados():
+    try:
+        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+        
+        if st.session_state.get("clientes_db"):
+            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
+            conn.update(worksheet="Clientes", data=df_clis)
+            
+        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
+        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
+        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
+        
+        # SALVA O AVISO NO BANCO
+        msg_atual = st.session_state.get('aviso_geral', "")
+        df_aviso = pd.DataFrame([{"Mensagem": msg_atual}])
+        conn.update(worksheet="Avisos", data=df_aviso)
+        
+        st.toast("✅ Sincronizado com Sucesso!", icon="☁️")
+    except Exception as e:
+        print(f"Erro silencioso ao salvar: {e}")
+        pass
 
 if "dados_carregados" not in st.session_state:
     carregar_dados()
@@ -291,13 +311,20 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
+# --- SISTEMA DE AVISOS (COM MEMÓRIA GLOBAL) ---
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
-with st.sidebar.expander("📢 DEFINIR AVISO"):
-    aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
-    c1, c2 = st.columns(2)
-    if c1.button("💾 Gravar"): st.session_state['aviso_geral'] = aviso_txt; st.rerun()
-    if c2.button("🗑️ Apagar"): st.session_state['aviso_geral'] = ""; st.rerun()
+with st.sidebar.expander("📢 MURAL DE AVISOS"):
+    aviso_txt = st.text_area("Mensagem:", value=st.session_state['aviso_geral'], height=100)
+    c_salv, c_limp = st.columns(2)
+    if c_salv.button("💾 PUBLICAR"):
+        st.session_state['aviso_geral'] = aviso_txt
+        salvar_dados() # <--- SALVA NA NUVEM
+        st.rerun()
+    if c_limp.button("🗑️ APAGAR"):
+        st.session_state['aviso_geral'] = ""
+        salvar_dados()
+        st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Personalizar Tela")
@@ -499,7 +526,8 @@ elif menu == "💰 Vendas & Orçamentos":
                     'Cliente': cli, 
                     'Produto': nome_final_registro, 
                     'Qtd': float(itens_sel['Qtd'].sum()), 
-                    'Vendedor': vend
+                    'Vendedor': vend,
+                    'Valor_Total': total
                 })
                 salvar_dados()
                 
@@ -507,6 +535,7 @@ elif menu == "💰 Vendas & Orçamentos":
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
                 pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "PEDIDO")
                 st.download_button("📥 Baixar Pedido PDF", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
     if st.session_state['estoque'].empty: st.warning("Cadastre produtos!"); st.stop()
@@ -525,118 +554,22 @@ elif menu == "📥 Entrada de Estoque":
                 st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
                 st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
                 salvar_dados(); st.success("Entrada Realizada!"); st.rerun()
-                # ==============================================================================
-# 8. CONFERÊNCIA GERAL (MÓDULO REINSTALADO)
-# ==============================================================================
-elif menu == "📋 Conferência Geral":
-    st.title("📋 Conferência Tática de Movimentações")
-    
-    # Abas para organizar o quartel-general
-    tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
-
-    # --- ABA 1: VENDAS ---
-    with tab1:
-        st.subheader("🛒 Registro de Vendas Realizadas")
-        st.caption("💡 Dica: Para apagar um erro, selecione a linha e aperte 'Delete' no teclado.")
-        
-        # Busca o log de vendas na memória do sistema
-        log_vendas_data = st.session_state.get('log_vendas', [])
-        
-        if log_vendas_data:
-            df_vendas_log = pd.DataFrame(log_vendas_data)
-            
-            # Editor para correções rápidas
-            vendas_editadas = st.data_editor(
-                df_vendas_log, 
-                use_container_width=True, 
-                num_rows="dynamic", 
-                key="editor_conferencia_vendas",
-                hide_index=True
-            )
-            
-            if st.button("💾 SALVAR ALTERAÇÕES EM VENDAS", type="primary"):
-                st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
-                salvar_dados()
-                st.success("Histórico de vendas atualizado e firmado!")
-                st.rerun()
-        else:
-            st.info("Nenhuma venda registrada no sistema até o momento.")
-
-    # --- ABA 2: ENTRADAS ---
-    with tab2:
-        st.subheader("📥 Registro de Entradas de Mercadoria")
-        
-        log_entradas_data = st.session_state.get('log_entradas', [])
-        
-        if log_entradas_data:
-            df_entradas_log = pd.DataFrame(log_entradas_data)
-            
-            entradas_editadas = st.data_editor(
-                df_entradas_log, 
-                use_container_width=True, 
-                num_rows="dynamic",
-                key="editor_conferencia_entradas",
-                hide_index=True
-            )
-            
-            if st.button("💾 SALVAR ALTERAÇÕES EM ENTRADAS", type="primary"):
-                st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
-                salvar_dados()
-                st.success("Histórico de entradas atualizado e firmado!")
-                st.rerun()
-        else:
-            st.info("Nenhuma entrada de estoque registrada no sistema.")
-
-    # --- ABA 3: LAUDOS ---
-    with tab3:
-        st.subheader("🧪 Status e Arquivamento de Laudos")
-        laudos_lista = st.session_state.get('log_laudos', [])
-        
-        pendentes_arq = [l for l in laudos_lista if l.get('Status') != 'Arquivado']
-        arquivados_lista = [l for l in laudos_lista if l.get('Status') == 'Arquivado']
-
-        if not pendentes_arq:
-            st.success("✅ Nenhum laudo pendente de arquivamento.")
-        else:
-            for i, item in enumerate(laudos_lista):
-                if item.get('Status') != 'Arquivado':
-                    with st.expander(f"📄 {item.get('Cliente', 'Cliente ?')} | Coleta: {item.get('Data_Coleta','--')}"):
-                        c1, c2 = st.columns([3, 1])
-                        c1.write(f"**Previsão:** {item.get('Data_Resultado', '--')}")
-                        link_final = c1.text_input("🔗 Link do PDF:", key=f"lk_conf_{i}", value=item.get('Link_Arquivo', ''))
-                        
-                        if c2.button("📂 ARQUIVAR", key=f"bt_conf_arq_{i}", use_container_width=True):
-                            st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
-                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link_final
-                            st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
-                            salvar_dados()
-                            st.rerun()
-
-        if arquivados_lista:
-            st.markdown("---")
-            with st.expander(f"🗄️ Ver Arquivo Morto ({len(arquivados_lista)} itens)"):
-                for i, item in enumerate(laudos_lista):
-                    if item.get('Status') == 'Arquivado':
-                        st.write(f"✅ **{item.get('Cliente')}** - Arquivado em: {item.get('Data_Arquivamento','?')}")
 
 elif menu == "📦 Estoque":
     st.title("📦 Estoque & Inventário")
 
-    # --- 1. BARRA DE COMANDO COMPACTA (LINHA ÚNICA) ---
     c_busca, c_ferramentas = st.columns([4, 1])
     
     with c_busca:
         busca = st.text_input("Filtrar:", placeholder="🔍 Pesquisar por nome ou SKU...", label_visibility="collapsed")
     
     with c_ferramentas:
-        # O Popover esconde a bagunça e libera espaço na tela
         with st.popover("🛠️ GERENCIAR", use_container_width=True):
             st.markdown("### ➕ Adicionar Produto")
             with st.form("form_add_compacto", clear_on_submit=True):
                 c1, c2 = st.columns([1, 2])
                 cod_n = c1.text_input("Código")
                 nome_n = c2.text_input("Nome")
-                
                 c3, c4, c5 = st.columns(3)
                 preco_n = c3.number_input("Preço", min_value=0.0)
                 saldo_n = c4.number_input("Saldo", min_value=0.0)
@@ -665,27 +598,19 @@ elif menu == "📦 Estoque":
                 st.success("💥 Removido!")
                 st.rerun()
 
-    # --- 2. TABELA DE ESTOQUE (DOMINANDO A TELA) ---
     df_exibir = st.session_state['estoque'].copy()
-
-    # Blindagem para não dar pau na matemática
     for col in ["Saldo", "Estoque_Minimo", "Preco_Base"]:
-        if col in df_exibir.columns:
-            df_exibir[col] = pd.to_numeric(df_exibir[col], errors='coerce').fillna(0.0)
+        if col in df_exibir.columns: df_exibir[col] = pd.to_numeric(df_exibir[col], errors='coerce').fillna(0.0)
 
     if busca:
         df_exibir = df_exibir[df_exibir['Produto'].str.contains(busca, case=False) | df_exibir['Cod'].astype(str).str.contains(busca)]
 
-    # Visual tático (Verde para saldo positivo)
     def style_saldo(v): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
     try: df_styled = df_exibir.style.map(style_saldo, subset=["Saldo"])
     except: df_styled = df_exibir
 
     ed = st.data_editor(
-        df_styled, 
-        use_container_width=True, 
-        hide_index=True,
-        key="estoque_v_elite",
+        df_styled, use_container_width=True, hide_index=True, key="estoque_v_elite",
         column_config={
             "Saldo": st.column_config.NumberColumn("✅ SALDO", format="%.2f"),
             "Preco_Base": st.column_config.NumberColumn("💲 PREÇO", format="%.2f"),
@@ -697,217 +622,140 @@ elif menu == "📦 Estoque":
         st.session_state["estoque"] = ed 
         salvar_dados()
         st.toast("Alteração salva!", icon="💾")
+
+elif menu == "📋 Conferência Geral":
+    st.title("📋 Conferência Tática")
+    tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos"])
+
+    with tab1:
+        st.subheader("🛒 Registro de Vendas")
+        if st.session_state.get('log_vendas'):
+            df_vendas_log = pd.DataFrame(st.session_state['log_vendas'])
+            vendas_editadas = st.data_editor(df_vendas_log, use_container_width=True, num_rows="dynamic", key="editor_conferencia_vendas", hide_index=True)
+            if st.button("💾 SALVAR VENDAS", type="primary"):
+                st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
+                salvar_dados(); st.success("Atualizado!"); st.rerun()
+        else: st.info("Sem vendas.")
+
+    with tab2:
+        st.subheader("📥 Registro de Entradas")
+        if st.session_state.get('log_entradas'):
+            df_entradas_log = pd.DataFrame(st.session_state['log_entradas'])
+            entradas_editadas = st.data_editor(df_entradas_log, use_container_width=True, num_rows="dynamic", key="editor_conferencia_entradas", hide_index=True)
+            if st.button("💾 SALVAR ENTRADAS", type="primary"):
+                st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
+                salvar_dados(); st.success("Atualizado!"); st.rerun()
+        else: st.info("Sem entradas.")
+
+    with tab3:
+        st.subheader("🧪 Laudos")
+        laudos_lista = st.session_state.get('log_laudos', [])
+        pendentes_arq = [l for l in laudos_lista if l.get('Status') != 'Arquivado']
+        arquivados_lista = [l for l in laudos_lista if l.get('Status') == 'Arquivado']
+
+        if not pendentes_arq: st.success("Tudo limpo.")
+        else:
+            for i, item in enumerate(laudos_lista):
+                if item.get('Status') != 'Arquivado':
+                    with st.expander(f"📄 {item.get('Cliente', '?')}"):
+                        c1, c2 = st.columns([3, 1])
+                        c1.write(f"Coleta: {item.get('Data_Coleta','--')}")
+                        link_final = c1.text_input("Link PDF:", key=f"lk_conf_{i}", value=item.get('Link_Arquivo', ''))
+                        if c2.button("ARQUIVAR", key=f"bt_conf_arq_{i}"):
+                            st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
+                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link_final
+                            st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
+                            salvar_dados(); st.rerun()
+
+        if arquivados_lista:
+            st.markdown("---")
+            with st.expander(f"🗄️ Arquivo Morto ({len(arquivados_lista)})"):
+                for i, item in enumerate(laudos_lista):
+                    if item.get('Status') == 'Arquivado':
+                        c_a, c_b = st.columns([4, 1])
+                        c_a.write(f"✅ {item.get('Cliente')} - {item.get('Data_Arquivamento','?')}")
+                        if c_b.button("🗑️", key=f"del_arq_{i}"):
+                            st.session_state['log_laudos'].pop(i); salvar_dados(); st.rerun()
+
 elif menu == "👥 Clientes":
-    st.title("👥 Gestão de Clientes & Precificação")
+    st.title("👥 Clientes")
+    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
     
-    # --- 1. CONFIGURAÇÃO INICIAL E ESTADO ---
-    if 'edit_mode' not in st.session_state: 
+    campos = ['nome', 'tel', 'email', 'end', 'cnpj', 'cid', 'uf', 'cep', 'cod', 'fator']
+    for c in campos: 
+        if f'cli_{c}' not in st.session_state: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
+
+    def limpar():
+        for c in campos: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
         st.session_state['edit_mode'] = False
 
-    # Define os campos padrão para não dar erro de chave
-    campos_padrao = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 
-                     'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
-    
-    for campo in campos_padrao:
-        if campo not in st.session_state:
-            st.session_state[campo] = 1.0 if campo == 'form_fator' else ""
-
-    # --- 2. FUNÇÕES DE COMANDO ---
-    def limpar_campos():
-        for campo in campos_padrao:
-            st.session_state[campo] = 1.0 if campo == 'form_fator' else ""
-        st.session_state['edit_mode'] = False
-
-    def salvar_cliente():
-        # Limpeza básica dos dados
-        nome = str(st.session_state.get('form_nome', '')).strip()
-        
-        if not nome:
-            st.toast("Erro: O nome é obrigatório!", icon="❌")
-            return
-
-        # Bloqueio de duplicidade (apenas se for novo cadastro)
-        if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
-            st.error(f"⛔ O cliente '{nome}' já existe. Use a busca para editar.")
-            return
-        
-        # Tratamento do Fator para garantir que é número
-        try:
-            fator_seguro = float(st.session_state.get('form_fator', 1.0))
-        except:
-            fator_seguro = 1.0
-
-        # Gravação no Banco de Dados
-        st.session_state['clientes_db'][nome] = {
-            'Tel': st.session_state.get('form_tel', ''),
-            'Email': st.session_state.get('form_email', ''),
-            'End': st.session_state.get('form_end', ''),
-            'CNPJ': st.session_state.get('form_cnpj', ''),
-            'Cidade': st.session_state.get('form_cid', ''),
-            'UF': st.session_state.get('form_uf', ''),
-            'CEP': st.session_state.get('form_cep', ''),
-            'Cod_Cli': st.session_state.get('form_cod', ''),
-            'Fator': fator_seguro
-        }
-        
-        salvar_dados()
-        tipo_acao = "atualizado" if st.session_state['edit_mode'] else "cadastrado"
-        st.toast(f"Cliente {nome} {tipo_acao} com sucesso!", icon="✅")
-        limpar_campos()
-
-    def excluir_cliente(nome_alvo):
-        if nome_alvo in st.session_state['clientes_db']:
-            del st.session_state['clientes_db'][nome_alvo]
-            salvar_dados()
-            st.toast("Cliente removido.", icon="🗑️")
-            st.rerun()
-
-    def preparar_edicao(chave, dados):
-        st.session_state['form_nome'] = str(chave)
-        st.session_state['form_tel'] = str(dados.get('Tel', ''))
-        st.session_state['form_email'] = str(dados.get('Email', ''))
-        st.session_state['form_end'] = str(dados.get('End', ''))
-        st.session_state['form_cnpj'] = str(dados.get('CNPJ', ''))
-        st.session_state['form_cid'] = str(dados.get('Cidade', ''))
-        st.session_state['form_uf'] = str(dados.get('UF', ''))
-        st.session_state['form_cep'] = str(dados.get('CEP', ''))
-        st.session_state['form_cod'] = str(dados.get('Cod_Cli', ''))
-        
-        try:
-            st.session_state['form_fator'] = float(dados.get('Fator', 1.0))
-        except:
-            st.session_state['form_fator'] = 1.0
-            
+    def carregar(k, d):
+        st.session_state['cli_nome'] = k
+        st.session_state['cli_tel'] = d.get('Tel','')
+        st.session_state['cli_email'] = d.get('Email','')
+        st.session_state['cli_end'] = d.get('End','')
+        st.session_state['cli_cnpj'] = d.get('CNPJ','')
+        st.session_state['cli_cid'] = d.get('Cidade','')
+        st.session_state['cli_uf'] = d.get('UF','')
+        st.session_state['cli_cep'] = d.get('CEP','')
+        st.session_state['cli_cod'] = d.get('Cod_Cli','')
+        try: st.session_state['cli_fator'] = float(d.get('Fator', 1.0))
+        except: st.session_state['cli_fator'] = 1.0
         st.session_state['edit_mode'] = True
-        st.toast(f"Editando: {chave}", icon="✏️")
 
-    # --- 3. ÁREA DE IMPORTAÇÃO (PDF) ---
-    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
-        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
-        if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
-            try:
-                # Chama a função que já existe no seu código lá em cima
-                dados_lidos = ler_pdf_antigo(arquivo_pdf) 
-                if dados_lidos:
-                    st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
-                    st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
-                    st.session_state['form_end'] = str(dados_lidos.get('End', ''))
-                    st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
-                    st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
-                    st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
-                    st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
-                    st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
-                    st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
-                    st.success("Dados extraídos com sucesso!")
-            except NameError: 
-                st.error("Erro: Função de leitura não encontrada. Verifique o início do código.")
-            except Exception as e:
-                st.error(f"Erro ao processar: {e}")
-
-    # --- 4. FORMULÁRIO DE CADASTRO ---
-    with st.form("form_cliente_principal"):
-        st.markdown(f"#### {'✏️ Editando Cliente' if st.session_state['edit_mode'] else '➕ Novo Cliente'}")
-        
+    with st.form("form_cli"):
         c1, c2 = st.columns([3, 1])
-        c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
-        c2.text_input("Cód. Cliente", key="form_cod")
+        c1.text_input("Nome", key="cli_nome", disabled=st.session_state['edit_mode'])
+        c2.text_input("Cód", key="cli_cod")
+        c3, c4 = st.columns(2)
+        c3.number_input("Fator Preço", 0.1, 5.0, step=0.05, key="cli_fator")
+        c4.text_input("CNPJ", key="cli_cnpj")
+        c5, c6 = st.columns(2)
+        c5.text_input("Tel", key="cli_tel"); c6.text_input("Email", key="cli_email")
+        st.text_input("Endereço", key="cli_end")
+        c7, c8, c9 = st.columns(3)
+        c7.text_input("Cidade", key="cli_cid"); c8.text_input("UF", key="cli_uf"); c9.text_input("CEP", key="cli_cep")
         
-        c3, c4 = st.columns([1, 2])
-        c3.number_input("💲 Fator Preço (1.0 = Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator")
-        c4.text_input("CNPJ", key="form_cnpj")
-        
-        c5, c6 = st.columns([1, 2])
-        c5.text_input("Telefone", key="form_tel")
-        c6.text_input("E-mail", key="form_email", placeholder="email@empresa.com")
-        
-        st.text_input("Endereço", key="form_end")
-        
-        c7, c8, c9 = st.columns([2, 1, 1])
-        c7.text_input("Cidade", key="form_cid")
-        c8.text_input("UF", key="form_uf")
-        c9.text_input("CEP", key="form_cep")
-        
-        st.form_submit_button("💾 SALVAR DADOS", on_click=salvar_cliente)
-
-    # Botão de Cancelar fora do form para não submeter
-    if st.session_state['edit_mode']:
-        st.button("❌ Cancelar Edição", on_click=limpar_campos)
-    else:
-        st.button("🧹 Limpar Campos", on_click=limpar_campos)
+        if st.form_submit_button("SALVAR"):
+            nome = st.session_state['cli_nome'].strip()
+            if nome:
+                st.session_state['clientes_db'][nome] = {
+                    'Tel': st.session_state['cli_tel'], 'Email': st.session_state['cli_email'],
+                    'End': st.session_state['cli_end'], 'CNPJ': st.session_state['cli_cnpj'],
+                    'Cidade': st.session_state['cli_cid'], 'UF': st.session_state['cli_uf'],
+                    'CEP': st.session_state['cli_cep'], 'Cod_Cli': st.session_state['cli_cod'],
+                    'Fator': st.session_state['cli_fator']
+                }
+                salvar_dados(); st.success("Salvo!"); limpar(); st.rerun()
+            else: st.error("Nome obrigatório")
+            
+    if st.session_state['edit_mode']: st.button("Cancelar Edição", on_click=limpar)
     
-    # --- 5. LISTAGEM DE CLIENTES (ÁREA DO ERRO CORRIGIDA) ---
     st.markdown("---")
-    st.subheader("📇 Carteira de Clientes")
+    busca = st.text_input("Buscar Cliente")
+    lista = sorted(st.session_state['clientes_db'].keys())
+    if busca: lista = [k for k in lista if busca.lower() in k.lower()]
     
-    if st.session_state['clientes_db']:
-        busca = st.text_input("🔍 Buscar Cliente...", placeholder="Digite o nome...")
+    for k in lista:
+        d = st.session_state['clientes_db'][k]
+        try: fator = float(d.get('Fator', 1.0) or 1.0)
+        except: fator = 1.0
         
-        # Ordena a lista
-        lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
+        if fator == 1.0: txt = "NORMAL"
+        elif fator < 1.0: txt = f"DESC {int((1-fator)*100)}%"
+        else: txt = f"ACRÉSC {int((fator-1)*100)}%"
         
-        # Filtra se tiver busca
-        if busca: 
-            lista_clientes = [k for k in lista_clientes if busca.lower() in k.lower()]
-        
-        # Cabeçalho Visual
-        h1, h2 = st.columns([5, 1])
-        h1.caption("DADOS DO CLIENTE")
-        h2.caption("AÇÕES")
-
-        for nome in lista_clientes:
-            dados = st.session_state['clientes_db'][nome]
-            
-            # --- BLINDAGEM MATEMÁTICA DA LISTA (AQUI ESTAVA O ERRO) ---
-            try:
-                raw_fator = dados.get('Fator', 1.0)
-                # Força conversão para float, se falhar, usa 1.0
-                fator = float(raw_fator) if raw_fator else 1.0
-            except (ValueError, TypeError):
-                fator = 1.0
-
-            # Lógica de Exibição do Texto (Blindada com try/except e round)
-            try:
-                if fator == 1.0:
-                    txt_fator = "NORMAL"
-                    cor_fator = "blue"
-                elif fator < 1.0:
-                    # round resolve problemas de dizima periodica
-                    desc = int(round((1.0 - fator) * 100))
-                    txt_fator = f"DESC. {desc}%"
-                    cor_fator = "green"
-                else:
-                    acres = int(round((fator - 1.0) * 100))
-                    txt_fator = f"ACRÉSC. {acres}%"
-                    cor_fator = "red"
-            except:
-                txt_fator = "NORMAL"
-                cor_fator = "blue"
-            
-            email = dados.get('Email', '')
-
-            # Layout da Linha
-            col_info, col_btn = st.columns([5, 1])
-            
-            with col_info:
-                with st.expander(f"🏢 {nome} [{txt_fator}]"):
-                    st.write(f"📍 {dados.get('End', '-')}")
-                    st.write(f"📞 {dados.get('Tel', '-')} | CNPJ: {dados.get('CNPJ', '-')}")
-                    st.markdown(f"**Tabela:** :{cor_fator}[{fator:.2f}]")
-                    
-                    b1, b2 = st.columns([1, 1])
-                    b1.button("✏️ EDITAR", key=f"ed_{nome}", on_click=preparar_edicao, args=(nome, dados))
-                    b2.button("🗑️ EXCLUIR", key=f"del_{nome}", on_click=excluir_cliente, args=(nome,))
-            
-            with col_btn:
-                if email:
-                    # Popover Discreto
-                    with st.popover("📋", help="Copiar Email"):
-                        st.code(email, language="text")
-                else:
-                    st.caption("-")
-            
-    else:
-        st.info("Nenhum cliente cadastrado no sistema.")
+        c_info, c_btn = st.columns([5, 1])
+        with c_info:
+            with st.expander(f"{k} [{txt}]"):
+                st.write(f"End: {d.get('End')} | Tel: {d.get('Tel')}")
+                st.write(f"CNPJ: {d.get('CNPJ')}")
+                c_e, c_d = st.columns(2)
+                if c_e.button("EDITAR", key=f"ed_{k}"): carregar(k, d); st.rerun()
+                if c_d.button("EXCLUIR", key=f"del_{k}"): del st.session_state['clientes_db'][k]; salvar_dados(); st.rerun()
+        with c_btn:
+            if d.get('Email'):
+                with st.popover("📋"): st.code(d.get('Email'), language="text")
 
 elif menu == "🛠️ Admin / Backup":
     st.title("🛠️ Admin")
@@ -937,19 +785,7 @@ elif menu == "🛠️ Admin / Backup":
             if st.button("ZERAR TUDO") and st.text_input("Confirma?") == "SIM":
                 st.session_state['clientes_db'] = {}
                 st.session_state['log_vendas'] = []
-                # ... limpar o resto
-                salvar_dados()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                st.session_state['log_entradas'] = []
+                st.session_state['log_laudos'] = []
+                st.session_state['estoque'] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Minimo"])
+                salvar_dados(); st.success("Zerado!")
