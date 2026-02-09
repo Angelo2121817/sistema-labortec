@@ -209,6 +209,37 @@ def carregar_dados():
         return True
     except Exception as e:
         return False
+        def salvar_dados():
+    """Salva TODOS os dados no Google Sheets"""
+    try:
+        # 1. Salva Estoque
+        if not st.session_state['estoque'].empty:
+            conn.update(worksheet="Estoque", data=st.session_state['estoque'])
+        
+        # 2. Salva Clientes
+        if st.session_state['clientes_db']:
+            df_cli = pd.DataFrame.from_dict(st.session_state['clientes_db'], orient='index')
+            df_cli.insert(0, 'Nome', df_cli.index)
+            conn.update(worksheet="Clientes", data=df_cli)
+        
+        # 3. Salva Logs
+        if st.session_state['log_vendas']:
+            conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state['log_vendas']))
+        
+        if st.session_state['log_entradas']:
+            conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state['log_entradas']))
+        
+        if st.session_state['log_laudos']:
+            conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state['log_laudos']))
+        
+        # 4. SALVA O AVISO
+        df_aviso = pd.DataFrame({'Mensagem': [st.session_state['aviso_geral']]})
+        conn.update(worksheet="Avisos", data=df_aviso)
+        
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
+        return False
 
 if "dados_carregados" not in st.session_state:
     carregar_dados()
@@ -939,6 +970,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
