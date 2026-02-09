@@ -425,120 +425,137 @@ menu = st.sidebar.radio("Navegar:", [
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
     
-    # --- ALERTA GERAL ---
+    # --- ALERTA GERAL (Piscante Moderno) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
         <style>
-            @keyframes pulse-red {{
-                0% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); transform: scale(1); }}
-                50% {{ box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); transform: scale(1.01); }}
-                100% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); transform: scale(1); }}
+            @keyframes pulse-soft {{
+                0% {{ box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }}
+                70% {{ box-shadow: 0 0 0 15px rgba(220, 53, 69, 0); }}
+                100% {{ box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }}
             }}
-            .alert-blink {{
-                background-color: #ffebee; border: 2px solid #ff1744; color: #b71c1c;
-                padding: 8px 20px; border-radius: 50px; text-align: center;
-                font-weight: bold; font-size: 1.1rem; margin: 0 auto 30px auto;
-                width: fit-content; animation: pulse-red 2s infinite;
-                display: flex; align-items: center; justify-content: center; gap: 10px;
+            .alert-box {{
+                background: #fff0f1; color: #c53030; border-left: 6px solid #c53030;
+                padding: 15px 20px; border-radius: 8px; margin-bottom: 25px;
+                display: flex; align-items: center; gap: 15px; font-weight: 600;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05); animation: pulse-soft 2s infinite;
             }}
+            .alert-icon { font-size: 24px; }
         </style>
-        <div class="alert-blink"><span>📢</span><span>{st.session_state['aviso_geral']}</span></div>
+        <div class="alert-box">
+            <span class="alert-icon">📢</span>
+            <span>{st.session_state['aviso_geral']}</span>
+        </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("---")
-    
-    # --- RADAR DE LAUDOS (SEM REPETIÇÃO) ---
-    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 PRÓXIMAS COLETAS (Apenas Pendentes)</h4>", unsafe_allow_html=True)
+    # --- RADAR DE LAUDOS (VISUAL PREMIUM) ---
+    st.markdown("<h4 style='color: #1e3d59; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;'><span style='font-size: 1.2em'>📡</span> Monitoramento de Coletas (Pendentes)</h4>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
-    
     # Filtro Estrito: Apenas Pendentes
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
 
     if not ativos:
-        st.success("✅ Tudo limpo! Nenhuma coleta pendente.")
+        st.markdown("""
+            <div style='background: #e8f5e9; color: #2e7d32; padding: 20px; border-radius: 12px; text-align: center; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.05);'>
+                ✅ Radar Limpo! Nenhuma coleta pendente no momento.
+            </div>
+        """, unsafe_allow_html=True)
     else:
         items_html = ""
-        # MUDANÇA TÁTICA: Removemos o loop multiplicador. 
-        # Agora a lista é exatamente o que existe.
         for l in ativos:
-            cliente = html.escape(str(l.get("Cliente", "") or "Sem Nome"))
+            cliente = html.escape(str(l.get("Cliente", "") or "Cliente Desconhecido"))
             coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--"))
             resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--"))
 
             items_html += f"""
-            <div class="card">
-                <div class="card-header" title="{cliente}">🏢 {cliente}</div>
-                <div class="card-body">
-                    <div class="data-group"><span class="label">📅 COLETA</span><span class="value-coleta">{coleta}</span></div>
-                    <div class="divider"></div>
-                    <div class="data-group"><span class="label">🧪 PREVISÃO</span><span class="value-result">{resultado}</span></div>
+            <div class="card-premium">
+                <div class="card-accent"></div>
+                <div class="card-content">
+                    <div class="client-header" title="{cliente}">
+                        <span class="icon-building">🏢</span> {cliente}
+                    </div>
+                    
+                    <div class="dates-container">
+                        <div class="date-box">
+                            <div class="icon-label">📅 COLETA</div>
+                            <div class="date-value">{coleta}</div>
+                        </div>
+                        <div class="vertical-divider"></div>
+                        <div class="date-box">
+                            <div class="icon-label">🧪 PREVISÃO</div>
+                            <div class="date-value highlight">{resultado}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-footer">
+                        <span class="status-badge">⏳ AGUARDANDO COLETA</span>
+                    </div>
                 </div>
-                <div class="card-footer"><span class="status-pill">⏳ AGUARDANDO COLETA</span></div>
             </div>
             """
 
-        # Lógica de Alinhamento:
-        # Se tiver poucos itens (<= 3), centraliza na tela. Se tiver muitos, alinha a esquerda com rolagem.
+        # Lógica de alinhamento centralizado se tiver poucos itens
         alinhamento = "center" if len(ativos) <= 3 else "flex-start"
 
         carousel_component = f"""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
             
-            /* Container Flexível (Sem Animação Infinita) */
             .carousel-container {{
-                display: flex;
-                overflow-x: auto; /* Permite rolar se tiver muitos */
-                gap: 20px;
-                padding: 10px 5px 20px 5px;
-                width: 100%;
-                justify-content: {alinhamento}; /* Centraliza ou Alinha */
+                display: flex; overflow-x: auto; gap: 25px; padding: 15px 5px 30px 5px;
+                width: 100%; justify-content: {alinhamento}; scroll-behavior: smooth;
             }}
-            
-            /* Estiliza a barra de rolagem para ficar bonita */
-            .carousel-container::-webkit-scrollbar {{ height: 8px; }}
-            .carousel-container::-webkit-scrollbar-track {{ background: #f1f1f1; border-radius: 4px; }}
-            .carousel-container::-webkit-scrollbar-thumb {{ background: #c1c1c1; border-radius: 4px; }}
-            .carousel-container::-webkit-scrollbar-thumb:hover {{ background: #a8a8a8; }}
+            .carousel-container::-webkit-scrollbar {{ height: 10px; }}
+            .carousel-container::-webkit-scrollbar-track {{ background: #f0f2f5; border-radius: 10px; }}
+            .carousel-container::-webkit-scrollbar-thumb {{ background: #cbd5e1; border-radius: 10px; border: 2px solid #f0f2f5; }}
 
-            .card {{ 
-                min-width: 260px; /* Garante que o card não encolha */
-                width: 260px; 
-                background: #ffffff; 
-                border-radius: 12px; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-                font-family: 'Inter', sans-serif; 
-                overflow: hidden; 
-                border: 1px solid #e2e8f0; 
-                transition: transform 0.2s; 
+            /* CARD PREMIUM DESIGN */
+            .card-premium {{
+                min-width: 280px; width: 280px; background: #ffffff; border-radius: 16px;
+                box-shadow: 0 10px 30px -5px rgba(0,0,0,0.08);
+                font-family: 'Inter', sans-serif; overflow: hidden; position: relative;
+                transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); border: 1px solid #f0f0f0;
             }}
+            .card-premium:hover {{ transform: translateY(-8px); box-shadow: 0 20px 40px -10px rgba(30, 61, 89, 0.15); border-color: #e0e0e0; }}
+
+            .card-accent {{ height: 6px; background: #1e3d59; width: 100%; }}
             
-            .card:hover {{ 
-                transform: translateY(-5px); 
-                box-shadow: 0 15px 30px rgba(0,0,0,0.1); 
-                border-color: #cbd5e1; 
+            .card-content {{ padding: 20px; display: flex; flex-direction: column; height: 100%; }}
+
+            .client-header {{
+                font-size: 16px; font-weight: 700; color: #1e3d59; margin-bottom: 20px;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                display: flex; align-items: center; gap: 8px;
             }}
-            
-            .card-header {{ background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%); color: white; padding: 12px 15px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 3px solid #ffb400; }}
-            .card-body {{ padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }}
-            .data-group {{ display: flex; flex-direction: column; align-items: center; flex: 1; }}
-            .divider {{ width: 1px; height: 30px; background: #cbd5e1; margin: 0 10px; }}
-            .label {{ font-size: 10px; color: #64748b; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }}
-            .value-coleta {{ font-size: 14px; font-weight: 700; color: #334155; }}
-            .value-result {{ font-size: 14px; font-weight: 700; color: #059669; }}
-            .card-footer {{ background: #ffffff; padding: 10px; text-align: center; border-top: 1px solid #f1f5f9; }}
-            .status-pill {{ background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; display: inline-block; }}
+            .icon-building {{ font-size: 18px; opacity: 0.8; }}
+
+            .dates-container {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
+            .date-box {{ flex: 1; text-align: center; }}
+            .icon-label {{ font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 6px; }}
+            .date-value {{ font-size: 15px; font-weight: 700; color: #334155; }}
+            .date-value.highlight {{ color: #004aad; }}
+
+            .vertical-divider {{ width: 1px; height: 35px; background: #e2e8f0; margin: 0 15px; }}
+
+            .status-footer {{ text-align: center; margin-top: auto; }}
+            .status-badge {{
+                background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 700;
+                padding: 6px 16px; border-radius: 50px; display: inline-block;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05); letter-spacing: 0.5px;
+            }}
         </style>
         
         <div class="carousel-container">
             {items_html}
         </div>
         """
-        components.html(carousel_component, height=230)
+        components.html(carousel_component, height=250)
 
-    # --- MÉTRICAS DE ESTOQUE ---
-    st.markdown("<h4 style='text-align: left; color: #555; margin-top: 20px; border-left: 5px solid #d32f2f; padding-left: 10px;'>🚨 ESTOQUE CRÍTICO (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # --- MÉTRICAS E GRÁFICOS (MANTIDOS, SÓ AJUSTEI O TÍTULO) ---
+    st.markdown("<h4 style='color: #d32f2f; margin-top: 20px; display: flex; align-items: center; gap: 10px;'>🚨 Estoque Crítico (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
     
     df_est = st.session_state.get('estoque')
     if df_est is not None and not df_est.empty:
@@ -549,15 +566,14 @@ if menu == "📊 Dashboard":
             if not criticos.empty:
                 st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True, column_config={"Saldo": st.column_config.NumberColumn("Saldo Atual", format="%.2f"), "Estoque_Minimo": st.column_config.NumberColumn("Mínimo Desejado", format="%.0f")})
             else:
-                st.info("👍 Situação Regular! Nenhum produto com estoque baixo.")
+                st.markdown("<div style='background: #e8f5e9; color: #2e7d32; padding: 10px 15px; border-radius: 8px; font-weight: 600;'>👍 Situação Regular! Nenhum produto crítico.</div>", unsafe_allow_html=True)
         except: st.info("Dados insuficientes.")
     
     st.markdown("---")
 
-    # --- GRÁFICOS ---
     c_graf1, c_graf2 = st.columns(2)
     with c_graf1:
-        st.markdown("**📈 Volume de Vendas Diárias**")
+        st.markdown("### 📈 Volume de Vendas Diárias")
         log_v = st.session_state.get('log_vendas', [])
         if log_v:
             df_v = pd.DataFrame(log_v)
@@ -566,100 +582,12 @@ if menu == "📊 Dashboard":
         else: st.caption("Aguardando dados...")
 
     with c_graf2:
-        st.markdown("**🏆 Produtos Mais Vendidos**")
+        st.markdown("### 🏆 Produtos Mais Vendidos")
         if log_v:
             df_v = pd.DataFrame(log_v)
             top_prods = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top_prods, color="#ffb400", horizontal=True)
         else: st.caption("Aguardando dados...")
-elif menu == "💰 Vendas & Orçamentos":
-    st.title("💰 Vendas Inteligentes")
-    if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
-    
-    # 1. Seleção do Cliente
-    c1, c2 = st.columns([2,1])
-    cli = c1.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-    vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
-    d_cli = st.session_state['clientes_db'][cli]
-    
-    # 2. Resgate do Fator de Preço
-    fator_cliente = float(d_cli.get('Fator', 1.0))
-    
-    # Mostra aviso visual com ARREDONDAMENTO CORRETO (CORREÇÃO APLICADA AQUI)
-    if fator_cliente == 1.0:
-        st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
-    elif fator_cliente < 1.0:
-        # Usamos round() para o computador arredondar 9.99 para 10
-        perc_desc = round((1.0 - fator_cliente) * 100)
-        st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {perc_desc}% (Fator {fator_cliente})")
-    else:
-        perc_acres = round((fator_cliente - 1.0) * 100)
-        st.warning(f"📈 Cliente **{cli}**: Tabela com ACRÉSCIMO de {perc_acres}% (Fator {fator_cliente})")
-    
-    col1, col2, col3 = st.columns(3)
-    p_pag = col1.text_input("Plano", "28/42 DIAS"); f_pag = col2.text_input("Forma", "BOLETO ITAU"); venc = col3.text_input("Vencimento", "A COMBINAR")
-    
-    # 3. Preparação da Tabela de Vendas
-    df_v = st.session_state['estoque'].copy()
-    if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
-    
-    # APLICAR O FATOR NO PREÇO!
-    # Criamos uma coluna nova "Preco_Final" que é a Base x Fator
-    df_v['Preco_Final'] = df_v['Preco_Base'].astype(float) * fator_cliente
-    
-    # Editor de Vendas (Mostramos o Preço Final já calculado)
-    ed_v = st.data_editor(
-        df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "Preco_Base": st.column_config.NumberColumn("Preço Base (R$)", format="%.2f", disabled=True),
-            "Preco_Final": st.column_config.NumberColumn("💵 Preço P/ Cliente (R$)", format="%.2f"), # Editável se quiser ajuste manual pontual
-            "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
-        }
-    )
-    
-    # 4. Cálculo do Total (Usando o Preço Final)
-    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
-    itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Final']
-    total = itens_sel['Total'].sum()
-    
-    if not itens_sel.empty:
-        st.divider()
-        c_tot, c_act = st.columns([1, 2])
-        c_tot.metric("Valor Total do Pedido", f"R$ {total:,.2f}")
-        
-        c_orc, c_ped = c_act.columns(2)
-        with c_orc:
-            if st.button("📄 ORÇAMENTO", use_container_width=True):
-                # No PDF, usamos o Preço Final como se fosse o unitário
-                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
-                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
-                st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
-        
-        with c_ped:
-            # Opção de Baixa
-            origem = st.radio("Origem?", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
-            
-            if st.button("✅ FECHAR VENDA", type="primary", use_container_width=True):
-                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
-                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
-                
-                if "METAL" in origem:
-                    for _, row in itens_sel.iterrows():
-                        mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
-                        if not st.session_state['estoque'][mask].empty:
-                            idx = st.session_state['estoque'][mask].index[0]
-                            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
-                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
-                    
-                    st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
-                    salvar_dados(); st.success("Venda Confirmada (Estoque Baixado)!")
-                else: 
-                    st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários (Indep)', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
-                    salvar_dados(); st.success("Venda Confirmada (Sem Baixa)!")
-                
-                st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes & Precificação")
     
@@ -1045,6 +973,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
