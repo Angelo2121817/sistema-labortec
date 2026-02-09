@@ -226,16 +226,20 @@ def carregar_dados():
 def salvar_dados():
     try:
         conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+        
         if st.session_state.get("clientes_db"):
             df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
             conn.update(worksheet="Clientes", data=df_clis)
+            
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        st.toast("✅ Sincronizado!")
-    except Exception:
-        st.error("Erro ao salvar")
-
+        
+        st.toast("✅ Dados Sincronizados!", icon="☁️")
+    except Exception as e:
+        # Se der erro, ele imprime no console do sistema mas NÃO trava a tela do usuário
+        print(f"Erro silencioso ao salvar: {e}")
+        pass
 
 if "dados_carregados" not in st.session_state:
     carregar_dados()
@@ -1032,6 +1036,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
