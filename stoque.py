@@ -308,7 +308,8 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 # ==============================================================================
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
-# --- SISTEMA DE AVISOS (COM MEMÓRIA GLOBAL) ---
+
+# --- SISTEMA DE AVISOS (ESTE É O ÚNICO E CORRETO) ---
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
 with st.sidebar.expander("📢 MURAL DE AVISOS"):
@@ -317,21 +318,15 @@ with st.sidebar.expander("📢 MURAL DE AVISOS"):
     
     if c_salv.button("💾 PUBLICAR"):
         st.session_state['aviso_geral'] = aviso_txt
-        salvar_dados() # <--- OBRIGATÓRIO PARA FIXAR
+        salvar_dados() # <--- SALVA NA NUVEM
         st.rerun()
         
     if c_limp.button("🗑️ APAGAR"):
         st.session_state['aviso_geral'] = ""
-        salvar_dados() # <--- APAGA DA NUVEM TAMBÉM
+        salvar_dados() # <--- APAGA DA NUVEM
         st.rerun()
 
-if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
-st.sidebar.markdown("---")
-with st.sidebar.expander("📢 DEFINIR AVISO"):
-    aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
-    c1, c2 = st.columns(2)
-    if c1.button("💾 Gravar"): st.session_state['aviso_geral'] = aviso_txt; st.rerun()
-    if c2.button("🗑️ Apagar"): st.session_state['aviso_geral'] = ""; st.rerun()
+# --- AQUI ESTAVA O DUPLICADO QUE EU APAGUEI ---
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Personalizar Tela")
@@ -343,7 +338,6 @@ menu = st.sidebar.radio("Navegar:", [
     "📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", 
     "📦 Estoque", "📋 Conferência Geral", "👥 Clientes", "🛠️ Admin / Backup"
 ])
-
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
@@ -973,6 +967,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
