@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import re
 import os
 import html
+import json
 from pypdf import PdfReader
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
@@ -906,6 +907,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
