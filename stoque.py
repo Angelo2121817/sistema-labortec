@@ -402,102 +402,65 @@ elif menu == "🧪 Laudos":
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     
-    # Verifica se existem clientes
     if not st.session_state.get('clientes_db'): 
-        st.warning("⚠️ Nenhum cliente cadastrado. Vá em 'Clientes' primeiro.")
-        st.stop()
+        st.warning("⚠️ Cadastre clientes primeiro."); st.stop()
     
-    # --- 1. SELEÇÃO DO CLIENTE ---
     c1, c2 = st.columns([2, 1])
     lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
     cli = c1.selectbox("Selecione o Cliente", lista_clientes)
     vend = c2.text_input("Vendedor", st.session_state.get('usuario_nome', 'Sistema'))
-    
     d_cli = st.session_state['clientes_db'][cli]
     
-    # --- 2. FATOR DE PREÇO (BLINDADO) ---
     try:
-        raw_fator = d_cli.get('Fator', 1.0)
-        fator_cliente = float(raw_fator)
-        if fator_cliente <= 0 or pd.isna(fator_cliente): fator_cliente = 1.0
-    except:
-        fator_cliente = 1.0
+        fator_cliente = float(d_cli.get('Fator', 1.0))
+        if fator_cliente <= 0: fator_cliente = 1.0
+    except: fator_cliente = 1.0
     
-    # Aviso Visual
-    if fator_cliente == 1.0:
-        st.info(f"📋 Tabela Padrão (Fator 1.0)")
-    elif fator_cliente < 1.0:
-        st.success(f"📉 Desconto de {int(round((1.0 - fator_cliente) * 100))}% aplicado.")
-    else:
-        st.warning(f"📈 Acréscimo de {int(round((fator_cliente - 1.0) * 100))}% aplicado.")
-    
-    col1, col2, col3 = st.columns(3)
-    p_pag = col1.text_input("Cond. Pagamento", "28/42 DIAS")
-    f_pag = col2.text_input("Forma Pagamento", "BOLETO ITAU")
-    venc = col3.text_input("Vencimento", "A COMBINAR")
-    
-    # --- 3. PREPARAÇÃO DA TABELA ---
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
-    
-    # Garante números
     df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
     df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
     
-    # EDITOR DE VENDAS
-    st.write("🛒 **Carrinho de Compras:**")
     ed_v = st.data_editor(
         df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
-        use_container_width=True, 
-        hide_index=True,
+        use_container_width=True, hide_index=True,
         column_config={
-            "Preco_Base": st.column_config.NumberColumn("Preço Base", format="%.2f", disabled=True),
-            "Preco_Final": st.column_config.NumberColumn("💵 Preço Cliente", format="%.2f", disabled=True), 
-            "Saldo": st.column_config.NumberColumn("Estoque", format="%.2f", disabled=True),
+            "Preco_Base": st.column_config.NumberColumn("Base", format="%.2f", disabled=True),
+            "Preco_Final": st.column_config.NumberColumn("💵 Preço Cliente", format="%.2f"), 
             "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
         }
     )
     
-    # --- 4. FECHAMENTO ---
-    # Pega apenas o que foi digitado (Qtd > 0)
     itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
-    itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Final']
-    total = itens_sel['Total'].sum()
     
     if not itens_sel.empty:
-        st.divider()
-        c_tot, c_act = st.columns([1, 2])
-        c_tot.metric("💰 TOTAL", f"R$ {total:,.2f}")
+        total = (itens_sel['Qtd'] * itens_sel['Preco_Final']).sum()
+        st.divider(); st.metric("💰 TOTAL DO PEDIDO", f"R$ {total:,.2f}")
         
-        # --- AQUI ESTÁ A CORREÇÃO DO NOME ---
-        # Garantia absoluta que vai pegar o nome do produto
-        lista_produtos = itens_sel['Produto'].astype(str).tolist()
-        
-        if len(lista_produtos) == 1:
-            # Se for só 1 produto, usa o nome exato dele
-            NOME_REAL_DO_PRODUTO = lista_produtos[0]
-        else:
-            # Se forem vários, junta com " + "
-            NOME_REAL_DO_PRODUTO = " + ".join(lista_produtos)
-        
-        # ----------------------------------
-
-        c_orc, c_ped = c_act.columns(2)
-        
+        c_orc, c_ped = st.columns(2)
         with c_orc:
             if st.button("📄 ORÇAMENTO", use_container_width=True):
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
-                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
-                st.download_button("📥 Baixar PDF", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
+                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "ORÇAMENTO")
+                st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
         
         with c_ped:
-            st.write("Confirmar Venda:")
-            origem = st.radio("Baixa de Estoque?", ["SIM (Baixar)", "NÃO (Apenas Pedido)"], horizontal=True)
-            
+            baixa = st.toggle("Baixar estoque?", value=True)
             if st.button("✅ FECHAR PEDIDO", type="primary", use_container_width=True):
                 
-                # Baixa no Estoque (Se selecionado)
-                if "SIM" in origem:
+                # --- LÓGICA DE CAPTURA DE NOME ANTI-ERRO ---
+                nomes_corrigidos = []
+                for _, row in itens_sel.iterrows():
+                    n = str(row['Produto']).strip()
+                    # Se o nome no estoque for "Varios" ou vazio, usa o Código
+                    if n.lower() in ['varios', 'vários', 'varias', 'várias', '']:
+                        nomes_corrigidos.append(f"Prod_{row['Cod']}")
+                    else:
+                        nomes_corrigidos.append(n)
+                
+                nome_final_registro = " + ".join(nomes_corrigidos)
+                
+                if baixa:
                     for _, row in itens_sel.iterrows():
                         mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
                         if not st.session_state['estoque'][mask].empty:
@@ -505,27 +468,17 @@ elif menu == "💰 Vendas & Orçamentos":
                             try: atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
                             except: atual = 0.0
                             st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
-                    msg_confirmacao = "✅ Venda com Baixa Confirmada!"
-                else:
-                    msg_confirmacao = "✅ Pedido Confirmado (Sem Baixa)!"
-
-                # REGISTRO NO LOG (AQUI GRAVA O NOME CORRETO)
+                
                 st.session_state['log_vendas'].append({
                     'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
                     'Cliente': cli, 
-                    'Produto': NOME_REAL_DO_PRODUTO,  # <--- USA A VARIÁVEL QUE CRIAMOS ACIMA
-                    'Qtd': itens_sel['Qtd'].sum(), 
-                    'Vendedor': vend,
-                    'Valor_Total': total
+                    'Produto': nome_final_registro, 
+                    'Qtd': float(itens_sel['Qtd'].sum()), 
+                    'Vendedor': vend
                 })
-                
                 salvar_dados()
-                st.success(msg_confirmacao)
-                
-                # Gera PDF Final
-                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
-                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
-                st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+                st.success(f"Venda de {nome_final_registro} registrada!")
+                st.rerun()
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
     if st.session_state['estoque'].empty: st.warning("Cadastre produtos!"); st.stop()
@@ -847,6 +800,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
