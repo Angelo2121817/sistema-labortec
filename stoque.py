@@ -234,26 +234,18 @@ def salvar_dados():
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
         
-        # --- SALVA O AVISO NO BANCO DE DADOS ---
+        # --- SALVA O AVISO FORÇANDO COLUNA ÚNICA ---
         msg_atual = st.session_state.get('aviso_geral', "")
-        df_aviso = pd.DataFrame([{"Mensagem": msg_atual}])
+        # Cria dataframe explícito
+        df_aviso = pd.DataFrame({"Mensagem": [str(msg_atual)]})
         conn.update(worksheet="Avisos", data=df_aviso)
         
-        st.toast("✅ Tudo Salvo na Nuvem!", icon="☁️")
+        st.toast("✅ Dados Sincronizados!", icon="☁️")
+        
     except Exception as e:
-        print(f"Erro silencioso ao salvar: {e}")
-        pass
-
-if "dados_carregados" not in st.session_state:
-    carregar_dados()
-    st.session_state["dados_carregados"] = True
-
-for key in ["log_vendas", "log_entradas", "log_laudos"]:
-    if key not in st.session_state: st.session_state[key] = []
-if "estoque" not in st.session_state:
-    st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
-if "clientes_db" not in st.session_state: st.session_state["clientes_db"] = {}
-
+        # AQUI O INIMIGO APARECE
+        st.error(f"⚠️ ERRO CRÍTICO AO SALVAR: {e}")
+        st.stop()
 # ==============================================================================
 # 4. TEMAS E CSS
 # ==============================================================================
@@ -983,6 +975,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
