@@ -157,13 +157,13 @@ def _fix_datetime_br(val):
 
 def carregar_dados():
     try:
-        # 1. Carrega Estoque
+        # Carrega Estoque
         df_est = conn.read(worksheet="Estoque", ttl=0)
         if isinstance(df_est, pd.DataFrame) and not df_est.empty:
             df_est = _normalizar_colunas(df_est)
             st.session_state["estoque"] = df_est
 
-        # 2. Carrega Clientes
+        # Carrega Clientes
         df_cli = conn.read(worksheet="Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
             df_cli = _normalizar_colunas(df_cli)
@@ -171,16 +171,17 @@ def carregar_dados():
             if "Nome" in df_cli.columns: st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
             else: st.session_state["clientes_db"] = {}
 
-        # 3. Carrega Logs e Aviso
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
+        # Carrega Logs e Aviso
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: # <--- Adicionei Avisos aqui
             try:
                 df = conn.read(worksheet=aba, ttl=0)
             except:
-                df = pd.DataFrame() 
+                df = pd.DataFrame() # Se a aba não existir, cria vazia
 
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
                 
+                # Lógica Específica para cada aba
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
@@ -195,13 +196,11 @@ def carregar_dados():
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
                 
-                # --- AVISOS (MODO BLINDADO) ---
+                # --- NOVA LÓGICA DO AVISO ---
                 elif aba == "Avisos":
-                    try:
-                        # Pega o valor da primeira célula, não importa o nome da coluna
-                        val = str(df.iloc[0].values[0])
-                        st.session_state['aviso_geral'] = val
-                    except:
+                    if "Mensagem" in df.columns and len(df) > 0:
+                        st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
+                    else:
                         st.session_state['aviso_geral'] = ""
             else:
                 if aba == "Avisos": st.session_state['aviso_geral'] = ""
@@ -209,32 +208,18 @@ def carregar_dados():
         
         return True
     except Exception as e:
-        st.error(f"Erro no Carregamento: {e}")
         return False
 
-def salvar_dados():
-    try:
-        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
-        
-        if st.session_state.get("clientes_db"):
-            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
-            conn.update(worksheet="Clientes", data=df_clis)
-            
-        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
-        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
-        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        
-        # --- SALVA O AVISO FORÇANDO COLUNA PADRÃO ---
-        msg_atual = st.session_state.get('aviso_geral', "")
-        # Cria um DataFrame novo e limpo sempre que salva
-        df_aviso = pd.DataFrame({"Mensagem": [str(msg_atual)]})
-        conn.update(worksheet="Avisos", data=df_aviso)
-        
-        st.toast("✅ Dados Sincronizados!", icon="☁️")
-        
-    except Exception as e:
-        st.error(f"⚠️ ERRO CRÍTICO AO SALVAR: {e}")
-        st.stop()
+if "dados_carregados" not in st.session_state:
+    carregar_dados()
+    st.session_state["dados_carregados"] = True
+
+for key in ["log_vendas", "log_entradas", "log_laudos"]:
+    if key not in st.session_state: st.session_state[key] = []
+if "estoque" not in st.session_state:
+    st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
+if "clientes_db" not in st.session_state: st.session_state["clientes_db"] = {}
+
 # ==============================================================================
 # 4. TEMAS E CSS
 # ==============================================================================
@@ -306,24 +291,13 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
-# --- SISTEMA DE AVISOS (ESTE É O ÚNICO E CORRETO) ---
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
-with st.sidebar.expander("📢 MURAL DE AVISOS"):
-    aviso_txt = st.text_area("Mensagem:", value=st.session_state['aviso_geral'], height=100)
-    c_salv, c_limp = st.columns(2)
-    
-    if c_salv.button("💾 PUBLICAR"):
-        st.session_state['aviso_geral'] = aviso_txt
-        salvar_dados() # <--- SALVA NA NUVEM
-        st.rerun()
-        
-    if c_limp.button("🗑️ APAGAR"):
-        st.session_state['aviso_geral'] = ""
-        salvar_dados() # <--- APAGA DA NUVEM
-        st.rerun()
-
-# --- AQUI ESTAVA O DUPLICADO QUE EU APAGUEI ---
+with st.sidebar.expander("📢 DEFINIR AVISO"):
+    aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
+    c1, c2 = st.columns(2)
+    if c1.button("💾 Gravar"): st.session_state['aviso_geral'] = aviso_txt; st.rerun()
+    if c2.button("🗑️ Apagar"): st.session_state['aviso_geral'] = ""; st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Personalizar Tela")
@@ -335,6 +309,7 @@ menu = st.sidebar.radio("Navegar:", [
     "📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", 
     "📦 Estoque", "📋 Conferência Geral", "👥 Clientes", "🛠️ Admin / Backup"
 ])
+
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
 # ==============================================================================
@@ -964,14 +939,6 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
-
-
-
-
-
-
-
-
 
 
 
