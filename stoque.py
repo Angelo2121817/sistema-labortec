@@ -226,6 +226,27 @@ def carregar_dados():
         return True
     except Exception as e:
         return False
+def salvar_dados():
+    try:
+        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+        
+        if st.session_state.get("clientes_db"):
+            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
+            conn.update(worksheet="Clientes", data=df_clis)
+            
+        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
+        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
+        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
+        
+        # --- SALVA O AVISO NO BANCO DE DADOS ---
+        msg_atual = st.session_state.get('aviso_geral', "")
+        df_aviso = pd.DataFrame([{"Mensagem": msg_atual}])
+        conn.update(worksheet="Avisos", data=df_aviso)
+        
+        st.toast("✅ Tudo Salvo na Nuvem!", icon="☁️")
+    except Exception as e:
+        print(f"Erro silencioso ao salvar: {e}")
+        pass
 
 if "dados_carregados" not in st.session_state:
     carregar_dados()
@@ -956,6 +977,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
