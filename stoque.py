@@ -540,84 +540,216 @@ elif menu == "📋 Conferência Geral":
                         st.session_state['log_laudos'][i]['Status'] = 'Arquivado'; salvar_dados(); st.rerun()
 
 elif menu == "👥 Clientes":
-    st.title("👥 Clientes")
-    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
+    st.title("👥 Gestão de Clientes & Precificação")
     
-    campos = ['nome', 'tel', 'email', 'end', 'cnpj', 'cid', 'uf', 'cep', 'cod', 'fator']
-    for c in campos: 
-        if f'cli_{c}' not in st.session_state: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
-
-    def limpar():
-        for c in campos: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
+    # --- 1. CONFIGURAÇÃO INICIAL E ESTADO ---
+    if 'edit_mode' not in st.session_state: 
         st.session_state['edit_mode'] = False
 
-    def carregar(k, d):
-        st.session_state['cli_nome'] = k
-        st.session_state['cli_tel'] = d.get('Tel','')
-        st.session_state['cli_email'] = d.get('Email','')
-        st.session_state['cli_end'] = d.get('End','')
-        st.session_state['cli_cnpj'] = d.get('CNPJ','')
-        st.session_state['cli_cid'] = d.get('Cidade','')
-        st.session_state['cli_uf'] = d.get('UF','')
-        st.session_state['cli_cep'] = d.get('CEP','')
-        st.session_state['cli_cod'] = d.get('Cod_Cli','')
-        try: st.session_state['cli_fator'] = float(d.get('Fator', 1.0))
-        except: st.session_state['cli_fator'] = 1.0
-        st.session_state['edit_mode'] = True
+    # Define os campos padrão para não dar erro de chave
+    campos_padrao = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 
+                     'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
+    
+    for campo in campos_padrao:
+        if campo not in st.session_state:
+            st.session_state[campo] = 1.0 if campo == 'form_fator' else ""
 
-    with st.form("form_cli"):
-        c1, c2 = st.columns([3, 1])
-        c1.text_input("Nome", key="cli_nome", disabled=st.session_state['edit_mode'])
-        c2.text_input("Cód", key="cli_cod")
-        c3, c4 = st.columns(2)
-        c3.number_input("Fator Preço", 0.1, 5.0, step=0.05, key="cli_fator")
-        c4.text_input("CNPJ", key="cli_cnpj")
-        c5, c6 = st.columns(2)
-        c5.text_input("Tel", key="cli_tel"); c6.text_input("Email", key="cli_email")
-        st.text_input("Endereço", key="cli_end")
-        c7, c8, c9 = st.columns(3)
-        c7.text_input("Cidade", key="cli_cid"); c8.text_input("UF", key="cli_uf"); c9.text_input("CEP", key="cli_cep")
+    # --- 2. FUNÇÕES DE COMANDO ---
+    def limpar_campos():
+        for campo in campos_padrao:
+            st.session_state[campo] = 1.0 if campo == 'form_fator' else ""
+        st.session_state['edit_mode'] = False
+
+    def salvar_cliente():
+        # Limpeza básica dos dados
+        nome = str(st.session_state.get('form_nome', '')).strip()
         
-        if st.form_submit_button("SALVAR"):
-            nome = st.session_state['cli_nome'].strip()
-            if nome:
-                st.session_state['clientes_db'][nome] = {
-                    'Tel': st.session_state['cli_tel'], 'Email': st.session_state['cli_email'],
-                    'End': st.session_state['cli_end'], 'CNPJ': st.session_state['cli_cnpj'],
-                    'Cidade': st.session_state['cli_cid'], 'UF': st.session_state['cli_uf'],
-                    'CEP': st.session_state['cli_cep'], 'Cod_Cli': st.session_state['cli_cod'],
-                    'Fator': st.session_state['cli_fator']
-                }
-                salvar_dados(); st.success("Salvo!"); limpar(); st.rerun()
-            else: st.error("Nome obrigatório")
+        if not nome:
+            st.toast("Erro: O nome é obrigatório!", icon="❌")
+            return
+
+        # Bloqueio de duplicidade (apenas se for novo cadastro)
+        if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
+            st.error(f"⛔ O cliente '{nome}' já existe. Use a busca para editar.")
+            return
+        
+        # Tratamento do Fator para garantir que é número
+        try:
+            fator_seguro = float(st.session_state.get('form_fator', 1.0))
+        except:
+            fator_seguro = 1.0
+
+        # Gravação no Banco de Dados
+        st.session_state['clientes_db'][nome] = {
+            'Tel': st.session_state.get('form_tel', ''),
+            'Email': st.session_state.get('form_email', ''),
+            'End': st.session_state.get('form_end', ''),
+            'CNPJ': st.session_state.get('form_cnpj', ''),
+            'Cidade': st.session_state.get('form_cid', ''),
+            'UF': st.session_state.get('form_uf', ''),
+            'CEP': st.session_state.get('form_cep', ''),
+            'Cod_Cli': st.session_state.get('form_cod', ''),
+            'Fator': fator_seguro
+        }
+        
+        salvar_dados()
+        tipo_acao = "atualizado" if st.session_state['edit_mode'] else "cadastrado"
+        st.toast(f"Cliente {nome} {tipo_acao} com sucesso!", icon="✅")
+        limpar_campos()
+
+    def excluir_cliente(nome_alvo):
+        if nome_alvo in st.session_state['clientes_db']:
+            del st.session_state['clientes_db'][nome_alvo]
+            salvar_dados()
+            st.toast("Cliente removido.", icon="🗑️")
+            st.rerun()
+
+    def preparar_edicao(chave, dados):
+        st.session_state['form_nome'] = str(chave)
+        st.session_state['form_tel'] = str(dados.get('Tel', ''))
+        st.session_state['form_email'] = str(dados.get('Email', ''))
+        st.session_state['form_end'] = str(dados.get('End', ''))
+        st.session_state['form_cnpj'] = str(dados.get('CNPJ', ''))
+        st.session_state['form_cid'] = str(dados.get('Cidade', ''))
+        st.session_state['form_uf'] = str(dados.get('UF', ''))
+        st.session_state['form_cep'] = str(dados.get('CEP', ''))
+        st.session_state['form_cod'] = str(dados.get('Cod_Cli', ''))
+        
+        try:
+            st.session_state['form_fator'] = float(dados.get('Fator', 1.0))
+        except:
+            st.session_state['form_fator'] = 1.0
             
-    if st.session_state['edit_mode']: st.button("Cancelar Edição", on_click=limpar)
+        st.session_state['edit_mode'] = True
+        st.toast(f"Editando: {chave}", icon="✏️")
+
+    # --- 3. ÁREA DE IMPORTAÇÃO (PDF) ---
+    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
+        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
+        if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
+            try:
+                # Chama a função que já existe no seu código lá em cima
+                dados_lidos = ler_pdf_antigo(arquivo_pdf) 
+                if dados_lidos:
+                    st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
+                    st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
+                    st.session_state['form_end'] = str(dados_lidos.get('End', ''))
+                    st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
+                    st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
+                    st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
+                    st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
+                    st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
+                    st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
+                    st.success("Dados extraídos com sucesso!")
+            except NameError: 
+                st.error("Erro: Função de leitura não encontrada. Verifique o início do código.")
+            except Exception as e:
+                st.error(f"Erro ao processar: {e}")
+
+    # --- 4. FORMULÁRIO DE CADASTRO ---
+    with st.form("form_cliente_principal"):
+        st.markdown(f"#### {'✏️ Editando Cliente' if st.session_state['edit_mode'] else '➕ Novo Cliente'}")
+        
+        c1, c2 = st.columns([3, 1])
+        c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
+        c2.text_input("Cód. Cliente", key="form_cod")
+        
+        c3, c4 = st.columns([1, 2])
+        c3.number_input("💲 Fator Preço (1.0 = Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator")
+        c4.text_input("CNPJ", key="form_cnpj")
+        
+        c5, c6 = st.columns([1, 2])
+        c5.text_input("Telefone", key="form_tel")
+        c6.text_input("E-mail", key="form_email", placeholder="email@empresa.com")
+        
+        st.text_input("Endereço", key="form_end")
+        
+        c7, c8, c9 = st.columns([2, 1, 1])
+        c7.text_input("Cidade", key="form_cid")
+        c8.text_input("UF", key="form_uf")
+        c9.text_input("CEP", key="form_cep")
+        
+        st.form_submit_button("💾 SALVAR DADOS", on_click=salvar_cliente)
+
+    # Botão de Cancelar fora do form para não submeter
+    if st.session_state['edit_mode']:
+        st.button("❌ Cancelar Edição", on_click=limpar_campos)
+    else:
+        st.button("🧹 Limpar Campos", on_click=limpar_campos)
     
+    # --- 5. LISTAGEM DE CLIENTES (ÁREA DO ERRO CORRIGIDA) ---
     st.markdown("---")
-    busca = st.text_input("Buscar Cliente")
-    lista = sorted(st.session_state['clientes_db'].keys())
-    if busca: lista = [k for k in lista if busca.lower() in k.lower()]
+    st.subheader("📇 Carteira de Clientes")
     
-    for k in lista:
-        d = st.session_state['clientes_db'][k]
-        try: fator = float(d.get('Fator', 1.0) or 1.0)
-        except: fator = 1.0
+    if st.session_state['clientes_db']:
+        busca = st.text_input("🔍 Buscar Cliente...", placeholder="Digite o nome...")
         
-        if fator == 1.0: txt = "NORMAL"
-        elif fator < 1.0: txt = f"DESC {int((1-fator)*100)}%"
-        else: txt = f"ACRÉSC {int((fator-1)*100)}%"
+        # Ordena a lista
+        lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
         
-        c_info, c_btn = st.columns([5, 1])
-        with c_info:
-            with st.expander(f"{k} [{txt}]"):
-                st.write(f"End: {d.get('End')} | Tel: {d.get('Tel')}")
-                st.write(f"CNPJ: {d.get('CNPJ')}")
-                c_e, c_d = st.columns(2)
-                if c_e.button("EDITAR", key=f"ed_{k}"): carregar(k, d); st.rerun()
-                if c_d.button("EXCLUIR", key=f"del_{k}"): del st.session_state['clientes_db'][k]; salvar_dados(); st.rerun()
-        with c_btn:
-            if d.get('Email'):
-                with st.popover("📋"): st.code(d.get('Email'), language="text")
+        # Filtra se tiver busca
+        if busca: 
+            lista_clientes = [k for k in lista_clientes if busca.lower() in k.lower()]
+        
+        # Cabeçalho Visual
+        h1, h2 = st.columns([5, 1])
+        h1.caption("DADOS DO CLIENTE")
+        h2.caption("AÇÕES")
+
+        for nome in lista_clientes:
+            dados = st.session_state['clientes_db'][nome]
+            
+            # --- BLINDAGEM MATEMÁTICA DA LISTA (AQUI ESTAVA O ERRO) ---
+            try:
+                raw_fator = dados.get('Fator', 1.0)
+                # Força conversão para float, se falhar, usa 1.0
+                fator = float(raw_fator) if raw_fator else 1.0
+            except (ValueError, TypeError):
+                fator = 1.0
+
+            # Lógica de Exibição do Texto (Blindada com try/except e round)
+            try:
+                if fator == 1.0:
+                    txt_fator = "NORMAL"
+                    cor_fator = "blue"
+                elif fator < 1.0:
+                    # round resolve problemas de dizima periodica
+                    desc = int(round((1.0 - fator) * 100))
+                    txt_fator = f"DESC. {desc}%"
+                    cor_fator = "green"
+                else:
+                    acres = int(round((fator - 1.0) * 100))
+                    txt_fator = f"ACRÉSC. {acres}%"
+                    cor_fator = "red"
+            except:
+                txt_fator = "NORMAL"
+                cor_fator = "blue"
+            
+            email = dados.get('Email', '')
+
+            # Layout da Linha
+            col_info, col_btn = st.columns([5, 1])
+            
+            with col_info:
+                with st.expander(f"🏢 {nome} [{txt_fator}]"):
+                    st.write(f"📍 {dados.get('End', '-')}")
+                    st.write(f"📞 {dados.get('Tel', '-')} | CNPJ: {dados.get('CNPJ', '-')}")
+                    st.markdown(f"**Tabela:** :{cor_fator}[{fator:.2f}]")
+                    
+                    b1, b2 = st.columns([1, 1])
+                    b1.button("✏️ EDITAR", key=f"ed_{nome}", on_click=preparar_edicao, args=(nome, dados))
+                    b2.button("🗑️ EXCLUIR", key=f"del_{nome}", on_click=excluir_cliente, args=(nome,))
+            
+            with col_btn:
+                if email:
+                    # Popover Discreto
+                    with st.popover("📋", help="Copiar Email"):
+                        st.code(email, language="text")
+                else:
+                    st.caption("-")
+            
+    else:
+        st.info("Nenhum cliente cadastrado no sistema.")
 
 elif menu == "🛠️ Admin / Backup":
     st.title("🛠️ Admin")
@@ -649,3 +781,4 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
