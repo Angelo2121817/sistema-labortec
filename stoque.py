@@ -469,12 +469,17 @@ elif menu == "💰 Vendas & Orçamentos":
         c_tot, c_act = st.columns([1, 2])
         c_tot.metric("💰 TOTAL", f"R$ {total:,.2f}")
         
-        # --- AQUI ESTÁ A LÓGICA DO NOME ---
-        # 1. Pega a coluna Produto
-        # 2. Converte para lista de textos
-        # 3. Junta com " + "
-        lista_produtos = itens_sel['Produto'].astype(str).values
-        NOME_FINAL_PARA_O_LOG = " + ".join(lista_produtos)
+        # --- AQUI ESTÁ A CORREÇÃO DO NOME ---
+        # Garantia absoluta que vai pegar o nome do produto
+        lista_produtos = itens_sel['Produto'].astype(str).tolist()
+        
+        if len(lista_produtos) == 1:
+            # Se for só 1 produto, usa o nome exato dele
+            NOME_REAL_DO_PRODUTO = lista_produtos[0]
+        else:
+            # Se forem vários, junta com " + "
+            NOME_REAL_DO_PRODUTO = " + ".join(lista_produtos)
+        
         # ----------------------------------
 
         c_orc, c_ped = c_act.columns(2)
@@ -504,11 +509,11 @@ elif menu == "💰 Vendas & Orçamentos":
                 else:
                     msg_confirmacao = "✅ Pedido Confirmado (Sem Baixa)!"
 
-                # REGISTRO NO LOG (AQUI GRAVA O NOME)
+                # REGISTRO NO LOG (AQUI GRAVA O NOME CORRETO)
                 st.session_state['log_vendas'].append({
                     'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
                     'Cliente': cli, 
-                    'Produto': NOME_FINAL_PARA_O_LOG,  # <--- USA A VARIÁVEL FORÇADA
+                    'Produto': NOME_REAL_DO_PRODUTO,  # <--- USA A VARIÁVEL QUE CRIAMOS ACIMA
                     'Qtd': itens_sel['Qtd'].sum(), 
                     'Vendedor': vend,
                     'Valor_Total': total
@@ -842,6 +847,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
