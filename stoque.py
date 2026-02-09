@@ -759,35 +759,59 @@ elif menu == "💰 Vendas & Orçamentos":
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes & Precificação")
     
-    # Adicionamos o 'form_fator' na lista de campos
+    # --- CONTROLE DE MODO (NOVO OU EDIÇÃO) ---
+    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
+
+    # Lista de campos do formulário
     campos = ['form_nome', 'form_tel', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
     for c in campos: 
         if c not in st.session_state: 
-            # O fator padrão é 1.0 (Preço normal)
             st.session_state[c] = 1.0 if c == 'form_fator' else ""
 
     def limpar_campos():
+        # Reseta tudo e sai do modo de edição
         for c in campos: 
             st.session_state[c] = 1.0 if c == 'form_fator' else ""
+        st.session_state['edit_mode'] = False
 
     def salvar_no_callback():
-        nome = st.session_state['form_nome']
-        if nome:
-            st.session_state['clientes_db'][nome] = {
-                'Tel': st.session_state['form_tel'], 'End': st.session_state['form_end'],
-                'CNPJ': st.session_state['form_cnpj'], 'Cidade': st.session_state['form_cid'],
-                'UF': st.session_state['form_uf'], 'CEP': st.session_state['form_cep'], 
-                'Cod_Cli': st.session_state['form_cod'],
-                # AQUI ESTÁ A MÁGICA: Salvamos o Fator
-                'Fator': float(st.session_state['form_fator'])
-            }
-            salvar_dados(); st.toast(f"Cliente {nome} salvo com Tabela Personalizada!", icon="✅"); limpar_campos()
-        else: st.toast("Erro: Nome obrigatório!", icon="❌")
+        nome = st.session_state['form_nome'].strip() # Remove espaços extras
+        
+        if not nome:
+            st.toast("Erro: Nome obrigatório!", icon="❌")
+            return
+
+        # --- SISTEMA DE DEFESA CONTRA DUPLICIDADE ---
+        # Se NÃO estiver editando E o nome já existir na lista:
+        if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
+            st.error(f"⛔ PARE! O cliente '{nome}' já está cadastrado. Se quiser alterar, busque na lista abaixo e clique no lápis (✏️).")
+            return # Aborta a missão (não salva)
+        
+        # Se passou pela defesa, salva (Cria ou Atualiza)
+        st.session_state['clientes_db'][nome] = {
+            'Tel': st.session_state['form_tel'], 'End': st.session_state['form_end'],
+            'CNPJ': st.session_state['form_cnpj'], 'Cidade': st.session_state['form_cid'],
+            'UF': st.session_state['form_uf'], 'CEP': st.session_state['form_cep'], 
+            'Cod_Cli': st.session_state['form_cod'],
+            'Fator': float(st.session_state['form_fator'])
+        }
+        salvar_dados()
+        
+        if st.session_state['edit_mode']:
+            st.toast(f"Dados de {nome} atualizados!", icon="🔄")
+        else:
+            st.toast(f"Novo cliente {nome} cadastrado!", icon="✅")
+            
+        limpar_campos()
 
     def excluir_cliente(nome):
-        if nome in st.session_state['clientes_db']: del st.session_state['clientes_db'][nome]; salvar_dados(); st.toast("Removido.", icon="🗑️")
+        if nome in st.session_state['clientes_db']: 
+            del st.session_state['clientes_db'][nome]
+            salvar_dados()
+            st.toast("Removido.", icon="🗑️")
 
     def preparar_edicao(k, d):
+        # Carrega os dados nos campos
         st.session_state['form_nome'] = str(k)
         st.session_state['form_tel'] = str(d.get('Tel', ''))
         st.session_state['form_end'] = str(d.get('End', ''))
@@ -796,20 +820,49 @@ elif menu == "👥 Clientes":
         st.session_state['form_uf'] = str(d.get('UF', ''))
         st.session_state['form_cep'] = str(d.get('CEP', ''))
         st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-        # Carrega o fator existente ou 1.0
         st.session_state['form_fator'] = float(d.get('Fator', 1.0))
+        
+        # ATIVA O MODO DE EDIÇÃO (Libera salvar por cima)
+        st.session_state['edit_mode'] = True
+        st.toast(f"Editando: {k}", icon="✏️")
+
+    # --- IMPORTAR PDF (MANTIDO) ---
+    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
+        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
+        if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
+            try:
+                dados_lidos = ler_pdf_antigo(arquivo_pdf)
+                if dados_lidos:
+                    st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
+                    st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
+                    st.session_state['form_end'] = str(dados_lidos.get('End', ''))
+                    st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
+                    st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
+                    st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
+                    st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
+                    st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
+                    st.success("Dados extraídos! Verifique se já existe antes de salvar.")
+            except NameError: st.error("Erro na função de leitura.")
 
     # --- FORMULÁRIO BLINDADO ---
     with st.form("form_cliente"):
-        st.subheader("📝 Dados & Tabela de Preço")
+        # Mostra em qual modo estamos
+        if st.session_state['edit_mode']:
+            st.markdown("#### ✏️ MODO EDIÇÃO: Alterando cadastro existente")
+        else:
+            st.markdown("#### ➕ MODO NOVO: Cadastrando cliente inédito")
         
         c1, c2 = st.columns([3, 1])
-        c1.text_input("Nome / Razão Social", key="form_nome")
+        # Se estiver editando, bloqueia a mudança de nome para evitar duplicidade acidental (Opcional, mas recomendado)
+        # Aqui deixei liberado, mas com o aviso se tentar salvar um nome novo que já existe
+        c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
         c2.text_input("Cód. Cliente (Interno)", key="form_cod")
         
+        if st.session_state['edit_mode']:
+            st.caption("⚠️ O nome não pode ser alterado na edição para manter o histórico. Se precisar mudar o nome, exclua e crie outro.")
+
         c_fator, c_cnpj = st.columns([1, 2])
-        # O CAMPO NOVO:
-        c_fator.number_input("💲 Fator de Preço (1.0 = Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator", help="Ex: 0.90 dá 10% de desconto. 1.10 aumenta 10%.")
+        c_fator.number_input("💲 Fator de Preço (1.0 = Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator", help="Ex: 0.90 dá 10% de desconto.")
         c_cnpj.text_input("CNPJ", key="form_cnpj")
         
         c4, c5 = st.columns([1, 2])
@@ -821,7 +874,7 @@ elif menu == "👥 Clientes":
         
         st.form_submit_button("💾 SALVAR DADOS", on_click=salvar_no_callback)
 
-    st.button("🧹 Limpar / Cancelar", on_click=limpar_campos)
+    st.button("🧹 Limpar / Cancelar Edição", on_click=limpar_campos)
     
     st.markdown("---"); st.subheader("📇 Carteira de Clientes")
     if st.session_state['clientes_db']:
@@ -832,7 +885,7 @@ elif menu == "👥 Clientes":
             d = st.session_state['clientes_db'][k]
             fator = d.get('Fator', 1.0)
             
-            # Mostra visualmente qual é a tabela do cliente
+            # Visual Tático da Tabela
             cor_tabela = "blue" if fator == 1.0 else ("green" if fator < 1.0 else "red")
             tipo_tabela = "NORMAL" if fator == 1.0 else (f"DESC. {int((1-fator)*100)}%" if fator < 1.0 else f"ACRÉSC. {int((fator-1)*100)}%")
             
@@ -842,10 +895,10 @@ elif menu == "👥 Clientes":
                 st.markdown(f"**Fator de Precificação:** :{cor_tabela}[{fator:.2f}]")
                 
                 c_edit, c_del = st.columns([1, 1])
+                # Botão Editar ativa o MODO EDIÇÃO
                 c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
                 c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
     else: st.info("Nenhum cliente cadastrado.")
-
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral")
     if not st.session_state["estoque"].empty:
@@ -1141,6 +1194,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
