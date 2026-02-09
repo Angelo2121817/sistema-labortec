@@ -249,8 +249,12 @@ def salvar_dados():
             conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state["log_laudos"]))
 
         # 4. SALVAR AVISOS (CORREÇÃO SOLICITADA)
+               # ... dentro de salvar_dados ...
+
+        # 4. SALVAR AVISOS (COM CABEÇALHO GARANTIDO)
         msg_aviso = st.session_state.get('aviso_geral', '')
-        df_aviso = pd.DataFrame([{'Mensagem': msg_aviso}])
+        # Cria um DataFrame explícito com coluna Mensagem
+        df_aviso = pd.DataFrame({'Mensagem': [msg_aviso]})
         conn.update(worksheet="Avisos", data=df_aviso)
 
         st.toast("✅ Dados sincronizados com a nuvem!", icon="☁️")
@@ -996,4 +1000,5 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
