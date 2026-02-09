@@ -762,7 +762,6 @@ elif menu == "👥 Clientes":
     # --- CONTROLE DE MODO (NOVO OU EDIÇÃO) ---
     if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
 
-    # Adicionamos 'form_email' na lista de campos
     campos = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
     for c in campos: 
         if c not in st.session_state: 
@@ -780,14 +779,13 @@ elif menu == "👥 Clientes":
             st.toast("Erro: Nome obrigatório!", icon="❌")
             return
 
-        # Defesa contra duplicidade (Só se for novo)
         if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
             st.error(f"⛔ O cliente '{nome}' já existe. Use a busca abaixo para editar.")
             return
         
         st.session_state['clientes_db'][nome] = {
             'Tel': st.session_state['form_tel'], 
-            'Email': st.session_state['form_email'], # <--- SALVANDO EMAIL
+            'Email': st.session_state['form_email'],
             'End': st.session_state['form_end'],
             'CNPJ': st.session_state['form_cnpj'], 'Cidade': st.session_state['form_cid'],
             'UF': st.session_state['form_uf'], 'CEP': st.session_state['form_cep'], 
@@ -807,14 +805,19 @@ elif menu == "👥 Clientes":
     def preparar_edicao(k, d):
         st.session_state['form_nome'] = str(k)
         st.session_state['form_tel'] = str(d.get('Tel', ''))
-        st.session_state['form_email'] = str(d.get('Email', '')) # <--- CARREGANDO EMAIL
+        st.session_state['form_email'] = str(d.get('Email', ''))
         st.session_state['form_end'] = str(d.get('End', ''))
         st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
         st.session_state['form_cid'] = str(d.get('Cidade', ''))
         st.session_state['form_uf'] = str(d.get('UF', ''))
         st.session_state['form_cep'] = str(d.get('CEP', ''))
         st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-        st.session_state['form_fator'] = float(d.get('Fator', 1.0))
+        # Blindagem também aqui
+        try:
+            st.session_state['form_fator'] = float(d.get('Fator', 1.0))
+        except:
+            st.session_state['form_fator'] = 1.0
+            
         st.session_state['edit_mode'] = True
         st.toast(f"Editando: {k}", icon="✏️")
 
@@ -832,7 +835,7 @@ elif menu == "👥 Clientes":
                     st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
                     st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
                     st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
-                    st.session_state['form_email'] = str(dados_lidos.get('Email', '')) # Tenta pegar do PDF se tiver
+                    st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
                     st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
                     st.success("Dados extraídos!")
             except NameError: st.error("Erro na função de leitura.")
@@ -840,7 +843,6 @@ elif menu == "👥 Clientes":
     # --- FORMULÁRIO ---
     with st.form("form_cliente"):
         st.markdown("#### 📝 Dados Cadastrais")
-        
         c1, c2 = st.columns([3, 1])
         c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
         c2.text_input("Cód. Cliente", key="form_cod")
@@ -849,13 +851,11 @@ elif menu == "👥 Clientes":
         c_fator.number_input("💲 Fator Preço (1.0=Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator")
         c_cnpj.text_input("CNPJ", key="form_cnpj")
         
-        # LINHA NOVA: Telefone e Email juntos
         c_tel, c_mail = st.columns([1, 2])
         c_tel.text_input("Telefone", key="form_tel")
         c_mail.text_input("E-mail", key="form_email", placeholder="contato@empresa.com")
         
         st.text_input("Endereço", key="form_end")
-        
         c6, c7, c8 = st.columns([2, 1, 1])
         c6.text_input("Cidade", key="form_cid"); c7.text_input("UF", key="form_uf"); c8.text_input("CEP", key="form_cep")
         
@@ -871,25 +871,59 @@ elif menu == "👥 Clientes":
         busca = st.text_input("🔍 Buscar...", placeholder="Nome da empresa...")
         lista = sorted(list(st.session_state['clientes_db'].keys()))
         if busca: lista = [k for k in lista if busca.lower() in k.lower()]
+        
+        c_h1, c_h2 = st.columns([6, 1])
+        c_h1.caption("📂 NOME DA EMPRESA")
+        c_h2.caption("📋 COPIAR")
+
         for k in lista:
             d = st.session_state['clientes_db'][k]
-            fator = d.get('Fator', 1.0)
+            
+            # --- BLINDAGEM CONTRA ERRO MATEMÁTICO ---
+            try:
+                raw_fator = d.get('Fator', 1.0)
+                fator = float(raw_fator)
+                if pd.isna(fator): fator = 1.0 # Se for NaN, vira 1.0
+            except:
+                fator = 1.0 # Se der erro, assume padrão
+            # ----------------------------------------
+
+            email_cli = d.get('Email', '')
             
             cor_tabela = "blue" if fator == 1.0 else ("green" if fator < 1.0 else "red")
-            tipo_tabela = "NORMAL" if fator == 1.0 else (f"DESC. {int((1-fator)*100)}%" if fator < 1.0 else f"ACRÉSC. {int((fator-1)*100)}%")
             
-            with st.expander(f"🏢 {k} [{tipo_tabela}]"):
-                col_a, col_b = st.columns(2)
-                col_a.write(f"📍 {d.get('End', '')}")
-                # Mostra o Email aqui agora
-                col_b.write(f"📞 {d.get('Tel', '')} | 📧 {d.get('Email', '-')}")
-                col_b.write(f"CNPJ: {d.get('CNPJ', '')}")
-                
-                st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
-                
-                c_edit, c_del = st.columns([1, 1])
-                c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
-                c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
+            # Cálculo seguro do texto da tabela
+            try:
+                if fator == 1.0:
+                    tipo_tabela = "NORMAL"
+                elif fator < 1.0:
+                    tipo_tabela = f"DESC. {int((1-fator)*100)}%"
+                else:
+                    tipo_tabela = f"ACRÉSC. {int((fator-1)*100)}%"
+            except:
+                tipo_tabela = "NORMAL"
+
+            col_expander, col_btn = st.columns([6, 1])
+            
+            with col_expander:
+                with st.expander(f"🏢 {k} [{tipo_tabela}]"):
+                    c_det1, c_det2 = st.columns(2)
+                    c_det1.write(f"📍 {d.get('End', '-')}")
+                    c_det2.write(f"📞 {d.get('Tel', '-')}")
+                    c_det2.write(f"📄 CNPJ: {d.get('CNPJ', '-')}")
+                    st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
+                    
+                    c_edit, c_del = st.columns([1, 1])
+                    c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
+                    c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
+            
+            with col_btn:
+                if email_cli:
+                    with st.popover("📋", help="Ver e Copiar Email"):
+                        st.code(email_cli, language="text")
+                else:
+                    st.caption("🚫")
+            
     else: st.info("Nenhum cliente cadastrado.")
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral")
@@ -1186,6 +1220,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
