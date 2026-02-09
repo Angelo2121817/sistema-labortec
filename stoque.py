@@ -208,8 +208,7 @@ def carregar_dados():
         
         return True
     except Exception as e:
-        return False
-        
+        return False        
         def salvar_dados():
     """Salva TODOS os dados no Google Sheets"""
     try:
@@ -971,6 +970,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
