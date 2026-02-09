@@ -572,6 +572,102 @@ if menu == "📊 Dashboard":
             top_prods = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top_prods, color="#ffb400", horizontal=True)
         else: st.caption("Aguardando dados...")
+        # ==============================================================================
+# GESTÃO DE LAUDOS (RESTAURADA E BLINDADA)
+# ==============================================================================
+elif menu == "🧪 Laudos":
+    st.title("🧪 Gestão de Laudos")
+    
+    # --- 1. AGENDAMENTO (DATA INPUT CONFIGURADO BR) ---
+    with st.expander("📅 Agendar Nova Coleta", expanded=True):
+        with st.form("f_laudo"):
+            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
+            c1, c2 = st.columns(2)
+            
+            # Format="DD/MM/YYYY" força o calendário visualmente
+            data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
+            
+            if st.form_submit_button("Agendar"):
+                novo = {
+                    'Cliente': cli_l, 
+                    # Strftime garante que salva como texto BR na lista
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
+                    'Status': 'Pendente'
+                }
+                st.session_state['log_laudos'].append(novo)
+                salvar_dados()
+                st.success(f"Agendado para {data_l.strftime('%d/%m/%Y')}!")
+                st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Editar Previsões e Status")
+    
+    laudos = st.session_state.get('log_laudos', [])
+    
+    # Filtra (Esconde arquivados da edição rápida)
+    laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
+    
+    if not laudos_ativos: 
+        st.info("Sem laudos ativos para editar.")
+    else:
+        # Prepara o DataFrame
+        df_p = pd.DataFrame(laudos)
+        df_p['ID_Real'] = range(len(laudos))
+        
+        # Filtra visualmente
+        df_view = df_p[df_p['Status'] != 'Arquivado'].copy()
+
+        # --- TRUQUE TÁTICO: CONVERTER PARA DATA REAL ---
+        # O Editor precisa que seja 'datetime' para mostrar o calendário
+        df_view['Data_Coleta'] = pd.to_datetime(df_view['Data_Coleta'], dayfirst=True, errors='coerce')
+        df_view['Data_Resultado'] = pd.to_datetime(df_view['Data_Resultado'], dayfirst=True, errors='coerce')
+
+        ed_p = st.data_editor(
+            df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
+            use_container_width=True, 
+            hide_index=True, 
+            disabled=['ID_Real', 'Cliente'],
+            column_config={
+                "Data_Coleta": st.column_config.DateColumn(
+                    "📅 Coleta", 
+                    format="DD/MM/YYYY", 
+                    step=1
+                ),
+                "Data_Resultado": st.column_config.DateColumn(
+                    "🧪 Previsão", 
+                    format="DD/MM/YYYY", 
+                    step=1
+                ),
+                "Status": st.column_config.SelectboxColumn(
+                    "Situação", 
+                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
+                )
+            }
+        )
+
+        if st.button("💾 SALVAR ALTERAÇÕES"):
+            for _, row in ed_p.iterrows():
+                idx = int(row['ID_Real'])
+                
+                # --- CONVERSÃO REVERSA (DATA -> TEXTO BR) ---
+                nova_coleta = row['Data_Coleta']
+                if hasattr(nova_coleta, 'strftime'):
+                    nova_coleta = nova_coleta.strftime("%d/%m/%Y")
+                
+                nova_previsao = row['Data_Resultado']
+                if hasattr(nova_previsao, 'strftime'):
+                    nova_previsao = nova_previsao.strftime("%d/%m/%Y")
+
+                # Atualiza a memória principal
+                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(nova_coleta)
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(nova_previsao)
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            
+            salvar_dados()
+            st.success("Dados atualizados!")
+            st.rerun()
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
@@ -1045,6 +1141,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
