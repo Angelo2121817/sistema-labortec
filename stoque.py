@@ -172,7 +172,7 @@ def carregar_dados():
             else: st.session_state["clientes_db"] = {}
 
         # Carrega Logs e Aviso
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: # <--- Adicionei Avisos aqui
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: 
             try:
                 df = conn.read(worksheet=aba, ttl=0)
             except:
@@ -187,8 +187,10 @@ def carregar_dados():
                     if "Status" not in df.columns: df["Status"] = "Pendente"
                     if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
                     if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
+                    # Aplica formatação de data apenas se necessário
                     if "Data_Coleta" in df.columns: df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
                     if "Data_Resultado" in df.columns: df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
+                    
                     for c in ["Cliente", "Status"]: df[c] = df[c].fillna("").astype(str)
                     st.session_state['log_laudos'] = df.to_dict("records")
 
@@ -208,8 +210,47 @@ def carregar_dados():
         
         return True
     except Exception as e:
+        # st.error(f"Erro ao carregar: {e}") # Descomente para debugar
         return False
 
+# --- FUNÇÃO FUNDAMENTAL QUE ESTAVA FALTANDO ---
+def salvar_dados():
+    """Salva todas as tabelas importantes de volta para o Google Sheets."""
+    try:
+        # 1. Salvar Estoque
+        if "estoque" in st.session_state:
+            conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+
+        # 2. Salvar Clientes (Converter Dic -> DataFrame)
+        if "clientes_db" in st.session_state:
+            try:
+                df_c = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient='index')
+                df_c.reset_index(inplace=True)
+                df_c.rename(columns={'index': 'Nome'}, inplace=True)
+                conn.update(worksheet="Clientes", data=df_c)
+            except Exception as e:
+                print(f"Erro ao salvar clientes: {e}")
+
+        # 3. Salvar Logs
+        if "log_vendas" in st.session_state: 
+            conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state["log_vendas"]))
+        
+        if "log_entradas" in st.session_state: 
+            conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state["log_entradas"]))
+        
+        if "log_laudos" in st.session_state: 
+            conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state["log_laudos"]))
+
+        # 4. SALVAR AVISOS (CORREÇÃO SOLICITADA)
+        msg_aviso = st.session_state.get('aviso_geral', '')
+        df_aviso = pd.DataFrame([{'Mensagem': msg_aviso}])
+        conn.update(worksheet="Avisos", data=df_aviso)
+
+        st.toast("✅ Dados sincronizados com a nuvem!", icon="☁️")
+    except Exception as e:
+        st.error(f"Erro ao salvar dados na nuvem: {e}")
+
+# Inicialização
 if "dados_carregados" not in st.session_state:
     carregar_dados()
     st.session_state["dados_carregados"] = True
@@ -296,8 +337,15 @@ st.sidebar.markdown("---")
 with st.sidebar.expander("📢 DEFINIR AVISO"):
     aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
     c1, c2 = st.columns(2)
-    if c1.button("💾 Gravar"): st.session_state['aviso_geral'] = aviso_txt; st.rerun()
-    if c2.button("🗑️ Apagar"): st.session_state['aviso_geral'] = ""; st.rerun()
+    # --- CORREÇÃO APLICADA AQUI: SALVAR DADOS ANTES DO RERUN ---
+    if c1.button("💾 Gravar"): 
+        st.session_state['aviso_geral'] = aviso_txt
+        salvar_dados() # Chama a função que salva na planilha
+        st.rerun()
+    if c2.button("🗑️ Apagar"): 
+        st.session_state['aviso_geral'] = ""
+        salvar_dados() # Chama a função que salva na planilha
+        st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Personalizar Tela")
@@ -507,6 +555,7 @@ elif menu == "💰 Vendas & Orçamentos":
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
                 pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "PEDIDO")
                 st.download_button("📥 Baixar Pedido PDF", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
     if st.session_state['estoque'].empty: st.warning("Cadastre produtos!"); st.stop()
@@ -525,7 +574,8 @@ elif menu == "📥 Entrada de Estoque":
                 st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
                 st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
                 salvar_dados(); st.success("Entrada Realizada!"); st.rerun()
-                # ==============================================================================
+
+# ==============================================================================
 # 8. CONFERÊNCIA GERAL (MÓDULO REINSTALADO)
 # ==============================================================================
 elif menu == "📋 Conferência Geral":
@@ -939,15 +989,3 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
-
-
-
-
-
-
-
-
-
-
-
-
