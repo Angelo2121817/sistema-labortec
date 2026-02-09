@@ -920,19 +920,52 @@ elif menu == "📋 Conferência Geral":
 
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
-    if st.session_state['estoque'].empty: st.warning("Sem produtos!"); st.stop()
-    opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
-    prod = st.selectbox("Selecione o Produto", opcoes)
-    qtd = st.number_input("Quantidade (KG)", min_value=0.0)
-    if st.button("Confirmar Entrada"):
-        cod = prod.split(" - ")[0]
-        mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-        if not st.session_state['estoque'][mask].empty:
-            idx = st.session_state['estoque'][mask].index[0]
-            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
-            st.session_state['estoque'].at[idx, 'Saldo'] = atual + float(qtd)
-            st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
-            salvar_dados(); st.success("Estoque Atualizado!")
+    
+    if st.session_state['estoque'].empty: 
+        st.warning("Cadastre produtos no estoque primeiro!")
+        st.stop()
+
+    with st.form("f_ent"):
+        # Cria lista de opções
+        opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
+        prod_sel = st.selectbox("Selecione o Produto", opcoes)
+        qtd = st.number_input("Quantidade (KG)", min_value=0.0, step=1.0)
+        
+        if st.form_submit_button("✅ Confirmar Entrada"):
+            # 1. Identifica o Produto
+            cod = prod_sel.split(" - ")[0]
+            mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
+            
+            if not st.session_state['estoque'][mask].empty:
+                idx = st.session_state['estoque'][mask].index[0]
+                
+                # 2. BLINDAGEM MATEMÁTICA (Aqui estava o erro)
+                # Converte o saldo atual para número na marra antes de somar
+                try:
+                    saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
+                except:
+                    saldo_atual = 0.0
+                
+                novo_saldo = saldo_atual + float(qtd)
+                
+                # 3. Atualiza
+                st.session_state['estoque'].at[idx, 'Saldo'] = novo_saldo
+                
+                # 4. Registra no Log
+                nome_prod = st.session_state['estoque'].at[idx, 'Produto']
+                st.session_state['log_entradas'].append({
+                    'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
+                    'Produto': nome_prod, 
+                    'Qtd': qtd, 
+                    'Usuario': st.session_state['usuario_nome']
+                })
+                
+                # 5. Salva
+                salvar_dados()
+                st.success(f"Entrada de +{qtd}Kg em {nome_prod} realizada!")
+                st.rerun()
+            else:
+                st.error("Erro: Produto não encontrado no índice.")
             # ==============================================================================
 # 9. ÁREA RESTRITA (BACKUP E RESET)
 # ==============================================================================
@@ -1036,6 +1069,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
