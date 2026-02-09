@@ -868,6 +868,8 @@ elif menu == "👥 Clientes":
     
    # ... (Parte de cima do formulário continua igual) ...
 
+   # ... (Parte de cima do formulário continua igual) ...
+
     st.markdown("---"); st.subheader("📇 Carteira de Clientes")
     if st.session_state['clientes_db']:
         busca = st.text_input("🔍 Buscar...", placeholder="Nome da empresa...")
@@ -875,9 +877,9 @@ elif menu == "👥 Clientes":
         if busca: lista = [k for k in lista if busca.lower() in k.lower()]
         
         # Cabeçalho Tático
-        c_h1, c_h2 = st.columns([5, 1])
+        c_h1, c_h2 = st.columns([6, 1])
         c_h1.caption("📂 NOME DA EMPRESA")
-        c_h2.caption("📧 EMAIL")
+        c_h2.caption("📋 COPIAR")
 
         for k in lista:
             d = st.session_state['clientes_db'][k]
@@ -887,8 +889,8 @@ elif menu == "👥 Clientes":
             cor_tabela = "blue" if fator == 1.0 else ("green" if fator < 1.0 else "red")
             tipo_tabela = "NORMAL" if fator == 1.0 else (f"DESC. {int((1-fator)*100)}%" if fator < 1.0 else f"ACRÉSC. {int((fator-1)*100)}%")
             
-            # DIVISÃO EM COLUNAS (90% Nome | 10% Botão Email)
-            col_expander, col_email = st.columns([5, 1])
+            # DIVISÃO EM COLUNAS (Ajustei para o botão ficar bem no cantinho)
+            col_expander, col_btn = st.columns([6, 1])
             
             with col_expander:
                 with st.expander(f"🏢 {k} [{tipo_tabela}]"):
@@ -903,12 +905,11 @@ elif menu == "👥 Clientes":
                     c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
                     c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
             
-            with col_email:
+            with col_btn:
                 if email_cli:
-                    # O TRUQUE DO POPOVER (O Bolso Secreto)
-                    # Cria um botão pequeno "📧". Ao clicar, mostra o email para copiar.
-                    with st.popover("📧", help="Pegar Email"):
-                        st.markdown("**Copiar Email:**")
+                    # MUDANÇA TÁTICA: Ícone de Prancheta (📋)
+                    # Ao clicar, abre o email pronto para copiar
+                    with st.popover("📋", help="Ver e Copiar Email"):
                         st.code(email_cli, language="text")
                 else:
                     st.caption("🚫")
@@ -1209,6 +1210,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
