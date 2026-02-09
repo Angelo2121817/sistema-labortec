@@ -195,25 +195,6 @@ def carregar_dados():
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
                 
-                # --- AQUI ESTAVA FALTANDO A LÓGICA DO AVISO ---
-                elif aba == "Avisos":
-                    if "Mensagem" in df.columns and len(df) > 0:
-                        # Pega a primeira linha da coluna Mensagem
-                        st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
-                    else:
-                        st.session_state['aviso_geral'] = ""
-            else:
-                # Se a aba estiver vazia
-                if aba == "Avisos": st.session_state['aviso_geral'] = ""
-                else: st.session_state[aba.lower()] = []
-        return True
-    except Exception as e:
-        return False
-                elif aba in ["Log_Vendas", "Log_Entradas"]:
-                    if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
-                    st.session_state[aba.lower()] = df.to_dict("records")
-                
-                # --- NOVA LÓGICA DO AVISO ---
                 elif aba == "Avisos":
                     if "Mensagem" in df.columns and len(df) > 0:
                         st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
@@ -222,7 +203,6 @@ def carregar_dados():
             else:
                 if aba == "Avisos": st.session_state['aviso_geral'] = ""
                 else: st.session_state[aba.lower()] = []
-        
         return True
     except Exception as e:
         return False
@@ -993,6 +973,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
