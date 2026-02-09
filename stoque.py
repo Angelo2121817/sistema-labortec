@@ -745,49 +745,122 @@ elif menu == "📦 Estoque":
 # ==============================================================================
 # 8. CONFERÊNCIA (AGORA COM ARQUIVAMENTO DE LAUDOS)
 # ==============================================================================
+# ==============================================================================
+# 8. CONFERÊNCIA (COM PROTOCOLO DE LIMPEZA / EXCLUSÃO)
+# ==============================================================================
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência Tática")
-    tab1, tab2, tab3 = st.tabs(["📊 Vendas", "📥 Entradas", "🧪 Laudos & Arquivamento"])
+    
+    # Abas para organizar
+    tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
 
+    # --- ABA 1: VENDAS (COM EXCLUSÃO EM MASSA) ---
     with tab1:
+        st.caption("Para apagar: Selecione a linha e pressione DELETE ou clique na lixeira ao lado da linha.")
+        
         if st.session_state.get('log_vendas'):
-            st.dataframe(pd.DataFrame(st.session_state['log_vendas']).iloc[::-1], use_container_width=True)
-        else: st.info("Nenhuma venda.")
+            df_v = pd.DataFrame(st.session_state['log_vendas'])
+            
+            # Editor que permite deletar linhas (num_rows="dynamic")
+            vendas_editadas = st.data_editor(
+                df_v, 
+                use_container_width=True, 
+                num_rows="dynamic", # Isso libera a exclusão
+                key="editor_log_vendas",
+                hide_index=True
+            )
+            
+            # Botão para confirmar a limpeza
+            if st.button("💾 SALVAR ALTERAÇÕES (VENDAS)", type="primary"):
+                st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
+                salvar_dados()
+                st.success("Histórico de vendas atualizado!")
+                st.rerun()
+        else:
+            st.info("Nenhuma venda registrada.")
 
+    # --- ABA 2: ENTRADAS (COM EXCLUSÃO EM MASSA) ---
     with tab2:
+        st.caption("Para corrigir lançamentos errados, edite ou apague a linha abaixo.")
+        
         if st.session_state.get('log_entradas'):
-            st.dataframe(pd.DataFrame(st.session_state['log_entradas']).iloc[::-1], use_container_width=True)
-        else: st.info("Nenhuma entrada.")
+            df_e = pd.DataFrame(st.session_state['log_entradas'])
+            
+            entradas_editadas = st.data_editor(
+                df_e, 
+                use_container_width=True, 
+                num_rows="dynamic",
+                key="editor_log_entradas",
+                hide_index=True
+            )
+            
+            if st.button("💾 SALVAR ALTERAÇÕES (ENTRADAS)", type="primary"):
+                st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
+                salvar_dados()
+                st.success("Histórico de entradas atualizado!")
+                st.rerun()
+        else:
+            st.info("Nenhuma entrada registrada.")
 
+    # --- ABA 3: LAUDOS (COM EXCLUSÃO DE ARQUIVO MORTO) ---
     with tab3:
         laudos = st.session_state.get('log_laudos', [])
+        
+        # Separa o joio do trigo
         pendentes = [l for l in laudos if l.get('Status') != 'Arquivado']
         arquivados = [l for l in laudos if l.get('Status') == 'Arquivado']
 
-        st.subheader(f"⚠️ Pendentes: {len(pendentes)}")
-        if not pendentes: st.success("Mesa limpa!")
+        # PARTE 1: PENDENTES (Foco em Resolver/Arquivar)
+        st.markdown("#### ⚠️ Pendentes (Em Análise)")
+        if not pendentes:
+            st.success("Tudo limpo por aqui.")
         else:
+            # Mostra pendentes apenas com opção de Arquivar
             for i, item in enumerate(laudos):
                 if item.get('Status') != 'Arquivado':
-                    with st.expander(f"📄 {item['Cliente']} | {item['Data_Coleta']}"):
+                    with st.expander(f"📄 {item['Cliente']} | Coleta: {item['Data_Coleta']}"):
                         c1, c2 = st.columns([2, 1])
                         c1.write(f"**Previsão:** {item.get('Data_Resultado', '-')}")
-                        c1.write(f"**Status:** {item.get('Status', 'Pendente')}")
-                        link_drive = c1.text_input("🔗 Link Arquivo:", key=f"link_{i}")
+                        link = c1.text_input("🔗 Link do PDF:", key=f"link_{i}", value=item.get('Link_Arquivo', ''))
+                        
                         c2.write(""); c2.write("")
-                        if c2.button("📂 ARQUIVAR", key=f"btn_arq_{i}", type="primary"):
+                        if c2.button("📂 ARQUIVAR", key=f"btn_arq_{i}"):
                             st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
-                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link_drive
+                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link
                             st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
-                            salvar_dados(); st.toast("Arquivado!"); st.rerun()
+                            salvar_dados()
+                            st.rerun()
 
         st.markdown("---")
-        with st.expander(f"🗄️ Arquivo Morto ({len(arquivados)})"):
-            if arquivados:
-                df_arq = pd.DataFrame(arquivados)
-                cols_show = [c for c in ['Cliente', 'Data_Coleta', 'Data_Arquivamento', 'Link_Arquivo'] if c in df_arq.columns]
-                st.dataframe(df_arq[cols_show], use_container_width=True)
-            else: st.info("Vazio.")
+        
+        # PARTE 2: ARQUIVO MORTO (Foco em Excluir/Limpar)
+        st.markdown(f"#### 🗄️ Arquivo Morto ({len(arquivados)})")
+        st.caption("Aqui ficam os laudos antigos. Use o botão **EXCLUIR** para remover definitivamente do sistema.")
+
+        if not arquivados:
+            st.info("Arquivo morto vazio.")
+        else:
+            # Lista Inversa (Mais recentes primeiro) para facilitar
+            for i, item in enumerate(laudos):
+                if item.get('Status') == 'Arquivado':
+                    # Card Vermelho Claro para indicar item velho
+                    with st.expander(f"🗄️ {item['Cliente']} | Arquivado em: {item.get('Data_Arquivamento', '?')}"):
+                        col_a, col_b = st.columns([3, 1])
+                        
+                        col_a.markdown(f"**Coleta:** {item['Data_Coleta']} | **Resultado:** {item['Data_Resultado']}")
+                        if item.get('Link_Arquivo'):
+                            col_a.markdown(f"🔗 [Acessar Arquivo na Nuvem]({item['Link_Arquivo']})")
+                        else:
+                            col_a.caption("Sem link de arquivo salvo.")
+
+                        # BOTÃO DE EXCLUSÃO DEFINITIVA
+                        col_b.write("")
+                        if col_b.button("🗑️ APAGAR", key=f"del_laudo_{i}", type="primary"):
+                            # Remove o item da lista principal usando o índice
+                            st.session_state['log_laudos'].pop(i)
+                            salvar_dados()
+                            st.toast("Registro apagado do mapa!", icon="💥")
+                            st.rerun()
 
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
@@ -907,6 +980,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
