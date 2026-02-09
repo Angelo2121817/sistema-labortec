@@ -405,6 +405,13 @@ elif menu == "🧪 Laudos":
                 r = row['Data_Resultado'].strftime("%d/%m/%Y") if hasattr(row['Data_Resultado'], 'strftime') else str(row['Data_Resultado'])
                 st.session_state['log_laudos'][idx].update({'Data_Coleta': c, 'Data_Resultado': r, 'Status': row['Status']})
             salvar_dados(); st.success("Salvo!"); st.rerun()
+            if 'aviso_geral' in st.session_state:
+            df_aviso = pd.DataFrame([{"Mensagem": st.session_state['aviso_geral']}])
+            conn.update(worksheet="Avisos", data=df_aviso)
+            
+        st.toast("✅ Sincronizado!")
+    except: 
+        st.error("Erro ao salvar")
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
@@ -939,6 +946,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
