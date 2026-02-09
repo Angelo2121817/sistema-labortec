@@ -336,6 +336,79 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     pdf.set_font("Arial", "", 8); pdf.set_xy(25, y + 2); pdf.cell(65, 4, "Assinatura Cliente", 0, 0, "C")
     pdf.set_xy(120, y + 2); pdf.cell(65, 4, "Assinatura Labortec", 0, 1, "C")
     return pdf.output(dest="S").encode("latin-1")
+    # ... (Cole isso logo abaixo da função criar_doc_pdf existente) ...
+
+def gerar_pdf_estoque(usuario, df_estoque):
+    pdf = PDF()
+    pdf.vendedor_nome = usuario
+    pdf.titulo_doc = "RELATÓRIO DE ESTOQUE" # Muda o título no cabeçalho
+    pdf.add_page()
+    
+    # 1. Cabeçalho do Relatório
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(0, 8, f" POSIÇÃO DE ESTOQUE EM: {obter_horario_br().strftime('%d/%m/%Y às %H:%M')}", 1, 1, "L", fill=True)
+    pdf.ln(5)
+    
+    # 2. Configuração das Colunas
+    # Larguras: Cod, Produto, Marca, Un, Saldo, Custo, Total
+    w = [15, 75, 25, 15, 20, 20, 25] 
+    cols = ["Cód", "Produto", "Marca", "Un", "Saldo", "Custo", "Total R$"]
+    
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_fill_color(225, 225, 225)
+    
+    # Desenha Cabeçalho da Tabela
+    for i, c in enumerate(cols):
+        pdf.cell(w[i], 8, c, 1, 0, "C", fill=True)
+    pdf.ln()
+    
+    # 3. Preenchimento dos Itens
+    pdf.set_font("Arial", "", 7)
+    valor_total_estoque = 0.0
+    
+    for _, row in df_estoque.iterrows():
+        # Tratamento de dados para evitar erros matemáticos
+        try:
+            saldo = float(row.get('Saldo', 0))
+            custo = float(row.get('Preco_Base', 0))
+            total_item = saldo * custo
+        except:
+            saldo, custo, total_item = 0.0, 0.0, 0.0
+            
+        valor_total_estoque += total_item
+        
+        pdf.cell(w[0], 6, str(row.get('Cod', ''))[:6], 1, 0, "C")
+        pdf.cell(w[1], 6, str(row.get('Produto', ''))[:45], 1, 0, "L")
+        pdf.cell(w[2], 6, str(row.get('Marca', ''))[:15], 1, 0, "C")
+        pdf.cell(w[3], 6, str(row.get('Unidade', 'UN')), 1, 0, "C")
+        
+        # Cores para saldo negativo ou zero
+        if saldo <= 0: pdf.set_text_color(200, 0, 0) # Vermelho
+        else: pdf.set_text_color(0, 0, 0)
+        
+        pdf.cell(w[4], 6, f"{saldo:,.2f}", 1, 0, "R")
+        pdf.set_text_color(0, 0, 0) # Reseta cor
+        
+        pdf.cell(w[5], 6, f"{custo:,.2f}", 1, 0, "R")
+        pdf.cell(w[6], 6, f"{total_item:,.2f}", 1, 1, "R")
+        
+    # 4. Totais e Rodapé
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 9)
+    pdf.cell(sum(w)-25, 8, "VALOR TOTAL EM ESTOQUE:", 0, 0, "R")
+    pdf.cell(25, 8, f"R$ {valor_total_estoque:,.2f}", 1, 1, "R", fill=True)
+    
+    pdf.ln(15)
+    y = pdf.get_y()
+    
+    # Linhas de Assinatura para Conferência
+    pdf.line(60, y, 150, y)
+    pdf.set_font("Arial", "", 8)
+    pdf.set_xy(60, y + 2)
+    pdf.cell(90, 4, "Responsável pela Conferência", 0, 1, "C")
+    
+    return pdf.output(dest="S").encode("latin-1")
 
 # ==============================================================================
 # 6. MENU LATERAL E TEMAS
@@ -1000,5 +1073,6 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
