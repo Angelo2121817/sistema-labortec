@@ -499,64 +499,55 @@ elif menu == "📥 Entrada de Estoque":
                 salvar_dados(); st.success("Entrada Realizada!"); st.rerun()
 
 elif menu == "📦 Estoque":
-    st.title("📦 Estoque Geral")
+    st.title("📦 Gestão de Estoque")
     
-    # --- 1. CADASTRO ---
-    with st.expander("➕ NOVO PRODUTO", expanded=False):
-        with st.form("novo_prod"):
-            c1, c2 = st.columns([1, 4])
-            cod = c1.text_input("Código")
-            nome = c2.text_input("Nome do Produto")
-            c3, c4, c5 = st.columns(3)
-            marca = c3.text_input("Marca", "LABORTEC"); ncm = c4.text_input("NCM"); unid = c5.selectbox("Un", ["KG", "L", "UN"])
-            c6, c7, c8 = st.columns(3)
-            preco = c6.number_input("Preço Base", 0.0); saldo = c7.number_input("Saldo Inicial", 0.0); min_est = c8.number_input("Mínimo", 0.0)
-            
-            if st.form_submit_button("CADASTRAR"):
-                if cod and nome:
-                    existentes = st.session_state['estoque']['Cod'].astype(str).values
-                    if str(cod) in existentes: st.error("Código já existe!")
-                    else:
-                        novo = {"Cod": cod, "Produto": nome, "Marca": marca, "NCM": ncm, "Unidade": unid, "Preco_Base": preco, "Saldo": saldo, "Estoque_Minimo": min_est}
-                        st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
-                        salvar_dados(); st.success("Cadastrado!"); st.rerun()
-                else: st.warning("Código e Nome obrigatórios.")
-
-    # --- 2. TABELA ---
-    st.markdown("---")
-    if not st.session_state['estoque'].empty:
-        for c in ['Saldo', 'Preco_Base', 'Estoque_Minimo']:
-            st.session_state['estoque'][c] = pd.to_numeric(st.session_state['estoque'][c], errors='coerce').fillna(0.0)
-            
-    def style_saldo(v): return 'background-color: #d4edda; color: #155724; font-weight: bold'
-    try: df_style = st.session_state['estoque'].style.map(style_saldo, subset=['Saldo'])
-    except: df_style = st.session_state['estoque']
+    # Botões de ação rápida
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("➕ Adicionar Nova Linha"):
+            nova_linha = pd.DataFrame([{"Produto": "Novo Item", "Cod": "000", "Marca": "-", "NCM": "-", "Unidade": "UN", "Preco_Base": 0.0, "Saldo": 0.0}])
+            st.session_state['estoque'] = pd.concat([st.session_state['estoque'], nova_linha], ignore_index=True)
+            st.rerun()
     
-    ed = st.data_editor(df_style, use_container_width=True, num_rows="dynamic", key="ed_estoque", column_config={
-        "Saldo": st.column_config.NumberColumn("Saldo", format="%.2f"),
-        "Preco_Base": st.column_config.NumberColumn("Preço", format="%.2f")
-    })
-    if not ed.equals(st.session_state['estoque']):
-        st.session_state['estoque'] = ed; salvar_dados()
+    with c2:
+        # Botão de Salvar Manual para ter certeza
+        if st.button("💾 SALVAR TODAS AS ALTERAÇÕES", type="primary", use_container_width=True):
+            salvar_dados()
+            st.toast("✅ ESTOQUE ATUALIZADO COM SUCESSO!", icon="🚀")
+            st.success("Dados sincronizados no banco de dados!")
 
-elif menu == "📋 Conferência Geral":
-    st.title("📋 Conferência")
-    t1, t2, t3 = st.tabs(["Vendas", "Entradas", "Laudos"])
-    with t1:
-        if st.session_state['log_vendas']:
-            ed = st.data_editor(pd.DataFrame(st.session_state['log_vendas']), num_rows="dynamic", use_container_width=True)
-            if st.button("Salvar Vendas"): st.session_state['log_vendas'] = ed.to_dict('records'); salvar_dados(); st.rerun()
-    with t2:
-        if st.session_state['log_entradas']:
-            ed = st.data_editor(pd.DataFrame(st.session_state['log_entradas']), num_rows="dynamic", use_container_width=True)
-            if st.button("Salvar Entradas"): st.session_state['log_entradas'] = ed.to_dict('records'); salvar_dados(); st.rerun()
-    with t3:
-        laudos = st.session_state.get('log_laudos', [])
-        for i, l in enumerate(laudos):
-            if l.get('Status') != 'Arquivado':
-                with st.expander(f"{l['Cliente']} - {l['Data_Coleta']}"):
-                    if st.button("Arquivar", key=f"arq_{i}"):
-                        st.session_state['log_laudos'][i]['Status'] = 'Arquivado'; salvar_dados(); st.rerun()
+    st.divider()
+    st.write("💡 *Dica: Edite direto na tabela abaixo e depois clique em Salvar.*")
+
+    # Editor de dados
+    df_estoque = st.session_state['estoque'].copy()
+    
+    # Garantir que colunas numéricas não tenham sujeira
+    for col in ['Preco_Base', 'Saldo']:
+        df_estoque[col] = pd.to_numeric(df_estoque[col], errors='coerce').fillna(0.0)
+
+    # O Editor
+    ed_estoque = st.data_editor(
+        df_estoque,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="dynamic",
+        key="editor_estoque_v2"
+    )
+
+    # Se houve mudança na tabela, a gente avisa e salva
+    if not ed_estoque.equals(df_estoque):
+        st.session_state['estoque'] = ed_estoque
+        salvar_dados()
+        st.toast("Mudança detectada e salva!", icon="💾")
+        # Força uma mensagem de sucesso fixada se houver alteração
+        st.success("✅ O item foi adicionado/alterado com sucesso!")
+
+    # Filtro de busca só pra facilitar a vida do General
+    busca = st.text_input("🔍 Buscar produto no estoque...")
+    if busca:
+        resultado = ed_estoque[ed_estoque['Produto'].str.contains(busca, case=False)]
+        st.dataframe(resultado, use_container_width=True)
 
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes & Precificação")
@@ -800,6 +791,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
