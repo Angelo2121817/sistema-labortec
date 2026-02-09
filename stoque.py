@@ -678,15 +678,18 @@ elif menu == "💰 Vendas & Orçamentos":
     vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
     d_cli = st.session_state['clientes_db'][cli]
     
-    # 2. Resgate do Fator de Preço (AGORA COM BLINDAGEM ANTI-ERRO)
+    # 2. Resgate do Fator de Preço (COM BLINDAGEM DE TITÂNIO)
     try:
         raw_fator = d_cli.get('Fator', 1.0)
-        # Tenta converter. Se for vazio ou texto, vai dar erro e cair no except
-        fator_cliente = float(raw_fator)
+        # Se for texto vazio, vira 1.0
+        if isinstance(raw_fator, str) and not raw_fator.strip():
+            fator_cliente = 1.0
+        else:
+            fator_cliente = float(raw_fator)
     except (ValueError, TypeError):
-        fator_cliente = 1.0 # Assume padrão se der erro
+        fator_cliente = 1.0 # Em caso de pânico, assume preço normal
     
-    # Mensagens visuais
+    # Mensagens visuais (Agora seguras)
     if fator_cliente == 1.0:
         st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
     elif fator_cliente < 1.0:
@@ -703,7 +706,7 @@ elif menu == "💰 Vendas & Orçamentos":
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
     
-    # Garante que Preco_Base é número antes de calcular
+    # Garante que Preco_Base é número
     df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
     
     # APLICAR O FATOR NO PREÇO!
@@ -761,171 +764,6 @@ elif menu == "💰 Vendas & Orçamentos":
                     salvar_dados(); st.success("Venda Confirmada (Sem Baixa)!")
                 
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
-elif menu == "📋 Conferência Geral":
-    st.title("📋 Conferência Tática")
-    
-    # Abas para organizar
-    tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
-
-    # --- ABA 1: VENDAS (COM EXCLUSÃO EM MASSA) ---
-    with tab1:
-        st.caption("Para apagar: Selecione a linha e pressione DELETE ou clique na lixeira ao lado da linha.")
-        
-        if st.session_state.get('log_vendas'):
-            df_v = pd.DataFrame(st.session_state['log_vendas'])
-            
-            # Editor que permite deletar linhas (num_rows="dynamic")
-            vendas_editadas = st.data_editor(
-                df_v, 
-                use_container_width=True, 
-                num_rows="dynamic", # Isso libera a exclusão
-                key="editor_log_vendas",
-                hide_index=True
-            )
-            
-            # Botão para confirmar a limpeza
-            if st.button("💾 SALVAR ALTERAÇÕES (VENDAS)", type="primary"):
-                st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
-                salvar_dados()
-                st.success("Histórico de vendas atualizado!")
-                st.rerun()
-        else:
-            st.info("Nenhuma venda registrada.")
-
-    # --- ABA 2: ENTRADAS (COM EXCLUSÃO EM MASSA) ---
-    with tab2:
-        st.caption("Para corrigir lançamentos errados, edite ou apague a linha abaixo.")
-        
-        if st.session_state.get('log_entradas'):
-            df_e = pd.DataFrame(st.session_state['log_entradas'])
-            
-            entradas_editadas = st.data_editor(
-                df_e, 
-                use_container_width=True, 
-                num_rows="dynamic",
-                key="editor_log_entradas",
-                hide_index=True
-            )
-            
-            if st.button("💾 SALVAR ALTERAÇÕES (ENTRADAS)", type="primary"):
-                st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
-                salvar_dados()
-                st.success("Histórico de entradas atualizado!")
-                st.rerun()
-        else:
-            st.info("Nenhuma entrada registrada.")
-
-    # --- ABA 3: LAUDOS (COM EXCLUSÃO DE ARQUIVO MORTO) ---
-    with tab3:
-        laudos = st.session_state.get('log_laudos', [])
-        
-        # Separa o joio do trigo
-        pendentes = [l for l in laudos if l.get('Status') != 'Arquivado']
-        arquivados = [l for l in laudos if l.get('Status') == 'Arquivado']
-
-        # PARTE 1: PENDENTES (Foco em Resolver/Arquivar)
-        st.markdown("#### ⚠️ Pendentes (Em Análise)")
-        if not pendentes:
-            st.success("Tudo limpo por aqui.")
-        else:
-            # Mostra pendentes apenas com opção de Arquivar
-            for i, item in enumerate(laudos):
-                if item.get('Status') != 'Arquivado':
-                    with st.expander(f"📄 {item['Cliente']} | Coleta: {item['Data_Coleta']}"):
-                        c1, c2 = st.columns([2, 1])
-                        c1.write(f"**Previsão:** {item.get('Data_Resultado', '-')}")
-                        link = c1.text_input("🔗 Link do PDF:", key=f"link_{i}", value=item.get('Link_Arquivo', ''))
-                        
-                        c2.write(""); c2.write("")
-                        if c2.button("📂 ARQUIVAR", key=f"btn_arq_{i}"):
-                            st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
-                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link
-                            st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
-                            salvar_dados()
-                            st.rerun()
-
-        st.markdown("---")
-        
-        # PARTE 2: ARQUIVO MORTO (Foco em Excluir/Limpar)
-        st.markdown(f"#### 🗄️ Arquivo Morto ({len(arquivados)})")
-        st.caption("Aqui ficam os laudos antigos. Use o botão **EXCLUIR** para remover definitivamente do sistema.")
-
-        if not arquivados:
-            st.info("Arquivo morto vazio.")
-        else:
-            # Lista Inversa (Mais recentes primeiro) para facilitar
-            for i, item in enumerate(laudos):
-                if item.get('Status') == 'Arquivado':
-                    # Card Vermelho Claro para indicar item velho
-                    with st.expander(f"🗄️ {item['Cliente']} | Arquivado em: {item.get('Data_Arquivamento', '?')}"):
-                        col_a, col_b = st.columns([3, 1])
-                        
-                        col_a.markdown(f"**Coleta:** {item['Data_Coleta']} | **Resultado:** {item['Data_Resultado']}")
-                        if item.get('Link_Arquivo'):
-                            col_a.markdown(f"🔗 [Acessar Arquivo na Nuvem]({item['Link_Arquivo']})")
-                        else:
-                            col_a.caption("Sem link de arquivo salvo.")
-
-                        # BOTÃO DE EXCLUSÃO DEFINITIVA
-                        col_b.write("")
-                        if col_b.button("🗑️ APAGAR", key=f"del_laudo_{i}", type="primary"):
-                            # Remove o item da lista principal usando o índice
-                            st.session_state['log_laudos'].pop(i)
-                            salvar_dados()
-                            st.toast("Registro apagado do mapa!", icon="💥")
-                            st.rerun()
-
-elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Entrada de Mercadoria")
-    
-    if st.session_state['estoque'].empty: 
-        st.warning("Cadastre produtos no estoque primeiro!")
-        st.stop()
-
-    with st.form("f_ent"):
-        # Cria lista de opções
-        opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
-        prod_sel = st.selectbox("Selecione o Produto", opcoes)
-        qtd = st.number_input("Quantidade (KG)", min_value=0.0, step=1.0)
-        
-        if st.form_submit_button("✅ Confirmar Entrada"):
-            # 1. Identifica o Produto
-            cod = prod_sel.split(" - ")[0]
-            mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-            
-            if not st.session_state['estoque'][mask].empty:
-                idx = st.session_state['estoque'][mask].index[0]
-                
-                # 2. BLINDAGEM MATEMÁTICA (Aqui estava o erro)
-                # Converte o saldo atual para número na marra antes de somar
-                try:
-                    saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
-                except:
-                    saldo_atual = 0.0
-                
-                novo_saldo = saldo_atual + float(qtd)
-                
-                # 3. Atualiza
-                st.session_state['estoque'].at[idx, 'Saldo'] = novo_saldo
-                
-                # 4. Registra no Log
-                nome_prod = st.session_state['estoque'].at[idx, 'Produto']
-                st.session_state['log_entradas'].append({
-                    'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
-                    'Produto': nome_prod, 
-                    'Qtd': qtd, 
-                    'Usuario': st.session_state['usuario_nome']
-                })
-                
-                # 5. Salva
-                salvar_dados()
-                st.success(f"Entrada de +{qtd}Kg em {nome_prod} realizada!")
-                st.rerun()
-            else:
-                st.error("Erro: Produto não encontrado no índice.")
-            # ==============================================================================
-# 9. ÁREA RESTRITA (BACKUP E RESET)
-# ==============================================================================
 elif menu == "🛠️ Admin / Backup":
     st.title("🛠️ Bunker de Comando")
     st.markdown("---")
@@ -1026,6 +864,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
