@@ -866,54 +866,30 @@ elif menu == "👥 Clientes":
     else:
         st.button("🧹 Limpar Campos", on_click=limpar_campos)
     
-   # ... (Parte de cima do formulário continua igual) ...
-
-   # ... (Parte de cima do formulário continua igual) ...
-
     st.markdown("---"); st.subheader("📇 Carteira de Clientes")
     if st.session_state['clientes_db']:
         busca = st.text_input("🔍 Buscar...", placeholder="Nome da empresa...")
         lista = sorted(list(st.session_state['clientes_db'].keys()))
         if busca: lista = [k for k in lista if busca.lower() in k.lower()]
-        
-        # Cabeçalho Tático
-        c_h1, c_h2 = st.columns([6, 1])
-        c_h1.caption("📂 NOME DA EMPRESA")
-        c_h2.caption("📋 COPIAR")
-
         for k in lista:
             d = st.session_state['clientes_db'][k]
             fator = d.get('Fator', 1.0)
-            email_cli = d.get('Email', '')
             
             cor_tabela = "blue" if fator == 1.0 else ("green" if fator < 1.0 else "red")
             tipo_tabela = "NORMAL" if fator == 1.0 else (f"DESC. {int((1-fator)*100)}%" if fator < 1.0 else f"ACRÉSC. {int((fator-1)*100)}%")
             
-            # DIVISÃO EM COLUNAS (Ajustei para o botão ficar bem no cantinho)
-            col_expander, col_btn = st.columns([6, 1])
-            
-            with col_expander:
-                with st.expander(f"🏢 {k} [{tipo_tabela}]"):
-                    c_det1, c_det2 = st.columns(2)
-                    c_det1.write(f"📍 {d.get('End', '-')}")
-                    c_det2.write(f"📞 {d.get('Tel', '-')}")
-                    c_det2.write(f"📄 CNPJ: {d.get('CNPJ', '-')}")
-                    
-                    st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
-                    
-                    c_edit, c_del = st.columns([1, 1])
-                    c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
-                    c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
-            
-            with col_btn:
-                if email_cli:
-                    # MUDANÇA TÁTICA: Ícone de Prancheta (📋)
-                    # Ao clicar, abre o email pronto para copiar
-                    with st.popover("📋", help="Ver e Copiar Email"):
-                        st.code(email_cli, language="text")
-                else:
-                    st.caption("🚫")
-            
+            with st.expander(f"🏢 {k} [{tipo_tabela}]"):
+                col_a, col_b = st.columns(2)
+                col_a.write(f"📍 {d.get('End', '')}")
+                # Mostra o Email aqui agora
+                col_b.write(f"📞 {d.get('Tel', '')} | 📧 {d.get('Email', '-')}")
+                col_b.write(f"CNPJ: {d.get('CNPJ', '')}")
+                
+                st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
+                
+                c_edit, c_del = st.columns([1, 1])
+                c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
+                c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
     else: st.info("Nenhum cliente cadastrado.")
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral")
@@ -1210,9 +1186,6 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
-
-
-
 
 
 
