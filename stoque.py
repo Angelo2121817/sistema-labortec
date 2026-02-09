@@ -803,6 +803,110 @@ elif menu == "📥 Entrada de Estoque":
             st.session_state['estoque'].at[idx, 'Saldo'] = atual + float(qtd)
             st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Produto': st.session_state['estoque'].at[idx, 'Produto'], 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
             salvar_dados(); st.success("Estoque Atualizado!")
+            # ==============================================================================
+# 9. ÁREA RESTRITA (BACKUP E RESET)
+# ==============================================================================
+elif menu == "🛠️ Admin / Backup":
+    st.title("🛠️ Bunker de Comando")
+    st.markdown("---")
+
+    # --- SENHA DE SEGURANÇA PARA ACESSAR O BUNKER ---
+    # Só libera as funções perigosas se digitar a senha de admin
+    senha_admin = st.text_input("🔑 Digite a Senha do General para liberar operações:", type="password")
+    
+    if senha_admin == "labormetal22": # A mesma senha do login do General
+        
+        st.success("🔓 Acesso Autorizado. Cuidado, General.")
+        
+        tab_bkp, tab_res, tab_nuc = st.tabs(["💾 SALVAR BACKUP", "♻️ RESTAURAR DADOS", "☢️ ZERAR SISTEMA"])
+
+        # ------------------------------------------------------------------
+        # 1. FAZER BACKUP (EXPORTAR)
+        # ------------------------------------------------------------------
+        with tab_bkp:
+            st.subheader("💾 Gerar Cópia de Segurança")
+            st.caption("Baixa um arquivo completo com Clientes, Estoque e Históricos.")
+            
+            if st.button("📦 CRIAR ARQUIVO DE BACKUP"):
+                # Empacota tudo num dicionário Python
+                pacote_dados = {
+                    "estoque": st.session_state['estoque'].to_dict('records'),
+                    "clientes": st.session_state['clientes_db'],
+                    "vendas": st.session_state['log_vendas'],
+                    "entradas": st.session_state['log_entradas'],
+                    "laudos": st.session_state['log_laudos'],
+                    "data_backup": datetime.now().strftime("%d/%m/%Y %H:%M")
+                }
+                
+                # Converte para texto JSON
+                arquivo_json = json.dumps(pacote_dados, indent=4)
+                
+                # Botão de Download
+                data_hoje = datetime.now().strftime("%d-%m-%Y")
+                st.download_button(
+                    label="⬇️ BAIXAR ARQUIVO (.json)",
+                    data=arquivo_json,
+                    file_name=f"Backup_Sistema_V65_{data_hoje}.json",
+                    mime="application/json",
+                    type="primary"
+                )
+
+        # ------------------------------------------------------------------
+        # 2. RESTAURAR (IMPORTAR)
+        # ------------------------------------------------------------------
+        with tab_res:
+            st.subheader("♻️ Restaurar Dados Antigos")
+            st.warning("⚠️ ATENÇÃO: Isso vai APAGAR o que está no sistema agora e substituir pelo arquivo que você enviar.")
+            
+            arquivo_up = st.file_uploader("Arraste o arquivo de backup (.json) aqui:", type="json")
+            
+            if arquivo_up is not None:
+                if st.button("🔄 CONFIRMAR RESTAURAÇÃO"):
+                    try:
+                        dados = json.load(arquivo_up)
+                        
+                        # Reconstrói a memória
+                        st.session_state['estoque'] = pd.DataFrame(dados['estoque'])
+                        st.session_state['clientes_db'] = dados['clientes']
+                        st.session_state['log_vendas'] = dados['vendas']
+                        st.session_state['log_entradas'] = dados['entradas']
+                        st.session_state['log_laudos'] = dados['laudos']
+                        
+                        # Salva na nuvem
+                        salvar_dados()
+                        st.balloons()
+                        st.success("✅ Sistema Restaurado com Sucesso! (Pressione R para recarregar)")
+                    except Exception as e:
+                        st.error(f"Erro ao ler arquivo: {e}")
+
+        # ------------------------------------------------------------------
+        # 3. ZERAR TUDO (BOTÃO NUCLEAR)
+        # ------------------------------------------------------------------
+        with tab_nuc:
+            st.subheader("☢️ ZERAR TUDO (Protocolo de Destruição)")
+            st.error("⛔ PERIGO: ISSO APAGA CLIENTES, ESTOQUE, TUDO! NÃO TEM VOLTA.")
+            
+            confirmacao = st.text_input("Digite 'CONFIRMO' para liberar o botão:", placeholder="...")
+            
+            if confirmacao == "CONFIRMO":
+                if st.button("💣 DETONAR / LIMPAR SISTEMA", type="primary"):
+                    # Limpa as variáveis
+                    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Inicial', 'Estoque_Minimo'])
+                    st.session_state['clientes_db'] = {}
+                    st.session_state['log_vendas'] = []
+                    st.session_state['log_entradas'] = []
+                    st.session_state['log_laudos'] = []
+                    
+                    # Salva o vazio na nuvem
+                    salvar_dados()
+                    st.success("O terreno está limpo, General. Começando do zero.")
+                    st.rerun()
+            else:
+                st.info("Botão travado por segurança.")
+
+    else:
+        st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
