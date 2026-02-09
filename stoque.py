@@ -99,7 +99,7 @@ def ler_pdf_antigo(f):
 # ==============================================================================
 # 1. CONFIGURAÇÃO E CONEXÃO
 # ==============================================================================
-st.set_page_config(page_title="Sistema Integrado v61", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v70", layout="wide", page_icon="🧪")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
@@ -235,10 +235,9 @@ def salvar_dados():
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
         
-        st.toast("✅ Dados Sincronizados!", icon="☁️")
+        st.toast("✅ Sincronizado!", icon="☁️")
     except Exception as e:
-        # Se der erro, ele imprime no console do sistema mas NÃO trava a tela do usuário
-        print(f"Erro silencioso ao salvar: {e}")
+        print(f"Alerta silencioso ao salvar: {e}")
         pass
 
 if "dados_carregados" not in st.session_state:
@@ -352,7 +351,11 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
         pdf.cell(w[3], 7, str(r.get("Marca", "LABORTEC")), 1, 0, "C")
         pdf.cell(w[4], 7, str(r.get("NCM", "")), 1, 0, "C")
         try:
-            pdf.cell(w[5], 7, f"{float(r.get('Total', 0)):.2f}", 1, 1, "R")
+            total_item = r.get('Total', 0)
+            if 'Preco_Final' in r: # Se tiver preco final, usa ele
+                 total_item = r['Preco_Final'] * r['Qtd']
+            
+            pdf.cell(w[5], 7, f"{float(total_item):.2f}", 1, 1, "R")
         except Exception:
             pdf.cell(w[5], 7, "0.00", 1, 1, "R")
 
@@ -377,17 +380,12 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 # ==============================================================================
 # 6. MENU LATERAL E TEMAS
 # ==============================================================================
-# ==============================================================================
-# 6. MENU LATERAL E TEMAS
-# ==============================================================================
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
-# --- SISTEMA DE AVISOS (TEXTO CORRIGIDO) ---
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
 with st.sidebar.expander("📢 DEFINIR AVISO"):
-    # Mudado de "Mensagem para a Tropa" para "Mensagem do Mural"
     aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
     c_salv, c_limp = st.columns(2)
     if c_salv.button("💾 Gravar"):
@@ -403,7 +401,6 @@ opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Naturez
 tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
 aplicar_tema(tema_sel)
 
-# Adicione "🛠️ Admin / Backup" no final da lista
 menu = st.sidebar.radio("Navegar:", [
     "📊 Dashboard", 
     "🧪 Laudos", 
@@ -412,11 +409,8 @@ menu = st.sidebar.radio("Navegar:", [
     "📦 Estoque", 
     "📋 Conferência Geral", 
     "👥 Clientes",
-    "🛠️ Admin / Backup"  # <--- ADICIONE ISSO AQUI
+    "🛠️ Admin / Backup"
 ])
-# ==============================================================================
-# 7. PÁGINAS DO SISTEMA
-# ==============================================================================
 
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
@@ -425,120 +419,106 @@ menu = st.sidebar.radio("Navegar:", [
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
     
-    # --- ALERTA GERAL ---
+    # --- ALERTA GERAL (VISUAL PREMIUM) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
         <style>
-            @keyframes pulse-red {{
-                0% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); transform: scale(1); }}
-                50% {{ box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); transform: scale(1.01); }}
-                100% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); transform: scale(1); }}
+            @keyframes pulse-soft {{
+                0% {{ box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }}
+                70% {{ box-shadow: 0 0 0 15px rgba(220, 53, 69, 0); }}
+                100% {{ box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }}
             }}
-            .alert-blink {{
-                background-color: #ffebee; border: 2px solid #ff1744; color: #b71c1c;
-                padding: 8px 20px; border-radius: 50px; text-align: center;
-                font-weight: bold; font-size: 1.1rem; margin: 0 auto 30px auto;
-                width: fit-content; animation: pulse-red 2s infinite;
-                display: flex; align-items: center; justify-content: center; gap: 10px;
+            .alert-box {{
+                background: #fff0f1; color: #c53030; border-left: 6px solid #c53030;
+                padding: 15px 20px; border-radius: 8px; margin-bottom: 25px;
+                display: flex; align-items: center; gap: 15px; font-weight: 600;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05); animation: pulse-soft 2s infinite;
             }}
+            .alert-icon {{ font-size: 24px; }}
         </style>
-        <div class="alert-blink"><span>📢</span><span>{st.session_state['aviso_geral']}</span></div>
+        <div class="alert-box">
+            <span class="alert-icon">📢</span>
+            <span>{st.session_state['aviso_geral']}</span>
+        </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("---")
-    
-    # --- RADAR DE LAUDOS (SEM REPETIÇÃO) ---
-    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 PRÓXIMAS COLETAS (Apenas Pendentes)</h4>", unsafe_allow_html=True)
+    # --- RADAR DE LAUDOS (VISUAL PREMIUM) ---
+    st.markdown("<h4 style='color: #1e3d59; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;'><span style='font-size: 1.2em'>📡</span> Monitoramento de Coletas (Pendentes)</h4>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
-    
     # Filtro Estrito: Apenas Pendentes
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
 
     if not ativos:
-        st.success("✅ Tudo limpo! Nenhuma coleta pendente.")
+        st.markdown("""
+            <div style='background: #e8f5e9; color: #2e7d32; padding: 20px; border-radius: 12px; text-align: center; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.05);'>
+                ✅ Radar Limpo! Nenhuma coleta pendente no momento.
+            </div>
+        """, unsafe_allow_html=True)
     else:
         items_html = ""
-        # MUDANÇA TÁTICA: Removemos o loop multiplicador. 
-        # Agora a lista é exatamente o que existe.
         for l in ativos:
-            cliente = html.escape(str(l.get("Cliente", "") or "Sem Nome"))
+            cliente = html.escape(str(l.get("Cliente", "") or "Cliente Desconhecido"))
             coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--"))
             resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--"))
 
             items_html += f"""
-            <div class="card">
-                <div class="card-header" title="{cliente}">🏢 {cliente}</div>
-                <div class="card-body">
-                    <div class="data-group"><span class="label">📅 COLETA</span><span class="value-coleta">{coleta}</span></div>
-                    <div class="divider"></div>
-                    <div class="data-group"><span class="label">🧪 PREVISÃO</span><span class="value-result">{resultado}</span></div>
+            <div class="card-premium">
+                <div class="card-accent"></div>
+                <div class="card-content">
+                    <div class="client-header" title="{cliente}">
+                        <span class="icon-building">🏢</span> {cliente}
+                    </div>
+                    <div class="dates-container">
+                        <div class="date-box">
+                            <div class="icon-label">📅 COLETA</div>
+                            <div class="date-value">{coleta}</div>
+                        </div>
+                        <div class="vertical-divider"></div>
+                        <div class="date-box">
+                            <div class="icon-label">🧪 PREVISÃO</div>
+                            <div class="date-value highlight">{resultado}</div>
+                        </div>
+                    </div>
+                    <div class="status-footer">
+                        <span class="status-badge">⏳ AGUARDANDO COLETA</span>
+                    </div>
                 </div>
-                <div class="card-footer"><span class="status-pill">⏳ AGUARDANDO COLETA</span></div>
             </div>
             """
 
-        # Lógica de Alinhamento:
-        # Se tiver poucos itens (<= 3), centraliza na tela. Se tiver muitos, alinha a esquerda com rolagem.
         alinhamento = "center" if len(ativos) <= 3 else "flex-start"
 
         carousel_component = f"""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-            
-            /* Container Flexível (Sem Animação Infinita) */
-            .carousel-container {{
-                display: flex;
-                overflow-x: auto; /* Permite rolar se tiver muitos */
-                gap: 20px;
-                padding: 10px 5px 20px 5px;
-                width: 100%;
-                justify-content: {alinhamento}; /* Centraliza ou Alinha */
-            }}
-            
-            /* Estiliza a barra de rolagem para ficar bonita */
-            .carousel-container::-webkit-scrollbar {{ height: 8px; }}
-            .carousel-container::-webkit-scrollbar-track {{ background: #f1f1f1; border-radius: 4px; }}
-            .carousel-container::-webkit-scrollbar-thumb {{ background: #c1c1c1; border-radius: 4px; }}
-            .carousel-container::-webkit-scrollbar-thumb:hover {{ background: #a8a8a8; }}
-
-            .card {{ 
-                min-width: 260px; /* Garante que o card não encolha */
-                width: 260px; 
-                background: #ffffff; 
-                border-radius: 12px; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-                font-family: 'Inter', sans-serif; 
-                overflow: hidden; 
-                border: 1px solid #e2e8f0; 
-                transition: transform 0.2s; 
-            }}
-            
-            .card:hover {{ 
-                transform: translateY(-5px); 
-                box-shadow: 0 15px 30px rgba(0,0,0,0.1); 
-                border-color: #cbd5e1; 
-            }}
-            
-            .card-header {{ background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%); color: white; padding: 12px 15px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 3px solid #ffb400; }}
-            .card-body {{ padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }}
-            .data-group {{ display: flex; flex-direction: column; align-items: center; flex: 1; }}
-            .divider {{ width: 1px; height: 30px; background: #cbd5e1; margin: 0 10px; }}
-            .label {{ font-size: 10px; color: #64748b; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }}
-            .value-coleta {{ font-size: 14px; font-weight: 700; color: #334155; }}
-            .value-result {{ font-size: 14px; font-weight: 700; color: #059669; }}
-            .card-footer {{ background: #ffffff; padding: 10px; text-align: center; border-top: 1px solid #f1f5f9; }}
-            .status-pill {{ background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; display: inline-block; }}
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            .carousel-container {{ display: flex; overflow-x: auto; gap: 25px; padding: 15px 5px 30px 5px; width: 100%; justify-content: {alinhamento}; scroll-behavior: smooth; }}
+            .carousel-container::-webkit-scrollbar {{ height: 10px; }}
+            .carousel-container::-webkit-scrollbar-track {{ background: #f0f2f5; border-radius: 10px; }}
+            .carousel-container::-webkit-scrollbar-thumb {{ background: #cbd5e1; border-radius: 10px; border: 2px solid #f0f2f5; }}
+            .card-premium {{ min-width: 280px; width: 280px; background: #ffffff; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.08); font-family: 'Inter', sans-serif; overflow: hidden; position: relative; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); border: 1px solid #f0f0f0; }}
+            .card-premium:hover {{ transform: translateY(-8px); box-shadow: 0 20px 40px -10px rgba(30, 61, 89, 0.15); border-color: #e0e0e0; }}
+            .card-accent {{ height: 6px; background: #1e3d59; width: 100%; }}
+            .card-content {{ padding: 20px; display: flex; flex-direction: column; height: 100%; }}
+            .client-header {{ font-size: 16px; font-weight: 700; color: #1e3d59; margin-bottom: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 8px; }}
+            .icon-building {{ font-size: 18px; opacity: 0.8; }}
+            .dates-container {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
+            .date-box {{ flex: 1; text-align: center; }}
+            .icon-label {{ font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 6px; }}
+            .date-value {{ font-size: 15px; font-weight: 700; color: #334155; }}
+            .date-value.highlight {{ color: #004aad; }}
+            .vertical-divider {{ width: 1px; height: 35px; background: #e2e8f0; margin: 0 15px; }}
+            .status-footer {{ text-align: center; margin-top: auto; }}
+            .status-badge {{ background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 700; padding: 6px 16px; border-radius: 50px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.05); letter-spacing: 0.5px; }}
         </style>
-        
-        <div class="carousel-container">
-            {items_html}
-        </div>
+        <div class="carousel-container">{items_html}</div>
         """
-        components.html(carousel_component, height=230)
+        components.html(carousel_component, height=250)
 
-    # --- MÉTRICAS DE ESTOQUE ---
-    st.markdown("<h4 style='text-align: left; color: #555; margin-top: 20px; border-left: 5px solid #d32f2f; padding-left: 10px;'>🚨 ESTOQUE CRÍTICO (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # --- MÉTRICAS E GRÁFICOS ---
+    st.markdown("<h4 style='color: #d32f2f; margin-top: 20px; display: flex; align-items: center; gap: 10px;'>🚨 Estoque Crítico (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
     
     df_est = st.session_state.get('estoque')
     if df_est is not None and not df_est.empty:
@@ -549,15 +529,14 @@ if menu == "📊 Dashboard":
             if not criticos.empty:
                 st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True, column_config={"Saldo": st.column_config.NumberColumn("Saldo Atual", format="%.2f"), "Estoque_Minimo": st.column_config.NumberColumn("Mínimo Desejado", format="%.0f")})
             else:
-                st.info("👍 Situação Regular! Nenhum produto com estoque baixo.")
+                st.markdown("<div style='background: #e8f5e9; color: #2e7d32; padding: 10px 15px; border-radius: 8px; font-weight: 600;'>👍 Situação Regular! Nenhum produto crítico.</div>", unsafe_allow_html=True)
         except: st.info("Dados insuficientes.")
     
     st.markdown("---")
 
-    # --- GRÁFICOS ---
     c_graf1, c_graf2 = st.columns(2)
     with c_graf1:
-        st.markdown("**📈 Volume de Vendas Diárias**")
+        st.markdown("### 📈 Volume de Vendas Diárias")
         log_v = st.session_state.get('log_vendas', [])
         if log_v:
             df_v = pd.DataFrame(log_v)
@@ -566,32 +545,26 @@ if menu == "📊 Dashboard":
         else: st.caption("Aguardando dados...")
 
     with c_graf2:
-        st.markdown("**🏆 Produtos Mais Vendidos**")
+        st.markdown("### 🏆 Produtos Mais Vendidos")
         if log_v:
             df_v = pd.DataFrame(log_v)
             top_prods = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top_prods, color="#ffb400", horizontal=True)
         else: st.caption("Aguardando dados...")
-        # ==============================================================================
-# GESTÃO DE LAUDOS (RESTAURADA E BLINDADA)
-# ==============================================================================
+
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
     
-    # --- 1. AGENDAMENTO (DATA INPUT CONFIGURADO BR) ---
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
             c1, c2 = st.columns(2)
-            
-            # Format="DD/MM/YYYY" força o calendário visualmente
             data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
             
             if st.form_submit_button("Agendar"):
                 novo = {
                     'Cliente': cli_l, 
-                    # Strftime garante que salva como texto BR na lista
                     'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
                     'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
                     'Status': 'Pendente'
@@ -605,62 +578,36 @@ elif menu == "🧪 Laudos":
     st.subheader("📋 Editar Previsões e Status")
     
     laudos = st.session_state.get('log_laudos', [])
-    
-    # Filtra (Esconde arquivados da edição rápida)
     laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
     
     if not laudos_ativos: 
         st.info("Sem laudos ativos para editar.")
     else:
-        # Prepara o DataFrame
         df_p = pd.DataFrame(laudos)
         df_p['ID_Real'] = range(len(laudos))
-        
-        # Filtra visualmente
         df_view = df_p[df_p['Status'] != 'Arquivado'].copy()
 
-        # --- TRUQUE TÁTICO: CONVERTER PARA DATA REAL ---
-        # O Editor precisa que seja 'datetime' para mostrar o calendário
         df_view['Data_Coleta'] = pd.to_datetime(df_view['Data_Coleta'], dayfirst=True, errors='coerce')
         df_view['Data_Resultado'] = pd.to_datetime(df_view['Data_Resultado'], dayfirst=True, errors='coerce')
 
         ed_p = st.data_editor(
             df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
-            use_container_width=True, 
-            hide_index=True, 
-            disabled=['ID_Real', 'Cliente'],
+            use_container_width=True, hide_index=True, disabled=['ID_Real', 'Cliente'],
             column_config={
-                "Data_Coleta": st.column_config.DateColumn(
-                    "📅 Coleta", 
-                    format="DD/MM/YYYY", 
-                    step=1
-                ),
-                "Data_Resultado": st.column_config.DateColumn(
-                    "🧪 Previsão", 
-                    format="DD/MM/YYYY", 
-                    step=1
-                ),
-                "Status": st.column_config.SelectboxColumn(
-                    "Situação", 
-                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
-                )
+                "Data_Coleta": st.column_config.DateColumn("📅 Coleta", format="DD/MM/YYYY", step=1),
+                "Data_Resultado": st.column_config.DateColumn("🧪 Previsão", format="DD/MM/YYYY", step=1),
+                "Status": st.column_config.SelectboxColumn("Situação", options=["Pendente", "Em Análise", "Concluído", "Cancelado"])
             }
         )
 
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Real'])
-                
-                # --- CONVERSÃO REVERSA (DATA -> TEXTO BR) ---
                 nova_coleta = row['Data_Coleta']
-                if hasattr(nova_coleta, 'strftime'):
-                    nova_coleta = nova_coleta.strftime("%d/%m/%Y")
-                
+                if hasattr(nova_coleta, 'strftime'): nova_coleta = nova_coleta.strftime("%d/%m/%Y")
                 nova_previsao = row['Data_Resultado']
-                if hasattr(nova_previsao, 'strftime'):
-                    nova_previsao = nova_previsao.strftime("%d/%m/%Y")
+                if hasattr(nova_previsao, 'strftime'): nova_previsao = nova_previsao.strftime("%d/%m/%Y")
 
-                # Atualiza a memória principal
                 st.session_state['log_laudos'][idx]['Data_Coleta'] = str(nova_coleta)
                 st.session_state['log_laudos'][idx]['Data_Resultado'] = str(nova_previsao)
                 st.session_state['log_laudos'][idx]['Status'] = row['Status']
@@ -668,24 +615,25 @@ elif menu == "🧪 Laudos":
             salvar_dados()
             st.success("Dados atualizados!")
             st.rerun()
+
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
     
-    # 1. Seleção do Cliente
     c1, c2 = st.columns([2,1])
     cli = c1.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
     vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
     d_cli = st.session_state['clientes_db'][cli]
     
-    # 2. Resgate do Fator de Preço
-    fator_cliente = float(d_cli.get('Fator', 1.0))
+    # Blindagem Fator
+    try:
+        fator_cliente = float(d_cli.get('Fator', 1.0))
+        if pd.isna(fator_cliente): fator_cliente = 1.0
+    except: fator_cliente = 1.0
     
-    # Mostra aviso visual com ARREDONDAMENTO CORRETO (CORREÇÃO APLICADA AQUI)
     if fator_cliente == 1.0:
         st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
     elif fator_cliente < 1.0:
-        # Usamos round() para o computador arredondar 9.99 para 10
         perc_desc = round((1.0 - fator_cliente) * 100)
         st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {perc_desc}% (Fator {fator_cliente})")
     else:
@@ -695,48 +643,38 @@ elif menu == "💰 Vendas & Orçamentos":
     col1, col2, col3 = st.columns(3)
     p_pag = col1.text_input("Plano", "28/42 DIAS"); f_pag = col2.text_input("Forma", "BOLETO ITAU"); venc = col3.text_input("Vencimento", "A COMBINAR")
     
-    # 3. Preparação da Tabela de Vendas
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
     
-    # APLICAR O FATOR NO PREÇO!
-    # Criamos uma coluna nova "Preco_Final" que é a Base x Fator
     df_v['Preco_Final'] = df_v['Preco_Base'].astype(float) * fator_cliente
     
-    # Editor de Vendas (Mostramos o Preço Final já calculado)
     ed_v = st.data_editor(
         df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
-        use_container_width=True, 
-        hide_index=True,
+        use_container_width=True, hide_index=True,
         column_config={
-            "Preco_Base": st.column_config.NumberColumn("Preço Base (R$)", format="%.2f", disabled=True),
-            "Preco_Final": st.column_config.NumberColumn("💵 Preço P/ Cliente (R$)", format="%.2f"), # Editável se quiser ajuste manual pontual
+            "Preco_Base": st.column_config.NumberColumn("Preço Base", format="%.2f", disabled=True),
+            "Preco_Final": st.column_config.NumberColumn("💵 Preço P/ Cliente", format="%.2f"),
             "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
         }
     )
     
-    # 4. Cálculo do Total (Usando o Preço Final)
     itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
     itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Final']
     total = itens_sel['Total'].sum()
     
     if not itens_sel.empty:
         st.divider()
-        c_tot, c_act = st.columns([1, 2])
-        c_tot.metric("Valor Total do Pedido", f"R$ {total:,.2f}")
+        st.metric("Valor Total do Pedido", f"R$ {total:,.2f}")
         
-        c_orc, c_ped = c_act.columns(2)
+        c_orc, c_ped = st.columns(2)
         with c_orc:
             if st.button("📄 ORÇAMENTO", use_container_width=True):
-                # No PDF, usamos o Preço Final como se fosse o unitário
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
                 pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
                 st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
         
         with c_ped:
-            # Opção de Baixa
             origem = st.radio("Origem?", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
-            
             if st.button("✅ FECHAR VENDA", type="primary", use_container_width=True):
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
                 pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
@@ -748,188 +686,44 @@ elif menu == "💰 Vendas & Orçamentos":
                             idx = st.session_state['estoque'][mask].index[0]
                             atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
                             st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
-                    
                     st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
                     salvar_dados(); st.success("Venda Confirmada (Estoque Baixado)!")
                 else: 
                     st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários (Indep)', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
                     salvar_dados(); st.success("Venda Confirmada (Sem Baixa)!")
-                
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
-elif menu == "👥 Clientes":
-    st.title("👥 Gestão de Clientes & Precificação")
-    
-    # --- CONTROLE DE MODO (NOVO OU EDIÇÃO) ---
-    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
 
-    campos = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
-    for c in campos: 
-        if c not in st.session_state: 
-            st.session_state[c] = 1.0 if c == 'form_fator' else ""
+elif menu == "📥 Entrada de Estoque":
+    st.title("📥 Entrada de Mercadoria")
+    if st.session_state['estoque'].empty: st.warning("Cadastre produtos no estoque primeiro!"); st.stop()
 
-    def limpar_campos():
-        for c in campos: 
-            st.session_state[c] = 1.0 if c == 'form_fator' else ""
-        st.session_state['edit_mode'] = False
-
-    def salvar_no_callback():
-        nome = st.session_state['form_nome'].strip()
+    with st.form("f_ent"):
+        opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
+        prod_sel = st.selectbox("Selecione o Produto", opcoes)
+        qtd = st.number_input("Quantidade (KG)", min_value=0.0, step=1.0)
         
-        if not nome:
-            st.toast("Erro: Nome obrigatório!", icon="❌")
-            return
+        if st.form_submit_button("✅ Confirmar Entrada"):
+            cod = prod_sel.split(" - ")[0]
+            mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
+            if not st.session_state['estoque'][mask].empty:
+                idx = st.session_state['estoque'][mask].index[0]
+                try: saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
+                except: saldo_atual = 0.0
+                
+                novo_saldo = saldo_atual + float(qtd)
+                st.session_state['estoque'].at[idx, 'Saldo'] = novo_saldo
+                
+                nome_prod = st.session_state['estoque'].at[idx, 'Produto']
+                st.session_state['log_entradas'].append({
+                    'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
+                    'Produto': nome_prod, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']
+                })
+                salvar_dados(); st.success(f"Entrada de +{qtd}Kg em {nome_prod} realizada!"); st.rerun()
+            else: st.error("Erro: Produto não encontrado.")
 
-        if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
-            st.error(f"⛔ O cliente '{nome}' já existe. Use a busca abaixo para editar.")
-            return
-        
-        st.session_state['clientes_db'][nome] = {
-            'Tel': st.session_state['form_tel'], 
-            'Email': st.session_state['form_email'],
-            'End': st.session_state['form_end'],
-            'CNPJ': st.session_state['form_cnpj'], 'Cidade': st.session_state['form_cid'],
-            'UF': st.session_state['form_uf'], 'CEP': st.session_state['form_cep'], 
-            'Cod_Cli': st.session_state['form_cod'],
-            'Fator': float(st.session_state['form_fator'])
-        }
-        salvar_dados()
-        st.toast(f"Cliente {nome} salvo!", icon="✅")
-        limpar_campos()
-
-    def excluir_cliente(nome):
-        if nome in st.session_state['clientes_db']: 
-            del st.session_state['clientes_db'][nome]
-            salvar_dados()
-            st.toast("Removido.", icon="🗑️")
-
-    def preparar_edicao(k, d):
-        st.session_state['form_nome'] = str(k)
-        st.session_state['form_tel'] = str(d.get('Tel', ''))
-        st.session_state['form_email'] = str(d.get('Email', ''))
-        st.session_state['form_end'] = str(d.get('End', ''))
-        st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
-        st.session_state['form_cid'] = str(d.get('Cidade', ''))
-        st.session_state['form_uf'] = str(d.get('UF', ''))
-        st.session_state['form_cep'] = str(d.get('CEP', ''))
-        st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-        # Blindagem também aqui
-        try:
-            st.session_state['form_fator'] = float(d.get('Fator', 1.0))
-        except:
-            st.session_state['form_fator'] = 1.0
-            
-        st.session_state['edit_mode'] = True
-        st.toast(f"Editando: {k}", icon="✏️")
-
-    # --- IMPORTAR PDF ---
-    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
-        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
-        if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
-            try:
-                dados_lidos = ler_pdf_antigo(arquivo_pdf)
-                if dados_lidos:
-                    st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
-                    st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
-                    st.session_state['form_end'] = str(dados_lidos.get('End', ''))
-                    st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
-                    st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
-                    st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
-                    st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
-                    st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
-                    st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
-                    st.success("Dados extraídos!")
-            except NameError: st.error("Erro na função de leitura.")
-
-    # --- FORMULÁRIO ---
-    with st.form("form_cliente"):
-        st.markdown("#### 📝 Dados Cadastrais")
-        c1, c2 = st.columns([3, 1])
-        c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
-        c2.text_input("Cód. Cliente", key="form_cod")
-        
-        c_fator, c_cnpj = st.columns([1, 2])
-        c_fator.number_input("💲 Fator Preço (1.0=Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator")
-        c_cnpj.text_input("CNPJ", key="form_cnpj")
-        
-        c_tel, c_mail = st.columns([1, 2])
-        c_tel.text_input("Telefone", key="form_tel")
-        c_mail.text_input("E-mail", key="form_email", placeholder="contato@empresa.com")
-        
-        st.text_input("Endereço", key="form_end")
-        c6, c7, c8 = st.columns([2, 1, 1])
-        c6.text_input("Cidade", key="form_cid"); c7.text_input("UF", key="form_uf"); c8.text_input("CEP", key="form_cep")
-        
-        st.form_submit_button("💾 SALVAR", on_click=salvar_no_callback)
-
-    if st.session_state['edit_mode']:
-        st.button("❌ Cancelar Edição", on_click=limpar_campos)
-    else:
-        st.button("🧹 Limpar Campos", on_click=limpar_campos)
-    
-    st.markdown("---"); st.subheader("📇 Carteira de Clientes")
-    if st.session_state['clientes_db']:
-        busca = st.text_input("🔍 Buscar...", placeholder="Nome da empresa...")
-        lista = sorted(list(st.session_state['clientes_db'].keys()))
-        if busca: lista = [k for k in lista if busca.lower() in k.lower()]
-        
-        c_h1, c_h2 = st.columns([6, 1])
-        c_h1.caption("📂 NOME DA EMPRESA")
-        c_h2.caption("📋 COPIAR")
-
-        for k in lista:
-            d = st.session_state['clientes_db'][k]
-            
-            # --- BLINDAGEM CONTRA ERRO MATEMÁTICO ---
-            try:
-                raw_fator = d.get('Fator', 1.0)
-                fator = float(raw_fator)
-                if pd.isna(fator): fator = 1.0 # Se for NaN, vira 1.0
-            except:
-                fator = 1.0 # Se der erro, assume padrão
-            # ----------------------------------------
-
-            email_cli = d.get('Email', '')
-            
-            cor_tabela = "blue" if fator == 1.0 else ("green" if fator < 1.0 else "red")
-            
-            # Cálculo seguro do texto da tabela
-            try:
-                if fator == 1.0:
-                    tipo_tabela = "NORMAL"
-                elif fator < 1.0:
-                    tipo_tabela = f"DESC. {int((1-fator)*100)}%"
-                else:
-                    tipo_tabela = f"ACRÉSC. {int((fator-1)*100)}%"
-            except:
-                tipo_tabela = "NORMAL"
-
-            col_expander, col_btn = st.columns([6, 1])
-            
-            with col_expander:
-                with st.expander(f"🏢 {k} [{tipo_tabela}]"):
-                    c_det1, c_det2 = st.columns(2)
-                    c_det1.write(f"📍 {d.get('End', '-')}")
-                    c_det2.write(f"📞 {d.get('Tel', '-')}")
-                    c_det2.write(f"📄 CNPJ: {d.get('CNPJ', '-')}")
-                    st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
-                    
-                    c_edit, c_del = st.columns([1, 1])
-                    c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
-                    c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
-            
-            with col_btn:
-                if email_cli:
-                    with st.popover("📋", help="Ver e Copiar Email"):
-                        st.code(email_cli, language="text")
-                else:
-                    st.caption("🚫")
-            
-    else: st.info("Nenhum cliente cadastrado.")
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral & Cadastro")
 
-    # --- 1. FORMULÁRIO DE CADASTRO BLINDADO (NOVIDADE) ---
-    # Aqui você cadastra com segurança. Preencheu, salvou, tá garantido.
     with st.expander("➕ CADASTRAR NOVO PRODUTO", expanded=False):
         with st.form("form_novo_prod"):
             st.write("📝 **Ficha do Produto**")
@@ -949,7 +743,6 @@ elif menu == "📦 Estoque":
             
             if st.form_submit_button("💾 SALVAR NOVO PRODUTO"):
                 if cod_novo and nome_novo:
-                    # Verifica se o código já existe para não duplicar
                     codigos_existentes = st.session_state['estoque']['Cod'].astype(str).values
                     if str(cod_novo) in codigos_existentes:
                         st.error("⛔ Erro: Já existe um produto com esse Código!")
@@ -960,43 +753,25 @@ elif menu == "📦 Estoque":
                             "Saldo": saldo_novo, "Estoque_Inicial": saldo_novo,
                             "Estoque_Minimo": min_novo
                         }
-                        # Adiciona na tabela de forma segura
-                        st.session_state['estoque'] = pd.concat([
-                            st.session_state['estoque'], 
-                            pd.DataFrame([novo_item])
-                        ], ignore_index=True)
-                        
-                        salvar_dados()
-                        st.success(f"✅ Produto '{nome_novo}' cadastrado e firmado!")
-                        st.rerun()
-                else:
-                    st.warning("⚠️ Atenção: Código e Nome são obrigatórios.")
+                        st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo_item])], ignore_index=True)
+                        salvar_dados(); st.success(f"✅ Produto '{nome_novo}' cadastrado!"); st.rerun()
+                else: st.warning("⚠️ Atenção: Código e Nome são obrigatórios.")
 
     st.markdown("---")
-    
-    # --- 2. TABELA DE ESTOQUE (PARA CONSULTA E AJUSTES) ---
     st.subheader("📦 Lista de Produtos")
     
     if not st.session_state["estoque"].empty:
-        # Blindagem Numérica para evitar erros de cálculo
         for col in ["Saldo", "Estoque_Minimo", "Preco_Base"]:
             if col in st.session_state["estoque"].columns:
                 st.session_state["estoque"][col] = pd.to_numeric(st.session_state["estoque"][col], errors='coerce').fillna(0.0)
-            else:
-                st.session_state["estoque"][col] = 0.0
+            else: st.session_state["estoque"][col] = 0.0
 
-    # Estilo visual (Verde se tiver saldo)
     def estilo_saldo(val): return 'background-color: #d4edda; color: #155724; font-weight: 900; border: 1px solid #c3e6cb'
     try: df_styled = st.session_state["estoque"].style.map(estilo_saldo, subset=["Saldo"])
     except: df_styled = st.session_state["estoque"]
 
-    # Editor de Tabela
-    # Dica: Use esta tabela para EDITAR coisas existentes. Para CRIAR novos, use o formulário acima.
     ed = st.data_editor(
-        df_styled, 
-        use_container_width=True, 
-        num_rows="dynamic", # Ainda permite adicionar por aqui se quiser, mas o formulário é mais seguro
-        key="editor_estoque_v6",
+        df_styled, use_container_width=True, num_rows="dynamic", key="editor_estoque_v6",
         column_config={
             "Saldo": st.column_config.NumberColumn("✅ SALDO", format="%.2f"),
             "Estoque_Minimo": st.column_config.NumberColumn("🚨 Mínimo", format="%.0f"),
@@ -1006,176 +781,38 @@ elif menu == "📦 Estoque":
         }
     )
     
-    # Salva automaticamente se você mudar algo na tabela
     if not ed.equals(st.session_state["estoque"]): 
         st.session_state["estoque"] = ed
         salvar_dados()
-elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Entrada de Mercadoria")
-    
-    if st.session_state['estoque'].empty: 
-        st.warning("Cadastre produtos no estoque primeiro!")
-        st.stop()
 
-    with st.form("f_ent"):
-        # Cria lista de opções
-        opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
-        prod_sel = st.selectbox("Selecione o Produto", opcoes)
-        qtd = st.number_input("Quantidade (KG)", min_value=0.0, step=1.0)
-        
-        if st.form_submit_button("✅ Confirmar Entrada"):
-            # 1. Identifica o Produto
-            cod = prod_sel.split(" - ")[0]
-            mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-            
-            if not st.session_state['estoque'][mask].empty:
-                idx = st.session_state['estoque'][mask].index[0]
-                
-                # 2. BLINDAGEM MATEMÁTICA (Aqui estava o erro)
-                # Converte o saldo atual para número na marra antes de somar
-                try:
-                    saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
-                except:
-                    saldo_atual = 0.0
-                
-                novo_saldo = saldo_atual + float(qtd)
-                
-                # 3. Atualiza
-                st.session_state['estoque'].at[idx, 'Saldo'] = novo_saldo
-                
-                # 4. Registra no Log
-                nome_prod = st.session_state['estoque'].at[idx, 'Produto']
-                st.session_state['log_entradas'].append({
-                    'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
-                    'Produto': nome_prod, 
-                    'Qtd': qtd, 
-                    'Usuario': st.session_state['usuario_nome']
-                })
-                
-                # 5. Salva
-                salvar_dados()
-                st.success(f"Entrada de +{qtd}Kg em {nome_prod} realizada!")
-                st.rerun()
-            else:
-                st.error("Erro: Produto não encontrado no índice.")
-            # ==============================================================================
-# 9. ÁREA RESTRITA (BACKUP E RESET)
-# ==============================================================================
-elif menu == "🛠️ Admin / Backup":
-    st.title("🛠️ Bunker de Comando")
-    st.markdown("---")
+elif menu == "📋 Conferência Geral":
+    st.title("📋 Conferência Tática")
+    tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
 
-    # --- SENHA DE SEGURANÇA PARA ACESSAR O BUNKER ---
-    # Só libera as funções perigosas se digitar a senha de admin
-    senha_admin = st.text_input("🔑 Digite a Senha do General para liberar operações:", type="password")
-    
-    if senha_admin == "labormetal22": # A mesma senha do login do General
-        
-        st.success("🔓 Acesso Autorizado. Cuidado, General.")
-        
-        tab_bkp, tab_res, tab_nuc = st.tabs(["💾 SALVAR BACKUP", "♻️ RESTAURAR DADOS", "☢️ ZERAR SISTEMA"])
+    with tab1:
+        st.caption("Para apagar: Selecione a linha e pressione DELETE ou clique na lixeira.")
+        if st.session_state.get('log_vendas'):
+            df_v = pd.DataFrame(st.session_state['log_vendas'])
+            vendas_editadas = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key="editor_log_vendas", hide_index=True)
+            if st.button("💾 SALVAR ALTERAÇÕES (VENDAS)", type="primary"):
+                st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
+                salvar_dados(); st.success("Atualizado!"); st.rerun()
+        else: st.info("Nenhuma venda registrada.")
 
-        # ------------------------------------------------------------------
-        # 1. FAZER BACKUP (EXPORTAR)
-        # ------------------------------------------------------------------
-        with tab_bkp:
-            st.subheader("💾 Gerar Cópia de Segurança")
-            st.caption("Baixa um arquivo completo com Clientes, Estoque e Históricos.")
-            
-            if st.button("📦 CRIAR ARQUIVO DE BACKUP"):
-                # Empacota tudo num dicionário Python
-                pacote_dados = {
-                    "estoque": st.session_state['estoque'].to_dict('records'),
-                    "clientes": st.session_state['clientes_db'],
-                    "vendas": st.session_state['log_vendas'],
-                    "entradas": st.session_state['log_entradas'],
-                    "laudos": st.session_state['log_laudos'],
-                    "data_backup": datetime.now().strftime("%d/%m/%Y %H:%M")
-                }
-                
-                # Converte para texto JSON
-                arquivo_json = json.dumps(pacote_dados, indent=4)
-                
-                # Botão de Download
-                data_hoje = datetime.now().strftime("%d-%m-%Y")
-                st.download_button(
-                    label="⬇️ BAIXAR ARQUIVO (.json)",
-                    data=arquivo_json,
-                    file_name=f"Backup_Sistema_V65_{data_hoje}.json",
-                    mime="application/json",
-                    type="primary"
-                )
+    with tab2:
+        st.caption("Edite ou apague lançamentos errados.")
+        if st.session_state.get('log_entradas'):
+            df_e = pd.DataFrame(st.session_state['log_entradas'])
+            entradas_editadas = st.data_editor(df_e, use_container_width=True, num_rows="dynamic", key="editor_log_entradas", hide_index=True)
+            if st.button("💾 SALVAR ALTERAÇÕES (ENTRADAS)", type="primary"):
+                st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
+                salvar_dados(); st.success("Atualizado!"); st.rerun()
+        else: st.info("Nenhuma entrada registrada.")
 
-        # ------------------------------------------------------------------
-        # 2. RESTAURAR (IMPORTAR)
-        # ------------------------------------------------------------------
-        with tab_res:
-            st.subheader("♻️ Restaurar Dados Antigos")
-            st.warning("⚠️ ATENÇÃO: Isso vai APAGAR o que está no sistema agora e substituir pelo arquivo que você enviar.")
-            
-            arquivo_up = st.file_uploader("Arraste o arquivo de backup (.json) aqui:", type="json")
-            
-            if arquivo_up is not None:
-                if st.button("🔄 CONFIRMAR RESTAURAÇÃO"):
-                    try:
-                        dados = json.load(arquivo_up)
-                        
-                        # Reconstrói a memória
-                        st.session_state['estoque'] = pd.DataFrame(dados['estoque'])
-                        st.session_state['clientes_db'] = dados['clientes']
-                        st.session_state['log_vendas'] = dados['vendas']
-                        st.session_state['log_entradas'] = dados['entradas']
-                        st.session_state['log_laudos'] = dados['laudos']
-                        
-                        # Salva na nuvem
-                        salvar_dados()
-                        st.balloons()
-                        st.success("✅ Sistema Restaurado com Sucesso! (Pressione R para recarregar)")
-                    except Exception as e:
-                        st.error(f"Erro ao ler arquivo: {e}")
+    with tab3:
+        laudos = st.session_state.get('log_laudos', [])
+        pendentes = [l for l in laudos if l.get('Status') != 'Arquivado']
+        arquivados = [l for l in laudos if l.get('Status') == 'Arquivado']
 
-        # ------------------------------------------------------------------
-        # 3. ZERAR TUDO (BOTÃO NUCLEAR)
-        # ------------------------------------------------------------------
-        with tab_nuc:
-            st.subheader("☢️ ZERAR TUDO (Protocolo de Destruição)")
-            st.error("⛔ PERIGO: ISSO APAGA CLIENTES, ESTOQUE, TUDO! NÃO TEM VOLTA.")
-            
-            confirmacao = st.text_input("Digite 'CONFIRMO' para liberar o botão:", placeholder="...")
-            
-            if confirmacao == "CONFIRMO":
-                if st.button("💣 DETONAR / LIMPAR SISTEMA", type="primary"):
-                    # Limpa as variáveis
-                    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Inicial', 'Estoque_Minimo'])
-                    st.session_state['clientes_db'] = {}
-                    st.session_state['log_vendas'] = []
-                    st.session_state['log_entradas'] = []
-                    st.session_state['log_laudos'] = []
-                    
-                    # Salva o vazio na nuvem
-                    salvar_dados()
-                    st.success("O terreno está limpo, General. Começando do zero.")
-                    st.rerun()
-            else:
-                st.info("Botão travado por segurança.")
-
-    else:
-        st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        st.markdown("#### ⚠️ Pendentes (Em Análise)")
+        if not pendentes:
