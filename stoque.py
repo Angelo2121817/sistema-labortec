@@ -547,53 +547,105 @@ if menu == "📊 Dashboard":
         else:
             st.caption("Aguardando dados de produtos...")
 # --- LAUDOS RESTAURADOS ---
+# ==============================================================================
+# GESTÃO DE LAUDOS (COM DATAS BRASILEIRAS FORÇADAS)
+# ==============================================================================
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
+    
+    # --- 1. AGENDAMENTO (DATA INPUT CONFIGURADO) ---
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
             c1, c2 = st.columns(2)
-            data_l = c1.date_input("Data da Coleta")
-            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7))
+            
+            # AQUI: format="DD/MM/YYYY" força o calendário visualmente
+            data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
+            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
+            
             if st.form_submit_button("Agendar"):
-                novo = {'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'}
+                novo = {
+                    'Cliente': cli_l, 
+                    # AQUI: strftime garante que salva como texto BR na lista
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
+                    'Status': 'Pendente'
+                }
                 st.session_state['log_laudos'].append(novo)
                 salvar_dados()
-                st.success("Agendado!")
+                st.success(f"Agendado para {data_l.strftime('%d/%m/%Y')}!")
                 st.rerun()
 
     st.markdown("---")
     st.subheader("📋 Editar Previsões e Status")
+    
     laudos = st.session_state.get('log_laudos', [])
-    # Filtra para não mostrar arquivados na edição rápida
+    
+    # Filtra (Esconde arquivados da edição rápida)
     laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
     
     if not laudos_ativos: 
-        st.info("Sem laudos ativos.")
+        st.info("Sem laudos ativos para editar.")
     else:
+        # Prepara o DataFrame
         df_p = pd.DataFrame(laudos)
-        # Cria ID para editar a lista original corretamente
         df_p['ID_Real'] = range(len(laudos))
+        
         # Filtra visualmente
         df_view = df_p[df_p['Status'] != 'Arquivado'].copy()
-        
+
+        # --- TRUQUE TÁTICO: CONVERTER PARA DATA REAL ---
+        # O Editor precisa que seja 'datetime' para mostrar o calendário, 
+        # mas nossos dados são texto. Convertemos agora:
+        df_view['Data_Coleta'] = pd.to_datetime(df_view['Data_Coleta'], dayfirst=True, errors='coerce')
+        df_view['Data_Resultado'] = pd.to_datetime(df_view['Data_Resultado'], dayfirst=True, errors='coerce')
+
         ed_p = st.data_editor(
             df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
-            use_container_width=True, hide_index=True, disabled=['ID_Real', 'Cliente'],
+            use_container_width=True, 
+            hide_index=True, 
+            disabled=['ID_Real', 'Cliente'],
             column_config={
-                "Data_Coleta": st.column_config.TextColumn("Coleta (dd/mm/aaaa)"),
-                "Data_Resultado": st.column_config.TextColumn("Resultado (dd/mm/aaaa)"),
-                "Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Análise", "Concluído", "Cancelado"])
+                # Configura a coluna para mostrar calendário BR
+                "Data_Coleta": st.column_config.DateColumn(
+                    "📅 Coleta", 
+                    format="DD/MM/YYYY", # Força visual BR
+                    step=1
+                ),
+                "Data_Resultado": st.column_config.DateColumn(
+                    "🧪 Previsão", 
+                    format="DD/MM/YYYY", # Força visual BR
+                    step=1
+                ),
+                "Status": st.column_config.SelectboxColumn(
+                    "Situação", 
+                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
+                )
             }
         )
+
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Real'])
-                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(row['Data_Coleta'])
-                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(row['Data_Resultado'])
-                st.session_state['log_laudos'][idx]['Status'] = row['Status']
-            salvar_dados(); st.success("Atualizado!"); st.rerun()
+                
+                # --- CONVERSÃO REVERSA (DATA -> TEXTO BR) ---
+                # Se for data real (Timestamp), converte para string BR. Se não, mantém.
+                nova_coleta = row['Data_Coleta']
+                if hasattr(nova_coleta, 'strftime'):
+                    nova_coleta = nova_coleta.strftime("%d/%m/%Y")
+                
+                nova_previsao = row['Data_Resultado']
+                if hasattr(nova_previsao, 'strftime'):
+                    nova_previsao = nova_previsao.strftime("%d/%m/%Y")
 
+                # Atualiza a memória principal
+                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(nova_coleta)
+                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(nova_previsao)
+                st.session_state['log_laudos'][idx]['Status'] = row['Status']
+            
+            salvar_dados()
+            st.success("Dados atualizados no padrão BR!")
+            st.rerun()
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas e Orçamentos")
     if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
@@ -980,6 +1032,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
