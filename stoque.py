@@ -497,6 +497,99 @@ elif menu == "📥 Entrada de Estoque":
                 st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
                 st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
                 salvar_dados(); st.success("Entrada Realizada!"); st.rerun()
+                # ==============================================================================
+# 8. CONFERÊNCIA GERAL (MÓDULO REINSTALADO)
+# ==============================================================================
+elif menu == "📋 Conferência Geral":
+    st.title("📋 Conferência Tática de Movimentações")
+    
+    # Abas para organizar o quartel-general
+    tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
+
+    # --- ABA 1: VENDAS ---
+    with tab1:
+        st.subheader("🛒 Registro de Vendas Realizadas")
+        st.caption("💡 Dica: Para apagar um erro, selecione a linha e aperte 'Delete' no teclado.")
+        
+        # Busca o log de vendas na memória do sistema
+        log_vendas_data = st.session_state.get('log_vendas', [])
+        
+        if log_vendas_data:
+            df_vendas_log = pd.DataFrame(log_vendas_data)
+            
+            # Editor para correções rápidas
+            vendas_editadas = st.data_editor(
+                df_vendas_log, 
+                use_container_width=True, 
+                num_rows="dynamic", 
+                key="editor_conferencia_vendas",
+                hide_index=True
+            )
+            
+            if st.button("💾 SALVAR ALTERAÇÕES EM VENDAS", type="primary"):
+                st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
+                salvar_dados()
+                st.success("Histórico de vendas atualizado e firmado!")
+                st.rerun()
+        else:
+            st.info("Nenhuma venda registrada no sistema até o momento.")
+
+    # --- ABA 2: ENTRADAS ---
+    with tab2:
+        st.subheader("📥 Registro de Entradas de Mercadoria")
+        
+        log_entradas_data = st.session_state.get('log_entradas', [])
+        
+        if log_entradas_data:
+            df_entradas_log = pd.DataFrame(log_entradas_data)
+            
+            entradas_editadas = st.data_editor(
+                df_entradas_log, 
+                use_container_width=True, 
+                num_rows="dynamic",
+                key="editor_conferencia_entradas",
+                hide_index=True
+            )
+            
+            if st.button("💾 SALVAR ALTERAÇÕES EM ENTRADAS", type="primary"):
+                st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
+                salvar_dados()
+                st.success("Histórico de entradas atualizado e firmado!")
+                st.rerun()
+        else:
+            st.info("Nenhuma entrada de estoque registrada no sistema.")
+
+    # --- ABA 3: LAUDOS ---
+    with tab3:
+        st.subheader("🧪 Status e Arquivamento de Laudos")
+        laudos_lista = st.session_state.get('log_laudos', [])
+        
+        pendentes_arq = [l for l in laudos_lista if l.get('Status') != 'Arquivado']
+        arquivados_lista = [l for l in laudos_lista if l.get('Status') == 'Arquivado']
+
+        if not pendentes_arq:
+            st.success("✅ Nenhum laudo pendente de arquivamento.")
+        else:
+            for i, item in enumerate(laudos_lista):
+                if item.get('Status') != 'Arquivado':
+                    with st.expander(f"📄 {item.get('Cliente', 'Cliente ?')} | Coleta: {item.get('Data_Coleta','--')}"):
+                        c1, c2 = st.columns([3, 1])
+                        c1.write(f"**Previsão:** {item.get('Data_Resultado', '--')}")
+                        link_final = c1.text_input("🔗 Link do PDF:", key=f"lk_conf_{i}", value=item.get('Link_Arquivo', ''))
+                        
+                        if c2.button("📂 ARQUIVAR", key=f"bt_conf_arq_{i}", use_container_width=True):
+                            st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
+                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link_final
+                            st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
+                            salvar_dados()
+                            st.rerun()
+
+        if arquivados_lista:
+            st.markdown("---")
+            with st.expander(f"🗄️ Ver Arquivo Morto ({len(arquivados_lista)} itens)"):
+                for i, item in enumerate(laudos_lista):
+                    if item.get('Status') == 'Arquivado':
+                        st.write(f"✅ **{item.get('Cliente')}** - Arquivado em: {item.get('Data_Arquivamento','?')}")
 
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral & Cadastro")
@@ -833,6 +926,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
