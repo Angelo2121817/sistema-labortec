@@ -328,6 +328,22 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
 # ==============================================================================
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
+# --- SISTEMA DE AVISOS (COM MEMÓRIA GLOBAL) ---
+if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
+st.sidebar.markdown("---")
+with st.sidebar.expander("📢 MURAL DE AVISOS"):
+    aviso_txt = st.text_area("Mensagem:", value=st.session_state['aviso_geral'], height=100)
+    c_salv, c_limp = st.columns(2)
+    
+    if c_salv.button("💾 PUBLICAR"):
+        st.session_state['aviso_geral'] = aviso_txt
+        salvar_dados() # <--- OBRIGATÓRIO PARA FIXAR
+        st.rerun()
+        
+    if c_limp.button("🗑️ APAGAR"):
+        st.session_state['aviso_geral'] = ""
+        salvar_dados() # <--- APAGA DA NUVEM TAMBÉM
+        st.rerun()
 
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
@@ -977,6 +993,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
