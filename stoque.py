@@ -157,13 +157,13 @@ def _fix_datetime_br(val):
 
 def carregar_dados():
     try:
-        # Carrega Estoque
+        # 1. Carrega Estoque
         df_est = conn.read(worksheet="Estoque", ttl=0)
         if isinstance(df_est, pd.DataFrame) and not df_est.empty:
             df_est = _normalizar_colunas(df_est)
             st.session_state["estoque"] = df_est
 
-        # Carrega Clientes
+        # 2. Carrega Clientes
         df_cli = conn.read(worksheet="Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
             df_cli = _normalizar_colunas(df_cli)
@@ -171,10 +171,9 @@ def carregar_dados():
             if "Nome" in df_cli.columns: st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
             else: st.session_state["clientes_db"] = {}
 
-        # Carrega Logs e Aviso
+        # 3. Carrega Logs e Aviso
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
             try:
-                # ttl=0 garante que ele não pegue dado velho do cache
                 df = conn.read(worksheet=aba, ttl=0)
             except:
                 df = pd.DataFrame() 
@@ -196,32 +195,23 @@ def carregar_dados():
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
                 
-                # --- LÓGICA DE AVISO (MODO BRUTO) ---
+                # --- AVISOS (MODO BLINDADO) ---
                 elif aba == "Avisos":
-                    # Se tiver qualquer dado, pega a primeira célula da primeira linha
                     try:
-                        st.session_state['aviso_geral'] = str(df.iloc[0].values[0])
+                        # Pega o valor da primeira célula, não importa o nome da coluna
+                        val = str(df.iloc[0].values[0])
+                        st.session_state['aviso_geral'] = val
                     except:
                         st.session_state['aviso_geral'] = ""
             else:
                 if aba == "Avisos": st.session_state['aviso_geral'] = ""
                 else: st.session_state[aba.lower()] = []
+        
         return True
     except Exception as e:
-        st.error(f"Erro no Carregamento: {e}") # Mostra erro se houver
+        st.error(f"Erro no Carregamento: {e}")
         return False
-                
-                elif aba == "Avisos":
-                    if "Mensagem" in df.columns and len(df) > 0:
-                        st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
-                    else:
-                        st.session_state['aviso_geral'] = ""
-            else:
-                if aba == "Avisos": st.session_state['aviso_geral'] = ""
-                else: st.session_state[aba.lower()] = []
-        return True
-    except Exception as e:
-        return False
+
 def salvar_dados():
     try:
         conn.update(worksheet="Estoque", data=st.session_state["estoque"])
@@ -234,16 +224,15 @@ def salvar_dados():
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
         
-        # --- SALVA O AVISO FORÇANDO COLUNA ÚNICA ---
+        # --- SALVA O AVISO FORÇANDO COLUNA PADRÃO ---
         msg_atual = st.session_state.get('aviso_geral', "")
-        # Cria dataframe explícito
+        # Cria um DataFrame novo e limpo sempre que salva
         df_aviso = pd.DataFrame({"Mensagem": [str(msg_atual)]})
         conn.update(worksheet="Avisos", data=df_aviso)
         
         st.toast("✅ Dados Sincronizados!", icon="☁️")
         
     except Exception as e:
-        # AQUI O INIMIGO APARECE
         st.error(f"⚠️ ERRO CRÍTICO AO SALVAR: {e}")
         st.stop()
 # ==============================================================================
@@ -975,6 +964,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
