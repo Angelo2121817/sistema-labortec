@@ -762,7 +762,8 @@ elif menu == "👥 Clientes":
     # --- CONTROLE DE MODO (NOVO OU EDIÇÃO) ---
     if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
 
-    campos = ['form_nome', 'form_tel', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
+    # Adicionamos 'form_email' na lista de campos
+    campos = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
     for c in campos: 
         if c not in st.session_state: 
             st.session_state[c] = 1.0 if c == 'form_fator' else ""
@@ -779,14 +780,15 @@ elif menu == "👥 Clientes":
             st.toast("Erro: Nome obrigatório!", icon="❌")
             return
 
-        # --- SISTEMA DE DEFESA CONTRA DUPLICIDADE ---
-        # Se NÃO estiver editando E o nome já existir na lista:
+        # Defesa contra duplicidade (Só se for novo)
         if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
             st.error(f"⛔ O cliente '{nome}' já existe. Use a busca abaixo para editar.")
             return
         
         st.session_state['clientes_db'][nome] = {
-            'Tel': st.session_state['form_tel'], 'End': st.session_state['form_end'],
+            'Tel': st.session_state['form_tel'], 
+            'Email': st.session_state['form_email'], # <--- SALVANDO EMAIL
+            'End': st.session_state['form_end'],
             'CNPJ': st.session_state['form_cnpj'], 'Cidade': st.session_state['form_cid'],
             'UF': st.session_state['form_uf'], 'CEP': st.session_state['form_cep'], 
             'Cod_Cli': st.session_state['form_cod'],
@@ -805,6 +807,7 @@ elif menu == "👥 Clientes":
     def preparar_edicao(k, d):
         st.session_state['form_nome'] = str(k)
         st.session_state['form_tel'] = str(d.get('Tel', ''))
+        st.session_state['form_email'] = str(d.get('Email', '')) # <--- CARREGANDO EMAIL
         st.session_state['form_end'] = str(d.get('End', ''))
         st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
         st.session_state['form_cid'] = str(d.get('Cidade', ''))
@@ -829,16 +832,16 @@ elif menu == "👥 Clientes":
                     st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
                     st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
                     st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
+                    st.session_state['form_email'] = str(dados_lidos.get('Email', '')) # Tenta pegar do PDF se tiver
                     st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
                     st.success("Dados extraídos!")
             except NameError: st.error("Erro na função de leitura.")
 
-    # --- FORMULÁRIO LIMPO ---
+    # --- FORMULÁRIO ---
     with st.form("form_cliente"):
         st.markdown("#### 📝 Dados Cadastrais")
         
         c1, c2 = st.columns([3, 1])
-        # Trava o nome se estiver editando para não criar duplicado sem querer
         c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
         c2.text_input("Cód. Cliente", key="form_cod")
         
@@ -846,9 +849,12 @@ elif menu == "👥 Clientes":
         c_fator.number_input("💲 Fator Preço (1.0=Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator")
         c_cnpj.text_input("CNPJ", key="form_cnpj")
         
-        c4, c5 = st.columns([1, 2])
-        c4.text_input("Telefone", key="form_tel")
-        c5.text_input("Endereço", key="form_end")
+        # LINHA NOVA: Telefone e Email juntos
+        c_tel, c_mail = st.columns([1, 2])
+        c_tel.text_input("Telefone", key="form_tel")
+        c_mail.text_input("E-mail", key="form_email", placeholder="contato@empresa.com")
+        
+        st.text_input("Endereço", key="form_end")
         
         c6, c7, c8 = st.columns([2, 1, 1])
         c6.text_input("Cidade", key="form_cid"); c7.text_input("UF", key="form_uf"); c8.text_input("CEP", key="form_cep")
@@ -874,7 +880,11 @@ elif menu == "👥 Clientes":
             
             with st.expander(f"🏢 {k} [{tipo_tabela}]"):
                 col_a, col_b = st.columns(2)
-                col_a.write(f"📍 {d.get('End', '')}"); col_b.write(f"📞 {d.get('Tel', '')} | CNPJ: {d.get('CNPJ', '')}")
+                col_a.write(f"📍 {d.get('End', '')}")
+                # Mostra o Email aqui agora
+                col_b.write(f"📞 {d.get('Tel', '')} | 📧 {d.get('Email', '-')}")
+                col_b.write(f"CNPJ: {d.get('CNPJ', '')}")
+                
                 st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
                 
                 c_edit, c_del = st.columns([1, 1])
@@ -1176,6 +1186,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
