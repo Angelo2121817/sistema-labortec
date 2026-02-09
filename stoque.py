@@ -171,46 +171,53 @@ def carregar_dados():
             if "Nome" in df_cli.columns: st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
             else: st.session_state["clientes_db"] = {}
 
-        # Carrega Logs e Aviso
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]: 
+        # Carrega Logs
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
             try:
                 df = conn.read(worksheet=aba, ttl=0)
             except:
-                df = pd.DataFrame() # Se a aba não existir, cria vazia
+                df = pd.DataFrame() 
 
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
                 
-                # Lógica Específica para cada aba
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
-                    if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
-                    if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
-                    # Aplica formatação de data apenas se necessário
                     if "Data_Coleta" in df.columns: df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
                     if "Data_Resultado" in df.columns: df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
-                    
                     for c in ["Cliente", "Status"]: df[c] = df[c].fillna("").astype(str)
                     st.session_state['log_laudos'] = df.to_dict("records")
 
                 elif aba in ["Log_Vendas", "Log_Entradas"]:
                     if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                     st.session_state[aba.lower()] = df.to_dict("records")
-                
-                # --- NOVA LÓGICA DO AVISO ---
-                elif aba == "Avisos":
-                    if "Mensagem" in df.columns and len(df) > 0:
-                        st.session_state['aviso_geral'] = str(df.iloc[0]['Mensagem'])
-                    else:
-                        st.session_state['aviso_geral'] = ""
             else:
-                if aba == "Avisos": st.session_state['aviso_geral'] = ""
-                else: st.session_state[aba.lower()] = []
-        
+                st.session_state[aba.lower()] = []
+
+        # --- LÓGICA DO AVISO REFORÇADA (SEPARADA DO LOOP) ---
+        try:
+            df_aviso = conn.read(worksheet="Avisos", ttl=0)
+            # Se o DF não estiver vazio
+            if isinstance(df_aviso, pd.DataFrame) and not df_aviso.empty:
+                # Tenta pegar pela coluna 'Mensagem'
+                if "Mensagem" in df_aviso.columns:
+                    valor = str(df_aviso.iloc[0]["Mensagem"])
+                # Se não achar a coluna, pega a primeira célula (linha 0, coluna 0)
+                else:
+                    valor = str(df_aviso.iloc[0, 0])
+                
+                # Limpa valores nulos ou 'nan'
+                if valor.lower() == 'nan' or valor.lower() == 'none': valor = ""
+                st.session_state['aviso_geral'] = valor
+            else:
+                st.session_state['aviso_geral'] = ""
+        except Exception as e:
+            # Se a aba não existir ou der erro, define vazio
+            st.session_state['aviso_geral'] = ""
+
         return True
     except Exception as e:
-        # st.error(f"Erro ao carregar: {e}") # Descomente para debugar
         return False
 
 # --- FUNÇÃO FUNDAMENTAL QUE ESTAVA FALTANDO ---
@@ -989,3 +996,4 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
