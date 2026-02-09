@@ -663,13 +663,16 @@ elif menu == "💰 Vendas & Orçamentos":
     # 2. Resgate do Fator de Preço
     fator_cliente = float(d_cli.get('Fator', 1.0))
     
-    # Mostra aviso visual sobre a tabela aplicada
+    # Mostra aviso visual com ARREDONDAMENTO CORRETO (CORREÇÃO APLICADA AQUI)
     if fator_cliente == 1.0:
         st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
     elif fator_cliente < 1.0:
-        st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {int((1-fator_cliente)*100)}% (Fator {fator_cliente})")
+        # Usamos round() para o computador arredondar 9.99 para 10
+        perc_desc = round((1.0 - fator_cliente) * 100)
+        st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {perc_desc}% (Fator {fator_cliente})")
     else:
-        st.warning(f"📈 Cliente **{cli}**: Tabela com ACRÉSCIMO de {int((fator_cliente-1)*100)}% (Fator {fator_cliente})")
+        perc_acres = round((fator_cliente - 1.0) * 100)
+        st.warning(f"📈 Cliente **{cli}**: Tabela com ACRÉSCIMO de {perc_acres}% (Fator {fator_cliente})")
     
     col1, col2, col3 = st.columns(3)
     p_pag = col1.text_input("Plano", "28/42 DIAS"); f_pag = col2.text_input("Forma", "BOLETO ITAU"); venc = col3.text_input("Vencimento", "A COMBINAR")
@@ -1120,6 +1123,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
