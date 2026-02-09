@@ -425,7 +425,7 @@ menu = st.sidebar.radio("Navegar:", [
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
     
-    # --- ALERTA GERAL (Mural de Avisos) ---
+    # --- ALERTA GERAL ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
         <style>
@@ -447,24 +447,21 @@ if menu == "📊 Dashboard":
 
     st.markdown("---")
     
-    # --- RADAR DE LAUDOS (FILTRO ESTRITO: SÓ PENDENTES) ---
+    # --- RADAR DE LAUDOS (SEM REPETIÇÃO) ---
     st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 PRÓXIMAS COLETAS (Apenas Pendentes)</h4>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
     
-    # --- A CORREÇÃO ESTÁ AQUI ---
-    # Só mostra se o Status for EXATAMENTE "Pendente".
-    # Se você mudar para "Em Análise", ele some daqui imediatamente.
+    # Filtro Estrito: Apenas Pendentes
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
 
     if not ativos:
         st.success("✅ Tudo limpo! Nenhuma coleta pendente.")
     else:
         items_html = ""
-        # Garante volume visual para o carrossel não quebrar se tiver poucos itens
-        lista_loop = ativos * (4 if len(ativos) < 4 else 1)
-        
-        for l in lista_loop:
+        # MUDANÇA TÁTICA: Removemos o loop multiplicador. 
+        # Agora a lista é exatamente o que existe.
+        for l in ativos:
             cliente = html.escape(str(l.get("Cliente", "") or "Sem Nome"))
             coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--"))
             resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--"))
@@ -481,15 +478,48 @@ if menu == "📊 Dashboard":
             </div>
             """
 
+        # Lógica de Alinhamento:
+        # Se tiver poucos itens (<= 3), centraliza na tela. Se tiver muitos, alinha a esquerda com rolagem.
+        alinhamento = "center" if len(ativos) <= 3 else "flex-start"
+
         carousel_component = f"""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-            .carousel-wrapper {{ overflow: hidden; width: 100%; padding: 10px 0 30px 0; }}
-            .carousel-track {{ display: flex; width: max-content; animation: scroll {max(30, len(ativos)*8)}s linear infinite; }}
-            .carousel-track:hover {{ animation-play-state: paused; }}
-            @keyframes scroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
-            .card {{ width: 260px; flex-shrink: 0; margin-right: 25px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1); font-family: 'Inter', sans-serif; overflow: hidden; border: 1px solid #e2e8f0; transition: transform 0.3s; }}
-            .card:hover {{ transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border-color: #cbd5e1; }}
+            
+            /* Container Flexível (Sem Animação Infinita) */
+            .carousel-container {{
+                display: flex;
+                overflow-x: auto; /* Permite rolar se tiver muitos */
+                gap: 20px;
+                padding: 10px 5px 20px 5px;
+                width: 100%;
+                justify-content: {alinhamento}; /* Centraliza ou Alinha */
+            }}
+            
+            /* Estiliza a barra de rolagem para ficar bonita */
+            .carousel-container::-webkit-scrollbar {{ height: 8px; }}
+            .carousel-container::-webkit-scrollbar-track {{ background: #f1f1f1; border-radius: 4px; }}
+            .carousel-container::-webkit-scrollbar-thumb {{ background: #c1c1c1; border-radius: 4px; }}
+            .carousel-container::-webkit-scrollbar-thumb:hover {{ background: #a8a8a8; }}
+
+            .card {{ 
+                min-width: 260px; /* Garante que o card não encolha */
+                width: 260px; 
+                background: #ffffff; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+                font-family: 'Inter', sans-serif; 
+                overflow: hidden; 
+                border: 1px solid #e2e8f0; 
+                transition: transform 0.2s; 
+            }}
+            
+            .card:hover {{ 
+                transform: translateY(-5px); 
+                box-shadow: 0 15px 30px rgba(0,0,0,0.1); 
+                border-color: #cbd5e1; 
+            }}
+            
             .card-header {{ background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%); color: white; padding: 12px 15px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 3px solid #ffb400; }}
             .card-body {{ padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }}
             .data-group {{ display: flex; flex-direction: column; align-items: center; flex: 1; }}
@@ -500,9 +530,12 @@ if menu == "📊 Dashboard":
             .card-footer {{ background: #ffffff; padding: 10px; text-align: center; border-top: 1px solid #f1f5f9; }}
             .status-pill {{ background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; display: inline-block; }}
         </style>
-        <div class="carousel-wrapper"><div class="carousel-track">{items_html}</div></div>
+        
+        <div class="carousel-container">
+            {items_html}
+        </div>
         """
-        components.html(carousel_component, height=220)
+        components.html(carousel_component, height=230)
 
     # --- MÉTRICAS DE ESTOQUE ---
     st.markdown("<h4 style='text-align: left; color: #555; margin-top: 20px; border-left: 5px solid #d32f2f; padding-left: 10px;'>🚨 ESTOQUE CRÍTICO (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
@@ -512,29 +545,17 @@ if menu == "📊 Dashboard":
         try:
             saldo_num = pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0)
             min_num = pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)
-            
             criticos = df_est[ (saldo_num < min_num) & (min_num > 0) ].copy()
-            
             if not criticos.empty:
-                st.dataframe(
-                    criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], 
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Saldo": st.column_config.NumberColumn("Saldo Atual", format="%.2f"),
-                        "Estoque_Minimo": st.column_config.NumberColumn("Mínimo Desejado", format="%.0f")
-                    }
-                )
+                st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True, column_config={"Saldo": st.column_config.NumberColumn("Saldo Atual", format="%.2f"), "Estoque_Minimo": st.column_config.NumberColumn("Mínimo Desejado", format="%.0f")})
             else:
                 st.info("👍 Situação Regular! Nenhum produto com estoque baixo.")
-        except:
-            st.info("Dados insuficientes para análise de estoque.")
+        except: st.info("Dados insuficientes.")
     
     st.markdown("---")
 
     # --- GRÁFICOS ---
     c_graf1, c_graf2 = st.columns(2)
-
     with c_graf1:
         st.markdown("**📈 Volume de Vendas Diárias**")
         log_v = st.session_state.get('log_vendas', [])
@@ -542,8 +563,7 @@ if menu == "📊 Dashboard":
             df_v = pd.DataFrame(log_v)
             df_v['Dia'] = pd.to_datetime(df_v['Data'], dayfirst=True, errors='coerce').dt.date
             st.area_chart(df_v.groupby('Dia')['Qtd'].sum(), color="#004aad")
-        else:
-            st.caption("Aguardando dados de vendas...")
+        else: st.caption("Aguardando dados...")
 
     with c_graf2:
         st.markdown("**🏆 Produtos Mais Vendidos**")
@@ -551,104 +571,7 @@ if menu == "📊 Dashboard":
             df_v = pd.DataFrame(log_v)
             top_prods = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top_prods, color="#ffb400", horizontal=True)
-        else:
-            st.caption("Aguardando dados de produtos...")
-elif menu == "🧪 Laudos":
-    st.title("🧪 Gestão de Laudos")
-    
-    # --- 1. AGENDAMENTO (DATA INPUT CONFIGURADO) ---
-    with st.expander("📅 Agendar Nova Coleta", expanded=True):
-        with st.form("f_laudo"):
-            cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-            c1, c2 = st.columns(2)
-            
-            # AQUI: format="DD/MM/YYYY" força o calendário visualmente
-            data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
-            data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
-            
-            if st.form_submit_button("Agendar"):
-                novo = {
-                    'Cliente': cli_l, 
-                    # AQUI: strftime garante que salva como texto BR na lista
-                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
-                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
-                    'Status': 'Pendente'
-                }
-                st.session_state['log_laudos'].append(novo)
-                salvar_dados()
-                st.success(f"Agendado para {data_l.strftime('%d/%m/%Y')}!")
-                st.rerun()
-
-    st.markdown("---")
-    st.subheader("📋 Editar Previsões e Status")
-    
-    laudos = st.session_state.get('log_laudos', [])
-    
-    # Filtra (Esconde arquivados da edição rápida)
-    laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
-    
-    if not laudos_ativos: 
-        st.info("Sem laudos ativos para editar.")
-    else:
-        # Prepara o DataFrame
-        df_p = pd.DataFrame(laudos)
-        df_p['ID_Real'] = range(len(laudos))
-        
-        # Filtra visualmente
-        df_view = df_p[df_p['Status'] != 'Arquivado'].copy()
-
-        # --- TRUQUE TÁTICO: CONVERTER PARA DATA REAL ---
-        # O Editor precisa que seja 'datetime' para mostrar o calendário, 
-        # mas nossos dados são texto. Convertemos agora:
-        df_view['Data_Coleta'] = pd.to_datetime(df_view['Data_Coleta'], dayfirst=True, errors='coerce')
-        df_view['Data_Resultado'] = pd.to_datetime(df_view['Data_Resultado'], dayfirst=True, errors='coerce')
-
-        ed_p = st.data_editor(
-            df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
-            use_container_width=True, 
-            hide_index=True, 
-            disabled=['ID_Real', 'Cliente'],
-            column_config={
-                # Configura a coluna para mostrar calendário BR
-                "Data_Coleta": st.column_config.DateColumn(
-                    "📅 Coleta", 
-                    format="DD/MM/YYYY", # Força visual BR
-                    step=1
-                ),
-                "Data_Resultado": st.column_config.DateColumn(
-                    "🧪 Previsão", 
-                    format="DD/MM/YYYY", # Força visual BR
-                    step=1
-                ),
-                "Status": st.column_config.SelectboxColumn(
-                    "Situação", 
-                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
-                )
-            }
-        )
-
-        if st.button("💾 SALVAR ALTERAÇÕES"):
-            for _, row in ed_p.iterrows():
-                idx = int(row['ID_Real'])
-                
-                # --- CONVERSÃO REVERSA (DATA -> TEXTO BR) ---
-                # Se for data real (Timestamp), converte para string BR. Se não, mantém.
-                nova_coleta = row['Data_Coleta']
-                if hasattr(nova_coleta, 'strftime'):
-                    nova_coleta = nova_coleta.strftime("%d/%m/%Y")
-                
-                nova_previsao = row['Data_Resultado']
-                if hasattr(nova_previsao, 'strftime'):
-                    nova_previsao = nova_previsao.strftime("%d/%m/%Y")
-
-                # Atualiza a memória principal
-                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(nova_coleta)
-                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(nova_previsao)
-                st.session_state['log_laudos'][idx]['Status'] = row['Status']
-            
-            salvar_dados()
-            st.success("Dados atualizados no padrão BR!")
-            st.rerun()
+        else: st.caption("Aguardando dados...")
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
@@ -1122,6 +1045,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
