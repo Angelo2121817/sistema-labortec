@@ -425,7 +425,7 @@ menu = st.sidebar.radio("Navegar:", [
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
     
-    # --- ALERTA GERAL ---
+    # --- ALERTA GERAL (Mural de Avisos) ---
     if st.session_state['aviso_geral']:
         st.markdown(f"""
         <style>
@@ -446,16 +446,22 @@ if menu == "📊 Dashboard":
         """, unsafe_allow_html=True)
 
     st.markdown("---")
-    # Trocado para MONITORAMENTO DE ANÁLISES
-    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 MONITORAMENTO DE LAUDOS (PENDENTES)</h4>", unsafe_allow_html=True)
+    
+    # --- RADAR DE LAUDOS (FILTRO ESTRITO: SÓ PENDENTES) ---
+    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 PRÓXIMAS COLETAS (Apenas Pendentes)</h4>", unsafe_allow_html=True)
 
     laudos_atuais = st.session_state.get("log_laudos", [])
-    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) != "Arquivado" and str(l.get("Status", "Pendente")) != "Cancelado"]
+    
+    # --- A CORREÇÃO ESTÁ AQUI ---
+    # Só mostra se o Status for EXATAMENTE "Pendente".
+    # Se você mudar para "Em Análise", ele some daqui imediatamente.
+    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
 
     if not ativos:
-        st.success("✅ Tudo limpo! Nenhuma pendência.")
+        st.success("✅ Tudo limpo! Nenhuma coleta pendente.")
     else:
         items_html = ""
+        # Garante volume visual para o carrossel não quebrar se tiver poucos itens
         lista_loop = ativos * (4 if len(ativos) < 4 else 1)
         
         for l in lista_loop:
@@ -471,7 +477,7 @@ if menu == "📊 Dashboard":
                     <div class="divider"></div>
                     <div class="data-group"><span class="label">🧪 PREVISÃO</span><span class="value-result">{resultado}</span></div>
                 </div>
-                <div class="card-footer"><span class="status-pill">⏳ EM ANÁLISE</span></div>
+                <div class="card-footer"><span class="status-pill">⏳ AGUARDANDO COLETA</span></div>
             </div>
             """
 
@@ -498,9 +504,7 @@ if menu == "📊 Dashboard":
         """
         components.html(carousel_component, height=220)
 
-    # --- MÉTRICAS DE ESTOQUE (AGORA COM TERMOS CORPORATIVOS) ---
-    
-    # A) ALERTA DE ESTOQUE CRÍTICO (TROCADO DE MUNIÇÃO PARA ESTOQUE CRÍTICO)
+    # --- MÉTRICAS DE ESTOQUE ---
     st.markdown("<h4 style='text-align: left; color: #555; margin-top: 20px; border-left: 5px solid #d32f2f; padding-left: 10px;'>🚨 ESTOQUE CRÍTICO (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
     
     df_est = st.session_state.get('estoque')
@@ -509,7 +513,6 @@ if menu == "📊 Dashboard":
             saldo_num = pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0)
             min_num = pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)
             
-            # Filtra itens críticos
             criticos = df_est[ (saldo_num < min_num) & (min_num > 0) ].copy()
             
             if not criticos.empty:
@@ -529,7 +532,7 @@ if menu == "📊 Dashboard":
     
     st.markdown("---")
 
-    # B) GRÁFICOS
+    # --- GRÁFICOS ---
     c_graf1, c_graf2 = st.columns(2)
 
     with c_graf1:
@@ -550,10 +553,6 @@ if menu == "📊 Dashboard":
             st.bar_chart(top_prods, color="#ffb400", horizontal=True)
         else:
             st.caption("Aguardando dados de produtos...")
-# --- LAUDOS RESTAURADOS ---
-# ==============================================================================
-# GESTÃO DE LAUDOS (COM DATAS BRASILEIRAS FORÇADAS)
-# ==============================================================================
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
     
@@ -1123,6 +1122,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
