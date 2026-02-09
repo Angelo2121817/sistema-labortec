@@ -678,9 +678,12 @@ elif menu == "📋 Conferência Geral":
                             st.session_state['log_laudos'].pop(i); salvar_dados(); st.rerun()
 
 elif menu == "👥 Clientes":
-    st.title("👥 Clientes")
+    st.title("👥 Gestão de Clientes")
+    
+    # --- Configuração Inicial ---
     if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
     
+    # Garante que todas as variáveis do formulário existam
     campos = ['nome', 'tel', 'email', 'end', 'cnpj', 'cid', 'uf', 'cep', 'cod', 'fator']
     for c in campos: 
         if f'cli_{c}' not in st.session_state: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
@@ -690,72 +693,137 @@ elif menu == "👥 Clientes":
         st.session_state['edit_mode'] = False
 
     def carregar(k, d):
-        st.session_state['cli_nome'] = k
-        st.session_state['cli_tel'] = d.get('Tel','')
-        st.session_state['cli_email'] = d.get('Email','')
-        st.session_state['cli_end'] = d.get('End','')
-        st.session_state['cli_cnpj'] = d.get('CNPJ','')
-        st.session_state['cli_cid'] = d.get('Cidade','')
-        st.session_state['cli_uf'] = d.get('UF','')
-        st.session_state['cli_cep'] = d.get('CEP','')
-        st.session_state['cli_cod'] = d.get('Cod_Cli','')
-        try: st.session_state['cli_fator'] = float(d.get('Fator', 1.0))
-        except: st.session_state['cli_fator'] = 1.0
+        st.session_state['cli_nome'] = str(k)
+        st.session_state['cli_tel'] = str(d.get('Tel',''))
+        st.session_state['cli_email'] = str(d.get('Email',''))
+        st.session_state['cli_end'] = str(d.get('End',''))
+        st.session_state['cli_cnpj'] = str(d.get('CNPJ',''))
+        st.session_state['cli_cid'] = str(d.get('Cidade',''))
+        st.session_state['cli_uf'] = str(d.get('UF',''))
+        st.session_state['cli_cep'] = str(d.get('CEP',''))
+        st.session_state['cli_cod'] = str(d.get('Cod_Cli',''))
+        
+        # Carregamento seguro do fator
+        try:
+            val = float(d.get('Fator', 1.0))
+            if pd.isna(val): val = 1.0
+        except: val = 1.0
+        st.session_state['cli_fator'] = val
+        
         st.session_state['edit_mode'] = True
 
-    with st.form("form_cli"):
-        c1, c2 = st.columns([3, 1])
-        c1.text_input("Nome", key="cli_nome", disabled=st.session_state['edit_mode'])
-        c2.text_input("Cód", key="cli_cod")
-        c3, c4 = st.columns(2)
-        c3.number_input("Fator Preço", 0.1, 5.0, step=0.05, key="cli_fator")
-        c4.text_input("CNPJ", key="cli_cnpj")
-        c5, c6 = st.columns(2)
-        c5.text_input("Tel", key="cli_tel"); c6.text_input("Email", key="cli_email")
-        st.text_input("Endereço", key="cli_end")
-        c7, c8, c9 = st.columns(3)
-        c7.text_input("Cidade", key="cli_cid"); c8.text_input("UF", key="cli_uf"); c9.text_input("CEP", key="cli_cep")
+    # --- Formulário de Cadastro ---
+    with st.form("form_cli", clear_on_submit=False):
+        st.markdown(f"### {'✏️ Editando' if st.session_state['edit_mode'] else '➕ Novo Cliente'}")
         
-        if st.form_submit_button("SALVAR"):
+        c1, c2 = st.columns([3, 1])
+        c1.text_input("Nome / Razão Social", key="cli_nome", disabled=st.session_state['edit_mode'])
+        c2.text_input("Cód. Cliente", key="cli_cod")
+        
+        c3, c4 = st.columns(2)
+        c3.number_input("Fator Preço (1.0 = Normal)", min_value=0.1, max_value=5.0, step=0.05, key="cli_fator")
+        c4.text_input("CNPJ", key="cli_cnpj")
+        
+        c5, c6 = st.columns(2)
+        c5.text_input("Telefone", key="cli_tel")
+        c6.text_input("E-mail", key="cli_email")
+        
+        st.text_input("Endereço Completo", key="cli_end")
+        
+        c7, c8, c9 = st.columns([2, 1, 1])
+        c7.text_input("Cidade", key="cli_cid")
+        c8.text_input("UF", key="cli_uf")
+        c9.text_input("CEP", key="cli_cep")
+        
+        if st.form_submit_button("💾 SALVAR DADOS"):
             nome = st.session_state['cli_nome'].strip()
             if nome:
+                # Tratamento final do fator antes de salvar
+                try:
+                    fator_safe = float(st.session_state['cli_fator'])
+                    if pd.isna(fator_safe) or fator_safe <= 0: fator_safe = 1.0
+                except: fator_safe = 1.0
+
                 st.session_state['clientes_db'][nome] = {
                     'Tel': st.session_state['cli_tel'], 'Email': st.session_state['cli_email'],
                     'End': st.session_state['cli_end'], 'CNPJ': st.session_state['cli_cnpj'],
                     'Cidade': st.session_state['cli_cid'], 'UF': st.session_state['cli_uf'],
                     'CEP': st.session_state['cli_cep'], 'Cod_Cli': st.session_state['cli_cod'],
-                    'Fator': st.session_state['cli_fator']
+                    'Fator': fator_safe
                 }
-                salvar_dados(); st.success("Salvo!"); limpar(); st.rerun()
-            else: st.error("Nome obrigatório")
+                salvar_dados()
+                st.success("✅ Cliente Salvo com Sucesso!")
+                limpar()
+                st.rerun()
+            else:
+                st.error("⛔ O Nome é obrigatório.")
             
-    if st.session_state['edit_mode']: st.button("Cancelar Edição", on_click=limpar)
+    if st.session_state['edit_mode']:
+        st.button("❌ Cancelar Edição", on_click=limpar)
     
     st.markdown("---")
-    busca = st.text_input("Buscar Cliente")
-    lista = sorted(st.session_state['clientes_db'].keys())
-    if busca: lista = [k for k in lista if busca.lower() in k.lower()]
     
-    for k in lista:
-        d = st.session_state['clientes_db'][k]
-        try: fator = float(d.get('Fator', 1.0) or 1.0)
-        except: fator = 1.0
+    # --- Lista de Clientes (Área do Erro Corrigida) ---
+    st.subheader("📇 Carteira de Clientes")
+    
+    if not st.session_state['clientes_db']:
+        st.info("Nenhum cliente cadastrado.")
+    else:
+        busca = st.text_input("🔍 Buscar Cliente...", placeholder="Digite o nome...")
+        lista = sorted(list(st.session_state['clientes_db'].keys()))
         
-        if fator == 1.0: txt = "NORMAL"
-        elif fator < 1.0: txt = f"DESC {int((1-fator)*100)}%"
-        else: txt = f"ACRÉSC {int((fator-1)*100)}%"
+        if busca:
+            lista = [k for k in lista if busca.lower() in k.lower()]
         
-        c_info, c_btn = st.columns([5, 1])
-        with c_info:
-            with st.expander(f"{k} [{txt}]"):
-                st.write(f"End: {d.get('End')} | Tel: {d.get('Tel')}")
-                st.write(f"CNPJ: {d.get('CNPJ')}")
-                c_e, c_d = st.columns(2)
-                if c_e.button("EDITAR", key=f"ed_{k}"): carregar(k, d); st.rerun()
-                if c_d.button("EXCLUIR", key=f"del_{k}"): del st.session_state['clientes_db'][k]; salvar_dados(); st.rerun()
-        with c_btn:
-            if d.get('Email'):
-                with st.popover("📋"): st.code(d.get('Email'), language="text")
+        for k in lista:
+            d = st.session_state['clientes_db'][k]
+            
+            # --- BLINDAGEM CONTRA ERRO MATEMÁTICO (CORREÇÃO AQUI) ---
+            try:
+                raw = d.get('Fator', 1.0)
+                fator = float(raw)
+                # Verifica se é NaN (Not a Number)
+                if pd.isna(fator): fator = 1.0
+            except:
+                fator = 1.0
+            
+            # Lógica de Texto Blindada
+            try:
+                if abs(fator - 1.0) < 0.001: # Comparação segura para floats
+                    txt = "NORMAL"
+                    cor = "blue"
+                elif fator < 1.0:
+                    val = int(round((1.0 - fator) * 100))
+                    txt = f"DESC {val}%"
+                    cor = "green"
+                else:
+                    val = int(round((fator - 1.0) * 100))
+                    txt = f"ACRÉSC {val}%"
+                    cor = "red"
+            except:
+                txt = "NORMAL"
+                cor = "blue"
+            
+            # Exibição do Card
+            c_info, c_btn = st.columns([5, 1])
+            with c_info:
+                with st.expander(f"🏢 {k} [{txt}]"):
+                    st.write(f"📍 {d.get('End','-')}")
+                    st.write(f"📞 {d.get('Tel','-')} | 📄 {d.get('CNPJ','-')}")
+                    st.markdown(f"**Tabela:** :{cor}[{fator:.2f}]")
+                    
+                    b1, b2 = st.columns([1, 1])
+                    if b1.button("✏️ EDITAR", key=f"ed_{k}"): carregar(k, d); st.rerun()
+                    if b2.button("🗑️ EXCLUIR", key=f"del_{k}"): 
+                        del st.session_state['clientes_db'][k]
+                        salvar_dados()
+                        st.toast("Cliente removido!")
+                        st.rerun()
+            
+            with c_btn:
+                email_c = d.get('Email','')
+                if email_c:
+                    with st.popover("📧"): st.code(email_c, language="text")
 
 elif menu == "🛠️ Admin / Backup":
     st.title("🛠️ Admin")
@@ -789,3 +857,4 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_laudos'] = []
                 st.session_state['estoque'] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Minimo"])
                 salvar_dados(); st.success("Zerado!")
+
