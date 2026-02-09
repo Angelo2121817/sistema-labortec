@@ -594,7 +594,7 @@ elif menu == "📋 Conferência Geral":
 elif menu == "📦 Estoque":
     st.title("📦 Estoque Geral & Cadastro")
 
-    # --- 1. FORMULÁRIO DE CADASTRO (RESTAURADO) ---
+    # --- 1. FORMULÁRIO DE CADASTRO ---
     with st.expander("➕ CADASTRAR NOVO PRODUTO", expanded=False):
         with st.form("form_novo_prod", clear_on_submit=True):
             st.write("📝 **Ficha do Produto**")
@@ -614,7 +614,6 @@ elif menu == "📦 Estoque":
             
             if st.form_submit_button("💾 SALVAR NOVO PRODUTO"):
                 if cod_novo and nome_novo:
-                    # Verifica se o código já existe
                     codigos_existentes = st.session_state['estoque']['Cod'].astype(str).values
                     if str(cod_novo) in codigos_existentes:
                         st.error(f"⛔ ERRO: O código {cod_novo} já pertence a outro produto!")
@@ -624,33 +623,36 @@ elif menu == "📦 Estoque":
                             "NCM": ncm_novo, "Unidade": unid_novo, "Preco_Base": preco_novo,
                             "Saldo": saldo_novo, "Estoque_Minimo": min_novo
                         }
-                        # Adiciona na tabela
-                        st.session_state['estoque'] = pd.concat([
-                            st.session_state['estoque'], 
-                            pd.DataFrame([novo_item])
-                        ], ignore_index=True)
-                        
+                        st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo_item])], ignore_index=True)
                         salvar_dados()
-                        # --- MENSAGENS DE CONFIRMAÇÃO ---
-                        st.success(f"✅ SUCESSO! O produto '{nome_novo}' foi firmado no sistema.")
-                        st.toast(f"Produto {nome_novo} cadastrado!", icon="📦")
+                        st.success(f"✅ Produto '{nome_novo}' firmado no sistema!")
+                        st.rerun()
                 else:
-                    st.warning("⚠️ Atenção: Código e Nome são obrigatórios para firmar o cadastro.")
+                    st.warning("⚠️ Código e Nome são obrigatórios.")
 
     st.markdown("---")
     
-    # --- 2. TABELA DE CONSULTA E EDIÇÃO RÁPIDA ---
+    # --- 2. FERRAMENTA DE EXCLUSÃO (NOVIDADE TÁTICA) ---
+    with st.expander("🗑️ REMOVER PRODUTO DO ESTOQUE", expanded=False):
+        st.warning("Cuidado: A exclusão é permanente.")
+        opcoes_delete = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1).tolist()
+        produto_para_deletar = st.selectbox("Selecione o produto para APAGAR:", [""] + opcoes_delete)
+        
+        if produto_para_deletar != "" and st.button("💣 EXCLUIR DEFINITIVAMENTE", type="secondary"):
+            cod_del = produto_para_deletar.split(" - ")[0]
+            # Filtra o estoque removendo o código selecionado
+            st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(cod_del)]
+            salvar_dados()
+            st.success(f"💥 Produto {cod_del} removido com sucesso!")
+            st.rerun()
+
+    st.markdown("---")
+    
+    # --- 3. TABELA DE CONSULTA E EDIÇÃO ---
     st.subheader("📦 Lista de Produtos Cadastrados")
     
-    # Busca rápida para facilitar a vida do General
     busca = st.text_input("🔍 Pesquisar na lista...", placeholder="Digite nome ou código...")
-    
     df_exibir = st.session_state['estoque'].copy()
-    
-    # Blindagem Numérica
-    for col in ["Saldo", "Estoque_Minimo", "Preco_Base"]:
-        if col in df_exibir.columns:
-            df_exibir[col] = pd.to_numeric(df_exibir[col], errors='coerce').fillna(0.0)
 
     if busca:
         df_exibir = df_exibir[
@@ -658,7 +660,7 @@ elif menu == "📦 Estoque":
             df_exibir['Cod'].astype(str).str.contains(busca)
         ]
 
-    # Estilo visual para saldo
+    # Estilo visual
     def estilo_saldo(val): return 'background-color: #d4edda; color: #155724; font-weight: 900;'
     try: df_styled = df_exibir.style.map(estilo_saldo, subset=["Saldo"])
     except: df_styled = df_exibir
@@ -667,23 +669,18 @@ elif menu == "📦 Estoque":
         df_styled, 
         use_container_width=True, 
         hide_index=True,
-        num_rows="dynamic",
-        key="editor_estoque_v_final",
+        key="editor_estoque_v99",
         column_config={
             "Saldo": st.column_config.NumberColumn("✅ SALDO", format="%.2f"),
             "Estoque_Minimo": st.column_config.NumberColumn("🚨 Mínimo", format="%.0f"),
             "Preco_Base": st.column_config.NumberColumn("💲 Preço", format="%.2f"),
-            "Produto": st.column_config.TextColumn("Descrição", width="large"),
         }
     )
     
-    # Se mudar algo na tabela, salva e avisa
     if not ed.equals(df_exibir):
-        # Localiza o que mudou e atualiza o original
         st.session_state["estoque"] = ed 
         salvar_dados()
-        st.toast("Alteração salva na lista!", icon="💾")
-
+        st.toast("Alteração salva!", icon="💾")
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes & Precificação")
     
@@ -926,6 +923,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
