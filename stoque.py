@@ -678,14 +678,18 @@ elif menu == "💰 Vendas & Orçamentos":
     vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
     d_cli = st.session_state['clientes_db'][cli]
     
-    # 2. Resgate do Fator de Preço
-    fator_cliente = float(d_cli.get('Fator', 1.0))
+    # 2. Resgate do Fator de Preço (AGORA COM BLINDAGEM ANTI-ERRO)
+    try:
+        raw_fator = d_cli.get('Fator', 1.0)
+        # Tenta converter. Se for vazio ou texto, vai dar erro e cair no except
+        fator_cliente = float(raw_fator)
+    except (ValueError, TypeError):
+        fator_cliente = 1.0 # Assume padrão se der erro
     
-    # Mostra aviso visual com ARREDONDAMENTO CORRETO (CORREÇÃO APLICADA AQUI)
+    # Mensagens visuais
     if fator_cliente == 1.0:
         st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
     elif fator_cliente < 1.0:
-        # Usamos round() para o computador arredondar 9.99 para 10
         perc_desc = round((1.0 - fator_cliente) * 100)
         st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {perc_desc}% (Fator {fator_cliente})")
     else:
@@ -699,23 +703,25 @@ elif menu == "💰 Vendas & Orçamentos":
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
     
-    # APLICAR O FATOR NO PREÇO!
-    # Criamos uma coluna nova "Preco_Final" que é a Base x Fator
-    df_v['Preco_Final'] = df_v['Preco_Base'].astype(float) * fator_cliente
+    # Garante que Preco_Base é número antes de calcular
+    df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
     
-    # Editor de Vendas (Mostramos o Preço Final já calculado)
+    # APLICAR O FATOR NO PREÇO!
+    df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
+    
+    # Editor de Vendas
     ed_v = st.data_editor(
         df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
         use_container_width=True, 
         hide_index=True,
         column_config={
             "Preco_Base": st.column_config.NumberColumn("Preço Base (R$)", format="%.2f", disabled=True),
-            "Preco_Final": st.column_config.NumberColumn("💵 Preço P/ Cliente (R$)", format="%.2f"), # Editável se quiser ajuste manual pontual
+            "Preco_Final": st.column_config.NumberColumn("💵 Preço P/ Cliente (R$)", format="%.2f"), 
             "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
         }
     )
     
-    # 4. Cálculo do Total (Usando o Preço Final)
+    # 4. Cálculo do Total
     itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
     itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Final']
     total = itens_sel['Total'].sum()
@@ -728,13 +734,11 @@ elif menu == "💰 Vendas & Orçamentos":
         c_orc, c_ped = c_act.columns(2)
         with c_orc:
             if st.button("📄 ORÇAMENTO", use_container_width=True):
-                # No PDF, usamos o Preço Final como se fosse o unitário
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
                 pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
                 st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
         
         with c_ped:
-            # Opção de Baixa
             origem = st.radio("Origem?", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
             
             if st.button("✅ FECHAR VENDA", type="primary", use_container_width=True):
@@ -746,7 +750,8 @@ elif menu == "💰 Vendas & Orçamentos":
                         mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
                         if not st.session_state['estoque'][mask].empty:
                             idx = st.session_state['estoque'][mask].index[0]
-                            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+                            try: atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
+                            except: atual = 0.0
                             st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
                     
                     st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
@@ -756,205 +761,6 @@ elif menu == "💰 Vendas & Orçamentos":
                     salvar_dados(); st.success("Venda Confirmada (Sem Baixa)!")
                 
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
-elif menu == "👥 Clientes":
-    st.title("👥 Gestão de Clientes & Precificação")
-    
-    # --- CONTROLE DE MODO (NOVO OU EDIÇÃO) ---
-    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
-
-    campos = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
-    for c in campos: 
-        if c not in st.session_state: 
-            st.session_state[c] = 1.0 if c == 'form_fator' else ""
-
-    def limpar_campos():
-        for c in campos: 
-            st.session_state[c] = 1.0 if c == 'form_fator' else ""
-        st.session_state['edit_mode'] = False
-
-    def salvar_no_callback():
-        nome = st.session_state['form_nome'].strip()
-        
-        if not nome:
-            st.toast("Erro: Nome obrigatório!", icon="❌")
-            return
-
-        if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
-            st.error(f"⛔ O cliente '{nome}' já existe. Use a busca abaixo para editar.")
-            return
-        
-        st.session_state['clientes_db'][nome] = {
-            'Tel': st.session_state['form_tel'], 
-            'Email': st.session_state['form_email'],
-            'End': st.session_state['form_end'],
-            'CNPJ': st.session_state['form_cnpj'], 'Cidade': st.session_state['form_cid'],
-            'UF': st.session_state['form_uf'], 'CEP': st.session_state['form_cep'], 
-            'Cod_Cli': st.session_state['form_cod'],
-            'Fator': float(st.session_state['form_fator'])
-        }
-        salvar_dados()
-        st.toast(f"Cliente {nome} salvo!", icon="✅")
-        limpar_campos()
-
-    def excluir_cliente(nome):
-        if nome in st.session_state['clientes_db']: 
-            del st.session_state['clientes_db'][nome]
-            salvar_dados()
-            st.toast("Removido.", icon="🗑️")
-
-    def preparar_edicao(k, d):
-        st.session_state['form_nome'] = str(k)
-        st.session_state['form_tel'] = str(d.get('Tel', ''))
-        st.session_state['form_email'] = str(d.get('Email', ''))
-        st.session_state['form_end'] = str(d.get('End', ''))
-        st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
-        st.session_state['form_cid'] = str(d.get('Cidade', ''))
-        st.session_state['form_uf'] = str(d.get('UF', ''))
-        st.session_state['form_cep'] = str(d.get('CEP', ''))
-        st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-        # Blindagem também aqui
-        try:
-            st.session_state['form_fator'] = float(d.get('Fator', 1.0))
-        except:
-            st.session_state['form_fator'] = 1.0
-            
-        st.session_state['edit_mode'] = True
-        st.toast(f"Editando: {k}", icon="✏️")
-
-    # --- IMPORTAR PDF ---
-    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
-        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
-        if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
-            try:
-                dados_lidos = ler_pdf_antigo(arquivo_pdf)
-                if dados_lidos:
-                    st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
-                    st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
-                    st.session_state['form_end'] = str(dados_lidos.get('End', ''))
-                    st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
-                    st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
-                    st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
-                    st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
-                    st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
-                    st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
-                    st.success("Dados extraídos!")
-            except NameError: st.error("Erro na função de leitura.")
-
-    # --- FORMULÁRIO ---
-    with st.form("form_cliente"):
-        st.markdown("#### 📝 Dados Cadastrais")
-        c1, c2 = st.columns([3, 1])
-        c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode']) 
-        c2.text_input("Cód. Cliente", key="form_cod")
-        
-        c_fator, c_cnpj = st.columns([1, 2])
-        c_fator.number_input("💲 Fator Preço (1.0=Normal)", min_value=0.1, max_value=5.0, step=0.05, key="form_fator")
-        c_cnpj.text_input("CNPJ", key="form_cnpj")
-        
-        c_tel, c_mail = st.columns([1, 2])
-        c_tel.text_input("Telefone", key="form_tel")
-        c_mail.text_input("E-mail", key="form_email", placeholder="contato@empresa.com")
-        
-        st.text_input("Endereço", key="form_end")
-        c6, c7, c8 = st.columns([2, 1, 1])
-        c6.text_input("Cidade", key="form_cid"); c7.text_input("UF", key="form_uf"); c8.text_input("CEP", key="form_cep")
-        
-        st.form_submit_button("💾 SALVAR", on_click=salvar_no_callback)
-
-    if st.session_state['edit_mode']:
-        st.button("❌ Cancelar Edição", on_click=limpar_campos)
-    else:
-        st.button("🧹 Limpar Campos", on_click=limpar_campos)
-    
-    st.markdown("---"); st.subheader("📇 Carteira de Clientes")
-    if st.session_state['clientes_db']:
-        busca = st.text_input("🔍 Buscar...", placeholder="Nome da empresa...")
-        lista = sorted(list(st.session_state['clientes_db'].keys()))
-        if busca: lista = [k for k in lista if busca.lower() in k.lower()]
-        
-        c_h1, c_h2 = st.columns([6, 1])
-        c_h1.caption("📂 NOME DA EMPRESA")
-        c_h2.caption("📋 COPIAR")
-
-        for k in lista:
-            d = st.session_state['clientes_db'][k]
-            
-            # --- BLINDAGEM CONTRA ERRO MATEMÁTICO ---
-            try:
-                raw_fator = d.get('Fator', 1.0)
-                fator = float(raw_fator)
-                if pd.isna(fator): fator = 1.0 # Se for NaN, vira 1.0
-            except:
-                fator = 1.0 # Se der erro, assume padrão
-            # ----------------------------------------
-
-            email_cli = d.get('Email', '')
-            
-            cor_tabela = "blue" if fator == 1.0 else ("green" if fator < 1.0 else "red")
-            
-            # Cálculo seguro do texto da tabela
-            try:
-                if fator == 1.0:
-                    tipo_tabela = "NORMAL"
-                elif fator < 1.0:
-                    tipo_tabela = f"DESC. {int((1-fator)*100)}%"
-                else:
-                    tipo_tabela = f"ACRÉSC. {int((fator-1)*100)}%"
-            except:
-                tipo_tabela = "NORMAL"
-
-            col_expander, col_btn = st.columns([6, 1])
-            
-            with col_expander:
-                with st.expander(f"🏢 {k} [{tipo_tabela}]"):
-                    c_det1, c_det2 = st.columns(2)
-                    c_det1.write(f"📍 {d.get('End', '-')}")
-                    c_det2.write(f"📞 {d.get('Tel', '-')}")
-                    c_det2.write(f"📄 CNPJ: {d.get('CNPJ', '-')}")
-                    st.markdown(f"**Fator:** :{cor_tabela}[{fator:.2f}]")
-                    
-                    c_edit, c_del = st.columns([1, 1])
-                    c_edit.button("✏️ EDITAR", key=f"ed_{k}", on_click=preparar_edicao, args=(k, d))
-                    c_del.button("🗑️ EXCLUIR", key=f"dl_{k}", on_click=excluir_cliente, args=(k,))
-            
-            with col_btn:
-                if email_cli:
-                    with st.popover("📋", help="Ver e Copiar Email"):
-                        st.code(email_cli, language="text")
-                else:
-                    st.caption("🚫")
-            
-    else: st.info("Nenhum cliente cadastrado.")
-elif menu == "📦 Estoque":
-    st.title("📦 Estoque Geral")
-    if not st.session_state["estoque"].empty:
-        # Blindagem Numérica
-        for col in ["Saldo", "Estoque_Minimo"]:
-            if col in st.session_state["estoque"].columns:
-                st.session_state["estoque"][col] = pd.to_numeric(st.session_state["estoque"][col], errors='coerce').fillna(0)
-            else:
-                st.session_state["estoque"][col] = 0.0
-
-    def estilo_saldo(val): return 'background-color: #d4edda; color: #155724; font-weight: 900; border: 1px solid #c3e6cb'
-    try: df_styled = st.session_state["estoque"].style.map(estilo_saldo, subset=["Saldo"])
-    except: df_styled = st.session_state["estoque"]
-
-    ed = st.data_editor(
-        df_styled, use_container_width=True, num_rows="dynamic", key="editor_estoque_v5",
-        column_config={
-            "Saldo": st.column_config.NumberColumn("✅ SALDO (KG)", format="%.2f", step=1),
-            "Estoque_Minimo": st.column_config.NumberColumn("🚨 Mínimo", format="%.0f", step=1),
-            "Preco_Base": None, "Estoque_Inicial": None
-        }
-    )
-    if not ed.equals(st.session_state["estoque"]): st.session_state["estoque"] = ed; salvar_dados()
-
-# ==============================================================================
-# 8. CONFERÊNCIA (AGORA COM ARQUIVAMENTO DE LAUDOS)
-# ==============================================================================
-# ==============================================================================
-# 8. CONFERÊNCIA (COM PROTOCOLO DE LIMPEZA / EXCLUSÃO)
-# ==============================================================================
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência Tática")
     
@@ -1220,6 +1026,7 @@ elif menu == "🛠️ Admin / Backup":
 
     else:
         st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
+
 
 
 
