@@ -401,64 +401,152 @@ elif menu == "🧪 Laudos":
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
-    if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
     
-    c1, c2 = st.columns([2,1])
-    cli = c1.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-    vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
+    # Verifica se tem clientes
+    if not st.session_state.get('clientes_db'): 
+        st.warning("⚠️ Nenhum cliente cadastrado. Vá em 'Clientes' primeiro.")
+        st.stop()
+    
+    # 1. Seleção do Cliente e Vendedor
+    c1, c2 = st.columns([2, 1])
+    # Pega a lista de nomes ordenada
+    lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
+    cli = c1.selectbox("Selecione o Cliente", lista_clientes)
+    vend = c2.text_input("Vendedor", st.session_state.get('usuario_nome', 'Sistema'))
+    
+    # Pega os dados do cliente selecionado
     d_cli = st.session_state['clientes_db'][cli]
     
-    try: fator = float(d_cli.get('Fator', 1.0) or 1.0)
-    except: fator = 1.0
+    # --- BLINDAGEM DO FATOR DE PREÇO (AQUI ESTAVA O ERRO) ---
+    # Tentamos ler o fator. Se der qualquer erro (vazio, texto, zero), assumimos 1.0
+    try:
+        raw_fator = d_cli.get('Fator', 1.0)
+        fator_cliente = float(raw_fator)
+        if fator_cliente <= 0: fator_cliente = 1.0 # Evita fator zero ou negativo
+    except (ValueError, TypeError):
+        fator_cliente = 1.0 # Padrão de segurança
     
-    if fator == 1.0: st.info(f"Tabela Normal (Fator 1.0)")
-    elif fator < 1.0: st.success(f"Desconto de {int((1-fator)*100)}%")
-    else: st.warning(f"Acréscimo de {int((fator-1)*100)}%")
+    # Mensagens visuais com cálculo seguro (Math Safety)
+    try:
+        if fator_cliente == 1.0:
+            st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
+        elif fator_cliente < 1.0:
+            # round() resolve problemas de dízima (0.99999...)
+            perc_desc = int(round((1.0 - fator_cliente) * 100))
+            st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {perc_desc}% (Fator {fator_cliente})")
+        else:
+            perc_acres = int(round((fator_cliente - 1.0) * 100))
+            st.warning(f"📈 Cliente **{cli}**: Tabela com ACRÉSCIMO de {perc_acres}% (Fator {fator_cliente})")
+    except:
+        # Se até o cálculo visual falhar, mostra o básico
+        st.info(f"📋 Cliente: {cli} (Fator: {fator_cliente})")
     
-    c3, c4, c5 = st.columns(3)
-    p_pag = c3.text_input("Plano", "28/42 DIAS"); f_pag = c4.text_input("Forma", "BOLETO"); venc = c5.text_input("Vencimento", "A COMBINAR")
+    # Campos de Condição de Pagamento
+    col1, col2, col3 = st.columns(3)
+    p_pag = col1.text_input("Cond. Pagamento", "28/42 DIAS")
+    f_pag = col2.text_input("Forma Pagamento", "BOLETO ITAU")
+    venc = col3.text_input("Vencimento", "A COMBINAR")
     
+    # 2. Preparação da Tabela de Vendas
+    # Cria uma cópia do estoque para não alterar o original ainda
     df_v = st.session_state['estoque'].copy()
-    if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
-    df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
-    df_v['Preco_Final'] = df_v['Preco_Base'] * fator
     
+    # Se não tiver coluna Qtd, cria
+    if 'Qtd' not in df_v.columns: 
+        df_v.insert(0, 'Qtd', 0.0)
+    
+    # Garante que Preco_Base é número (tratamento de erro na coluna inteira)
+    df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
+    
+    # APLICAR O FATOR NO PREÇO! (Matemática Vetorial)
+    df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
+    
+    # 3. Editor de Vendas
+    st.write("🛒 **Selecione os produtos:**")
     ed_v = st.data_editor(
         df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
-        use_container_width=True, hide_index=True,
+        use_container_width=True, 
+        hide_index=True,
         column_config={
-            "Preco_Base": st.column_config.NumberColumn("Base", format="%.2f", disabled=True),
-            "Preco_Final": st.column_config.NumberColumn("Final", format="%.2f"),
-            "Qtd": st.column_config.NumberColumn("Qtd", step=1.0)
+            "Preco_Base": st.column_config.NumberColumn("Preço Base (R$)", format="%.2f", disabled=True),
+            "Preco_Final": st.column_config.NumberColumn("💵 Preço Cliente (R$)", format="%.2f", disabled=True), 
+            "Saldo": st.column_config.NumberColumn("Estoque Atual", format="%.2f", disabled=True),
+            "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
         }
     )
     
-    itens = ed_v[ed_v['Qtd'] > 0].copy()
-    itens['Total'] = itens['Qtd'] * itens['Preco_Final']
-    total = itens['Total'].sum()
+    # 4. Cálculo do Total
+    # Filtra apenas o que tem quantidade maior que 0
+    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
+    itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Final']
+    total = itens_sel['Total'].sum()
     
-    if not itens.empty:
-        st.divider(); st.metric("Total", f"R$ {total:,.2f}")
-        b1, b2 = st.columns(2)
-        if b1.button("📄 ORÇAMENTO"):
-            pdf = criar_doc_pdf(vend, cli, d_cli, itens.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
-            st.download_button("📥 Baixar PDF", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
+    # Se tiver itens selecionados, libera o fechamento
+    if not itens_sel.empty:
+        st.divider()
+        c_tot, c_act = st.columns([1, 2])
+        c_tot.metric("💰 VALOR TOTAL", f"R$ {total:,.2f}")
         
-        with b2:
-            tipo = st.radio("Baixa?", ["Sim (Estoque)", "Não (Apenas Pedido)"], horizontal=True)
-            if st.button("✅ FECHAR VENDA", type="primary"):
-                pdf = criar_doc_pdf(vend, cli, d_cli, itens.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
-                if "Sim" in tipo:
-                    for _, r in itens.iterrows():
-                        mask = st.session_state['estoque']['Cod'].astype(str) == str(r['Cod'])
+        c_orc, c_ped = c_act.columns(2)
+        
+        # BOTÃO DE ORÇAMENTO
+        with c_orc:
+            if st.button("📄 GERAR ORÇAMENTO", use_container_width=True):
+                # Prepara dados para o PDF
+                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
+                # Gera PDF
+                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
+                # Botão de Download
+                st.download_button("📥 Baixar PDF Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
+        
+        # BOTÃO DE PEDIDO
+        with c_ped:
+            st.write("Confirmar Venda:")
+            origem = st.radio("Tipo de Baixa:", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True, label_visibility="collapsed")
+            
+            if st.button("✅ FECHAR PEDIDO", type="primary", use_container_width=True):
+                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
+                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
+                
+                # Lógica de Baixa de Estoque
+                if "METAL" in origem:
+                    for _, row in itens_sel.iterrows():
+                        # Busca o produto pelo código para garantir
+                        mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
                         if not st.session_state['estoque'][mask].empty:
                             idx = st.session_state['estoque'][mask].index[0]
-                            try: atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
-                            except: atual = 0.0
-                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - r['Qtd']
-                st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens['Qtd'].sum(), 'Vendedor': vend})
-                salvar_dados(); st.success("Venda Realizada!")
-                st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
+                            try: 
+                                atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
+                            except: 
+                                atual = 0.0
+                            # Subtrai
+                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
+                    
+                    # Registra no Log
+                    st.session_state['log_vendas'].append({
+                        'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
+                        'Cliente': cli, 
+                        'Produto': 'Vários', 
+                        'Qtd': itens_sel['Qtd'].sum(), 
+                        'Vendedor': vend,
+                        'Valor_Total': total
+                    })
+                    salvar_dados()
+                    st.success("✅ Venda Confirmada e Estoque Baixado!")
+                else: 
+                    # Venda sem baixa
+                    st.session_state['log_vendas'].append({
+                        'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
+                        'Cliente': cli, 
+                        'Produto': 'Vários (Indep)', 
+                        'Qtd': itens_sel['Qtd'].sum(), 
+                        'Vendedor': vend,
+                        'Valor_Total': total
+                    })
+                    salvar_dados()
+                    st.success("✅ Venda Confirmada (Sem Baixa de Estoque)!")
+                
+                st.download_button("📥 Baixar PDF Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
 
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
@@ -781,4 +869,5 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
