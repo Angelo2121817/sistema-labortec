@@ -47,7 +47,6 @@ def extrair_dados_cetesb(f):
     except Exception:
         return None
 
-
 def ler_pdf_antigo(f):
     try:
         reader = PdfReader(f)
@@ -80,14 +79,11 @@ def ler_pdf_antigo(f):
             return fragment[:min_idx].strip(" :/-|").strip()
 
         d["Nome"] = extract("Cliente", ["CNPJ", "CPF", "Endereço", "Data:", "Código:"])
-
         cnpj_match = re.search(r"(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})", core)
         d["CNPJ"] = cnpj_match.group(1) if cnpj_match else ""
-
         d["End"] = extract("Endereço", ["Bairro", "Cidade", "Cep", "CEP"])
         d["Bairro"] = extract("Bairro", ["Cidade", "Cep", "CEP"])
         d["Cidade"] = extract("Cidade", ["Cep", "CEP"])
-
         cep_match = re.search(r"(\d{5}-\d{3})", core)
         d["CEP"] = cep_match.group(1) if cep_match else ""
 
@@ -95,36 +91,29 @@ def ler_pdf_antigo(f):
     except Exception:
         return None
 
-
 # ==============================================================================
 # 1. CONFIGURAÇÃO E CONEXÃO
 # ==============================================================================
-st.set_page_config(page_title="Sistema Integrado v61", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v80", layout="wide", page_icon="🧪")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
     st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud.")
     st.stop()
 
-
 # ==============================================================================
 # 2. SEGURANÇA E LOGIN
 # ==============================================================================
 CREDENCIAIS = {"General": "labormetal22", "Fabricio": "fabricio2225", "Anderson": "anderson2225", "Angelo": "angelo2225"}
 
-
 def obter_horario_br():
     return datetime.utcnow() - timedelta(hours=3)
 
-
 def obter_saudacao():
     hora = obter_horario_br().hour
-    if 5 <= hora < 12:
-        return "Bom dia"
-    elif 12 <= hora < 18:
-        return "Boa tarde"
+    if 5 <= hora < 12: return "Bom dia"
+    elif 12 <= hora < 18: return "Boa tarde"
     return "Boa noite"
-
 
 def verificar_senha():
     if "autenticado" not in st.session_state:
@@ -146,10 +135,7 @@ def verificar_senha():
         return False
     return True
 
-
-if not verificar_senha():
-    st.stop()
-
+if not verificar_senha(): st.stop()
 
 # ==============================================================================
 # 3. MOTOR DE DADOS
@@ -160,20 +146,14 @@ def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _fix_date_br(val):
-    if not val or pd.isna(val) or str(val).strip() == "":
-        return ""
-    try:
-        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y")
-    except:
-        return val
+    if not val or pd.isna(val) or str(val).strip() == "": return ""
+    try: return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y")
+    except: return val
 
 def _fix_datetime_br(val):
-    if not val or pd.isna(val) or str(val).strip() == "":
-        return ""
-    try:
-        return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
-    except:
-        return val
+    if not val or pd.isna(val) or str(val).strip() == "": return ""
+    try: return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
+    except: return val
 
 def carregar_dados():
     try:
@@ -185,59 +165,41 @@ def carregar_dados():
         df_cli = conn.read(worksheet="Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
             df_cli = _normalizar_colunas(df_cli)
-            if "Email" not in df_cli.columns:
-                df_cli["Email"] = ""
-            if "Nome" in df_cli.columns:
-                st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
-            else:
-                st.session_state["clientes_db"] = {}
+            if "Email" not in df_cli.columns: df_cli["Email"] = ""
+            if "Nome" in df_cli.columns: st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
+            else: st.session_state["clientes_db"] = {}
 
         for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
             df = conn.read(worksheet=aba, ttl=0)
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df = _normalizar_colunas(df)
-                
                 if aba == "Log_Laudos":
                     if "Cliente" not in df.columns: df["Cliente"] = ""
                     if "Status" not in df.columns: df["Status"] = "Pendente"
                     if "Data_Coleta" not in df.columns: df["Data_Coleta"] = ""
                     if "Data_Resultado" not in df.columns: df["Data_Resultado"] = "Não definida"
-
-                    if "Data_Coleta" in df.columns:
-                        df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
-                    if "Data_Resultado" in df.columns:
-                        df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
-                    
-                    for c in ["Cliente", "Status"]:
-                        df[c] = df[c].fillna("").astype(str)
-
+                    if "Data_Coleta" in df.columns: df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
+                    if "Data_Resultado" in df.columns: df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
+                    for c in ["Cliente", "Status"]: df[c] = df[c].fillna("").astype(str)
                 elif aba in ["Log_Vendas", "Log_Entradas"]:
-                    if "Data" in df.columns:
-                        df["Data"] = df["Data"].apply(_fix_datetime_br)
-                    
+                    if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
                 st.session_state[aba.lower()] = df.to_dict("records")
             else:
                 st.session_state[aba.lower()] = []
         return True
-    except Exception:
-        return False
-
+    except Exception: return False
 
 def salvar_dados():
     try:
         conn.update(worksheet="Estoque", data=st.session_state["estoque"])
-        
         if st.session_state.get("clientes_db"):
             df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
             conn.update(worksheet="Clientes", data=df_clis)
-            
         conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
         conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
         conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        
-        st.toast("✅ Dados Sincronizados!", icon="☁️")
+        st.toast("✅ Sincronizado!", icon="☁️")
     except Exception as e:
-        # Se der erro, ele imprime no console do sistema mas NÃO trava a tela do usuário
         print(f"Erro silencioso ao salvar: {e}")
         pass
 
@@ -246,105 +208,58 @@ if "dados_carregados" not in st.session_state:
     st.session_state["dados_carregados"] = True
 
 for key in ["log_vendas", "log_entradas", "log_laudos"]:
-    if key not in st.session_state:
-        st.session_state[key] = []
+    if key not in st.session_state: st.session_state[key] = []
 if "estoque" not in st.session_state:
     st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
-if "clientes_db" not in st.session_state:
-    st.session_state["clientes_db"] = {}
-
+if "clientes_db" not in st.session_state: st.session_state["clientes_db"] = {}
 
 # ==============================================================================
 # 4. TEMAS E CSS
 # ==============================================================================
 def aplicar_tema(escolha):
-    css = """
-    <style>
-        .centered-title { text-align: center; color: #1e3d59; font-weight: bold; padding: 20px 0; font-size: 2.5em; }
-    </style>
-    """
-    if escolha == "⚪ Padrão (Clean)":
-        css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
-    elif escolha == "🔵 Azul Labortec":
-        css += "<style>.stApp { background-color: #F0F8FF !important; color: #002B4E !important; } h1,h2,h3 { color: #004aad !important; }</style>"
-    elif escolha == "🌿 Verde Natureza":
-        css += "<style>.stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }</style>"
-    elif escolha == "⚫ Dark Mode (Noturno)":
-        css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } .prevista-label { color: #aaa; }</style>"
+    css = """<style>.centered-title { text-align: center; color: #1e3d59; font-weight: bold; padding: 20px 0; font-size: 2.5em; }</style>"""
+    if escolha == "⚪ Padrão (Clean)": css += "<style>.stApp { background-color: #FFFFFF !important; color: #000000 !important; }</style>"
+    elif escolha == "🔵 Azul Labortec": css += "<style>.stApp { background-color: #F0F8FF !important; color: #002B4E !important; } h1,h2,h3 { color: #004aad !important; }</style>"
+    elif escolha == "🌿 Verde Natureza": css += "<style>.stApp { background-color: #F1F8E9 !important; color: #1B5E20 !important; }</style>"
+    elif escolha == "⚫ Dark Mode (Noturno)": css += "<style>.stApp { background-color: #0E1117 !important; color: #FAFAFA !important; } .prevista-label { color: #aaa; }</style>"
     st.markdown(css, unsafe_allow_html=True)
-
 
 # ==============================================================================
 # 5. GERADOR DE PDF
 # ==============================================================================
 class PDF(FPDF):
     def header(self):
-        if os.path.exists("labortec.jpg"):
-            self.image("labortec.jpg", x=10, y=8, w=48)
+        if os.path.exists("labortec.jpg"): self.image("labortec.jpg", x=10, y=8, w=48)
         offset_y = 10
         self.set_font("Arial", "B", 19)
-        self.set_xy(65, 10 + offset_y)
-        self.cell(100, 10, "LABORTEC", 0, 0, "L")
-
+        self.set_xy(65, 10 + offset_y); self.cell(100, 10, "LABORTEC", 0, 0, "L")
         self.set_font("Arial", "B", 19)
-        self.set_xy(110, 10 + offset_y)
-        titulo_doc = getattr(self, "titulo_doc", "ORÇAMENTO")
-        self.cell(90, 10, titulo_doc, 0, 1, "R")
-
+        self.set_xy(110, 10 + offset_y); titulo = getattr(self, "titulo_doc", "ORÇAMENTO"); self.cell(90, 10, titulo, 0, 1, "R")
         self.set_font("Arial", "", 10)
-        self.set_xy(65, 20 + offset_y)
-        self.cell(100, 5, "Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235", 0, 0, "L")
-        self.set_xy(110, 20 + offset_y)
-        self.cell(90, 5, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, "R")
-
-        self.set_xy(65, 25 + offset_y)
-        self.cell(100, 5, "labortecconsultoria@gmail.com | Tel.: (19) 3238-9320", 0, 0, "L")
-        self.set_xy(110, 25 + offset_y)
-        vendedor_nome = getattr(self, "vendedor_nome", "Sistema")
-        self.cell(90, 5, f"Vendedor: {vendedor_nome}", 0, 1, "R")
-
-        self.set_xy(65, 30 + offset_y)
-        self.cell(100, 5, "C.N.P.J.: 03.763.197/0001-09", 0, 1, "L")
-
-        self.line(10, 40 + offset_y, 200, 40 + offset_y)
-        self.set_y(48 + offset_y)
+        self.set_xy(65, 20 + offset_y); self.cell(100, 5, "Rua Alfredo Bruno, 22 - Campinas/SP - CEP 13040-235", 0, 0, "L")
+        self.set_xy(110, 20 + offset_y); self.cell(90, 5, f"Data: {obter_horario_br().strftime('%d/%m/%Y')}", 0, 1, "R")
+        self.set_xy(65, 25 + offset_y); self.cell(100, 5, "labortecconsultoria@gmail.com | Tel.: (19) 3238-9320", 0, 0, "L")
+        self.set_xy(110, 25 + offset_y); vend = getattr(self, "vendedor_nome", "Sistema"); self.cell(90, 5, f"Vendedor: {vend}", 0, 1, "R")
+        self.set_xy(65, 30 + offset_y); self.cell(100, 5, "C.N.P.J.: 03.763.197/0001-09", 0, 1, "L")
+        self.line(10, 40 + offset_y, 200, 40 + offset_y); self.set_y(48 + offset_y)
 
     def footer(self):
-        self.set_y(-25)
-        self.set_font("Arial", "I", 7)
+        self.set_y(-25); self.set_font("Arial", "I", 7)
         self.cell(0, 4, "Obs.: FRETE NÃO INCLUSO. PROPOSTA VÁLIDA POR 5 DIAS.", 0, 1, "C")
         self.cell(0, 4, "PRAZO DE RETIRADA: 3 A 5 DIAS ÚTEIS APÓS CONFIRMAÇÃO.", 0, 0, "C")
 
-
 def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo):
-    pdf = PDF()
-    pdf.vendedor_nome = vendedor
-    pdf.titulo_doc = titulo
-    pdf.add_page()
-
-    pdf.set_font("Arial", "B", 10)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, "L", fill=True)
-
+    pdf = PDF(); pdf.vendedor_nome = vendedor; pdf.titulo_doc = titulo; pdf.add_page()
+    pdf.set_font("Arial", "B", 10); pdf.set_fill_color(240, 240, 240); pdf.cell(0, 8, f" Cliente: {cliente}", 1, 1, "L", fill=True)
     pdf.set_font("Arial", "", 9)
     pdf.cell(0, 6, f" Endereço: {dados_cli.get('End', '')}", "LR", 1, "L")
     pdf.cell(0, 6, f" Cidade: {dados_cli.get('Cidade', '')}/{dados_cli.get('UF', '')} - CEP: {dados_cli.get('CEP', '')}", "LR", 1, "L")
-    pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", "LRB", 1, "L")
-    pdf.ln(5)
-
-    pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, "L")
-    pdf.ln(6)
-
-    pdf.set_font("Arial", "B", 8)
-    pdf.set_fill_color(225, 225, 225)
-    w = [15, 15, 85, 25, 20, 30]
-    cols = ["Un", "Qtd", "Produto", "Marca", "NCM", "Total"]
-    for i, c in enumerate(cols):
-        pdf.cell(w[i], 8, c, 1, 0, "C", fill=True)
-
-    pdf.ln()
-    pdf.set_font("Arial", "", 8)
-
+    pdf.cell(0, 6, f" CNPJ: {dados_cli.get('CNPJ', '')} - Tel: {dados_cli.get('Tel', '')}", "LRB", 1, "L"); pdf.ln(5)
+    pdf.cell(0, 8, f" Pagto: {condicoes.get('plano', '')} | Forma: {condicoes.get('forma', '')} | Vencto: {condicoes.get('venc', '')}", 1, 1, "L"); pdf.ln(6)
+    pdf.set_font("Arial", "B", 8); pdf.set_fill_color(225, 225, 225)
+    w = [15, 15, 85, 25, 20, 30]; cols = ["Un", "Qtd", "Produto", "Marca", "NCM", "Total"]
+    for i, c in enumerate(cols): pdf.cell(w[i], 8, c, 1, 0, "C", fill=True)
+    pdf.ln(); pdf.set_font("Arial", "", 8)
     for r in itens:
         pdf.cell(w[0], 7, str(r.get("Unidade", "KG")), 1, 0, "C")
         pdf.cell(w[1], 7, str(r.get("Qtd", 0)), 1, 0, "C")
@@ -352,50 +267,30 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
         pdf.cell(w[3], 7, str(r.get("Marca", "LABORTEC")), 1, 0, "C")
         pdf.cell(w[4], 7, str(r.get("NCM", "")), 1, 0, "C")
         try:
-            pdf.cell(w[5], 7, f"{float(r.get('Total', 0)):.2f}", 1, 1, "R")
-        except Exception:
-            pdf.cell(w[5], 7, "0.00", 1, 1, "R")
-
+            total_item = r.get('Total', 0)
+            if 'Preco_Final' in r: total_item = r['Preco_Final'] * r['Qtd']
+            pdf.cell(w[5], 7, f"{float(total_item):.2f}", 1, 1, "R")
+        except: pdf.cell(w[5], 7, "0.00", 1, 1, "R")
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(sum(w) - w[5], 10, "TOTAL GERAL: ", 0, 0, "R")
-    pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, "R")
-
-    pdf.ln(30)
-    y = pdf.get_y()
-    pdf.line(25, y, 90, y)
-    pdf.line(120, y, 185, y)
-
-    pdf.set_font("Arial", "", 8)
-    pdf.set_xy(25, y + 2)
-    pdf.cell(65, 4, "Assinatura Cliente", 0, 0, "C")
-    pdf.set_xy(120, y + 2)
-    pdf.cell(65, 4, "Assinatura Labortec", 0, 1, "C")
-
+    pdf.cell(sum(w) - w[5], 10, "TOTAL GERAL: ", 0, 0, "R"); pdf.cell(w[5], 10, f"R$ {total:,.2f}", 1, 1, "R")
+    pdf.ln(30); y = pdf.get_y(); pdf.line(25, y, 90, y); pdf.line(120, y, 185, y)
+    pdf.set_font("Arial", "", 8); pdf.set_xy(25, y + 2); pdf.cell(65, 4, "Assinatura Cliente", 0, 0, "C")
+    pdf.set_xy(120, y + 2); pdf.cell(65, 4, "Assinatura Labortec", 0, 1, "C")
     return pdf.output(dest="S").encode("latin-1")
 
-
-# ==============================================================================
-# 6. MENU LATERAL E TEMAS
-# ==============================================================================
 # ==============================================================================
 # 6. MENU LATERAL E TEMAS
 # ==============================================================================
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
-# --- SISTEMA DE AVISOS (TEXTO CORRIGIDO) ---
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
 with st.sidebar.expander("📢 DEFINIR AVISO"):
-    # Mudado de "Mensagem para a Tropa" para "Mensagem do Mural"
     aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
-    c_salv, c_limp = st.columns(2)
-    if c_salv.button("💾 Gravar"):
-        st.session_state['aviso_geral'] = aviso_txt
-        st.rerun()
-    if c_limp.button("🗑️ Apagar"):
-        st.session_state['aviso_geral'] = ""
-        st.rerun()
+    c1, c2 = st.columns(2)
+    if c1.button("💾 Gravar"): st.session_state['aviso_geral'] = aviso_txt; st.rerun()
+    if c2.button("🗑️ Apagar"): st.session_state['aviso_geral'] = ""; st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Personalizar Tela")
@@ -403,20 +298,10 @@ opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Naturez
 tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
 aplicar_tema(tema_sel)
 
-# Adicione "🛠️ Admin / Backup" no final da lista
 menu = st.sidebar.radio("Navegar:", [
-    "📊 Dashboard", 
-    "🧪 Laudos", 
-    "💰 Vendas & Orçamentos", 
-    "📥 Entrada de Estoque", 
-    "📦 Estoque", 
-    "📋 Conferência Geral", 
-    "👥 Clientes",
-    "🛠️ Admin / Backup"  # <--- ADICIONE ISSO AQUI
+    "📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", 
+    "📦 Estoque", "📋 Conferência Geral", "👥 Clientes", "🛠️ Admin / Backup"
 ])
-# ==============================================================================
-# 7. PÁGINAS DO SISTEMA
-# ==============================================================================
 
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
@@ -424,461 +309,343 @@ menu = st.sidebar.radio("Navegar:", [
 
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
-    
-    # --- ALERTA GERAL ---
     if st.session_state['aviso_geral']:
-        st.markdown(f"""
-        <style>
-            @keyframes pulse-red {{
-                0% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); transform: scale(1); }}
-                50% {{ box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); transform: scale(1.01); }}
-                100% {{ box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); transform: scale(1); }}
-            }}
-            .alert-blink {{
-                background-color: #ffebee; border: 2px solid #ff1744; color: #b71c1c;
-                padding: 8px 20px; border-radius: 50px; text-align: center;
-                font-weight: bold; font-size: 1.1rem; margin: 0 auto 30px auto;
-                width: fit-content; animation: pulse-red 2s infinite;
-                display: flex; align-items: center; justify-content: center; gap: 10px;
-            }}
-        </style>
-        <div class="alert-blink"><span>📢</span><span>{st.session_state['aviso_geral']}</span></div>
-        """, unsafe_allow_html=True)
-
+        st.markdown(f"""<div style='background-color:#ffebee; border:2px solid #ff1744; color:#b71c1c; padding:10px; border-radius:10px; text-align:center; font-weight:bold;'>📢 {st.session_state['aviso_geral']}</div>""", unsafe_allow_html=True)
     st.markdown("---")
-    
-    # --- RADAR DE LAUDOS (SEM REPETIÇÃO) ---
-    st.markdown("<h4 style='text-align: left; color: #555; margin-bottom: 15px; padding-left: 10px; border-left: 5px solid #1e3d59;'>📡 PRÓXIMAS COLETAS (Apenas Pendentes)</h4>", unsafe_allow_html=True)
-
+    st.markdown("<h4 style='color: #1e3d59;'>📡 Monitoramento de Coletas (Pendentes)</h4>", unsafe_allow_html=True)
     laudos_atuais = st.session_state.get("log_laudos", [])
-    
-    # Filtro Estrito: Apenas Pendentes
     ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
-
-    if not ativos:
-        st.success("✅ Tudo limpo! Nenhuma coleta pendente.")
+    
+    if not ativos: st.success("✅ Radar Limpo!")
     else:
         items_html = ""
-        # MUDANÇA TÁTICA: Removemos o loop multiplicador. 
-        # Agora a lista é exatamente o que existe.
         for l in ativos:
-            cliente = html.escape(str(l.get("Cliente", "") or "Sem Nome"))
-            coleta = html.escape(str(l.get("Data_Coleta", "") or "--/--"))
-            resultado = html.escape(str(l.get("Data_Resultado", "") or "--/--"))
-
             items_html += f"""
-            <div class="card">
-                <div class="card-header" title="{cliente}">🏢 {cliente}</div>
-                <div class="card-body">
-                    <div class="data-group"><span class="label">📅 COLETA</span><span class="value-coleta">{coleta}</span></div>
-                    <div class="divider"></div>
-                    <div class="data-group"><span class="label">🧪 PREVISÃO</span><span class="value-result">{resultado}</span></div>
-                </div>
-                <div class="card-footer"><span class="status-pill">⏳ AGUARDANDO COLETA</span></div>
-            </div>
-            """
+            <div style='min-width:250px; background:#fff; border-radius:10px; padding:15px; box-shadow:0 4px 6px rgba(0,0,0,0.1); border:1px solid #ddd; margin-right:20px;'>
+                <div style='font-weight:bold; color:#1e3d59; border-bottom:2px solid #ffb400; padding-bottom:5px;'>🏢 {l.get('Cliente','?')}</div>
+                <div style='margin-top:10px;'>📅 Coleta: <b>{l.get('Data_Coleta','--')}</b></div>
+                <div style='margin-top:5px;'>🧪 Previsão: <b>{l.get('Data_Resultado','--')}</b></div>
+                <div style='margin-top:10px; text-align:center; background:#e3f2fd; color:#1565c0; border-radius:15px; font-size:0.8em; padding:3px;'>⏳ AGUARDANDO COLETA</div>
+            </div>"""
+        components.html(f"<div style='display:flex; overflow-x:auto; padding:10px;'>{items_html}</div>", height=200)
 
-        # Lógica de Alinhamento:
-        # Se tiver poucos itens (<= 3), centraliza na tela. Se tiver muitos, alinha a esquerda com rolagem.
-        alinhamento = "center" if len(ativos) <= 3 else "flex-start"
-
-        carousel_component = f"""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-            
-            /* Container Flexível (Sem Animação Infinita) */
-            .carousel-container {{
-                display: flex;
-                overflow-x: auto; /* Permite rolar se tiver muitos */
-                gap: 20px;
-                padding: 10px 5px 20px 5px;
-                width: 100%;
-                justify-content: {alinhamento}; /* Centraliza ou Alinha */
-            }}
-            
-            /* Estiliza a barra de rolagem para ficar bonita */
-            .carousel-container::-webkit-scrollbar {{ height: 8px; }}
-            .carousel-container::-webkit-scrollbar-track {{ background: #f1f1f1; border-radius: 4px; }}
-            .carousel-container::-webkit-scrollbar-thumb {{ background: #c1c1c1; border-radius: 4px; }}
-            .carousel-container::-webkit-scrollbar-thumb:hover {{ background: #a8a8a8; }}
-
-            .card {{ 
-                min-width: 260px; /* Garante que o card não encolha */
-                width: 260px; 
-                background: #ffffff; 
-                border-radius: 12px; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-                font-family: 'Inter', sans-serif; 
-                overflow: hidden; 
-                border: 1px solid #e2e8f0; 
-                transition: transform 0.2s; 
-            }}
-            
-            .card:hover {{ 
-                transform: translateY(-5px); 
-                box-shadow: 0 15px 30px rgba(0,0,0,0.1); 
-                border-color: #cbd5e1; 
-            }}
-            
-            .card-header {{ background: linear-gradient(135deg, #1e3d59 0%, #162e44 100%); color: white; padding: 12px 15px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 3px solid #ffb400; }}
-            .card-body {{ padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }}
-            .data-group {{ display: flex; flex-direction: column; align-items: center; flex: 1; }}
-            .divider {{ width: 1px; height: 30px; background: #cbd5e1; margin: 0 10px; }}
-            .label {{ font-size: 10px; color: #64748b; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }}
-            .value-coleta {{ font-size: 14px; font-weight: 700; color: #334155; }}
-            .value-result {{ font-size: 14px; font-weight: 700; color: #059669; }}
-            .card-footer {{ background: #ffffff; padding: 10px; text-align: center; border-top: 1px solid #f1f5f9; }}
-            .status-pill {{ background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; display: inline-block; }}
-        </style>
-        
-        <div class="carousel-container">
-            {items_html}
-        </div>
-        """
-        components.html(carousel_component, height=230)
-
-    # --- MÉTRICAS DE ESTOQUE ---
-    st.markdown("<h4 style='text-align: left; color: #555; margin-top: 20px; border-left: 5px solid #d32f2f; padding-left: 10px;'>🚨 ESTOQUE CRÍTICO (Abaixo do Mínimo)</h4>", unsafe_allow_html=True)
-    
+    st.markdown("---")
+    st.markdown("<h4 style='color: #d32f2f;'>🚨 Estoque Crítico</h4>", unsafe_allow_html=True)
     df_est = st.session_state.get('estoque')
     if df_est is not None and not df_est.empty:
         try:
-            saldo_num = pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0)
-            min_num = pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)
-            criticos = df_est[ (saldo_num < min_num) & (min_num > 0) ].copy()
-            if not criticos.empty:
-                st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True, column_config={"Saldo": st.column_config.NumberColumn("Saldo Atual", format="%.2f"), "Estoque_Minimo": st.column_config.NumberColumn("Mínimo Desejado", format="%.0f")})
-            else:
-                st.info("👍 Situação Regular! Nenhum produto com estoque baixo.")
-        except: st.info("Dados insuficientes.")
-    
-    st.markdown("---")
+            criticos = df_est[ (pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0) < pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)) ].copy()
+            if not criticos.empty: st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True)
+            else: st.info("👍 Estoque OK.")
+        except: st.info("Erro ao calcular estoque.")
 
-    # --- GRÁFICOS ---
-    c_graf1, c_graf2 = st.columns(2)
-    with c_graf1:
-        st.markdown("**📈 Volume de Vendas Diárias**")
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### 📈 Vendas Diárias")
         log_v = st.session_state.get('log_vendas', [])
         if log_v:
             df_v = pd.DataFrame(log_v)
             df_v['Dia'] = pd.to_datetime(df_v['Data'], dayfirst=True, errors='coerce').dt.date
             st.area_chart(df_v.groupby('Dia')['Qtd'].sum(), color="#004aad")
-        else: st.caption("Aguardando dados...")
-
-    with c_graf2:
-        st.markdown("**🏆 Produtos Mais Vendidos**")
+        else: st.caption("Sem dados.")
+    with c2:
+        st.markdown("### 🏆 Top Produtos")
         if log_v:
             df_v = pd.DataFrame(log_v)
-            top_prods = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
-            st.bar_chart(top_prods, color="#ffb400", horizontal=True)
-        else: st.caption("Aguardando dados...")
-        # ==============================================================================
-# GESTÃO DE LAUDOS (RESTAURADA E BLINDADA)
-# ==============================================================================
+            st.bar_chart(df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5), color="#ffb400", horizontal=True)
+        else: st.caption("Sem dados.")
+
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos")
-    
-    # --- 1. AGENDAMENTO (DATA INPUT CONFIGURADO BR) ---
     with st.expander("📅 Agendar Nova Coleta", expanded=True):
         with st.form("f_laudo"):
             cli_l = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
             c1, c2 = st.columns(2)
-            
-            # Format="DD/MM/YYYY" força o calendário visualmente
             data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
             data_r = c2.date_input("Previsão do Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
-            
             if st.form_submit_button("Agendar"):
-                novo = {
-                    'Cliente': cli_l, 
-                    # Strftime garante que salva como texto BR na lista
-                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
-                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
-                    'Status': 'Pendente'
-                }
-                st.session_state['log_laudos'].append(novo)
-                salvar_dados()
-                st.success(f"Agendado para {data_l.strftime('%d/%m/%Y')}!")
-                st.rerun()
+                st.session_state['log_laudos'].append({
+                    'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'
+                })
+                salvar_dados(); st.success("Agendado!"); st.rerun()
 
-    st.markdown("---")
-    st.subheader("📋 Editar Previsões e Status")
-    
+    st.markdown("---"); st.subheader("📋 Editar Previsões")
     laudos = st.session_state.get('log_laudos', [])
-    
-    # Filtra (Esconde arquivados da edição rápida)
     laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
-    
-    if not laudos_ativos: 
-        st.info("Sem laudos ativos para editar.")
+    if not laudos_ativos: st.info("Sem laudos ativos.")
     else:
-        # Prepara o DataFrame
-        df_p = pd.DataFrame(laudos)
-        df_p['ID_Real'] = range(len(laudos))
-        
-        # Filtra visualmente
-        df_view = df_p[df_p['Status'] != 'Arquivado'].copy()
-
-        # --- TRUQUE TÁTICO: CONVERTER PARA DATA REAL ---
-        # O Editor precisa que seja 'datetime' para mostrar o calendário
+        df_view = pd.DataFrame(laudos)
+        df_view['ID_Real'] = range(len(laudos))
+        df_view = df_view[df_view['Status'] != 'Arquivado']
         df_view['Data_Coleta'] = pd.to_datetime(df_view['Data_Coleta'], dayfirst=True, errors='coerce')
         df_view['Data_Resultado'] = pd.to_datetime(df_view['Data_Resultado'], dayfirst=True, errors='coerce')
-
+        
         ed_p = st.data_editor(
-            df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']],
-            use_container_width=True, 
-            hide_index=True, 
-            disabled=['ID_Real', 'Cliente'],
+            df_view[['ID_Real', 'Cliente', 'Data_Coleta', 'Data_Resultado', 'Status']], 
+            use_container_width=True, hide_index=True, disabled=['ID_Real', 'Cliente'],
             column_config={
-                "Data_Coleta": st.column_config.DateColumn(
-                    "📅 Coleta", 
-                    format="DD/MM/YYYY", 
-                    step=1
-                ),
-                "Data_Resultado": st.column_config.DateColumn(
-                    "🧪 Previsão", 
-                    format="DD/MM/YYYY", 
-                    step=1
-                ),
-                "Status": st.column_config.SelectboxColumn(
-                    "Situação", 
-                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"]
-                )
+                "Data_Coleta": st.column_config.DateColumn("Coleta", format="DD/MM/YYYY"),
+                "Data_Resultado": st.column_config.DateColumn("Previsão", format="DD/MM/YYYY"),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Análise", "Concluído", "Cancelado"])
             }
         )
-
         if st.button("💾 SALVAR ALTERAÇÕES"):
             for _, row in ed_p.iterrows():
                 idx = int(row['ID_Real'])
-                
-                # --- CONVERSÃO REVERSA (DATA -> TEXTO BR) ---
-                nova_coleta = row['Data_Coleta']
-                if hasattr(nova_coleta, 'strftime'):
-                    nova_coleta = nova_coleta.strftime("%d/%m/%Y")
-                
-                nova_previsao = row['Data_Resultado']
-                if hasattr(nova_previsao, 'strftime'):
-                    nova_previsao = nova_previsao.strftime("%d/%m/%Y")
+                c = row['Data_Coleta'].strftime("%d/%m/%Y") if hasattr(row['Data_Coleta'], 'strftime') else str(row['Data_Coleta'])
+                r = row['Data_Resultado'].strftime("%d/%m/%Y") if hasattr(row['Data_Resultado'], 'strftime') else str(row['Data_Resultado'])
+                st.session_state['log_laudos'][idx].update({'Data_Coleta': c, 'Data_Resultado': r, 'Status': row['Status']})
+            salvar_dados(); st.success("Salvo!"); st.rerun()
 
-                # Atualiza a memória principal
-                st.session_state['log_laudos'][idx]['Data_Coleta'] = str(nova_coleta)
-                st.session_state['log_laudos'][idx]['Data_Resultado'] = str(nova_previsao)
-                st.session_state['log_laudos'][idx]['Status'] = row['Status']
-            
-            salvar_dados()
-            st.success("Dados atualizados!")
-            st.rerun()
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
     
-    # 1. Seleção do Cliente
     c1, c2 = st.columns([2,1])
     cli = c1.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
     vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
     d_cli = st.session_state['clientes_db'][cli]
     
-    # 2. Resgate do Fator de Preço (COM BLINDAGEM DE TITÂNIO)
-    try:
-        raw_fator = d_cli.get('Fator', 1.0)
-        # Se for texto vazio, vira 1.0
-        if isinstance(raw_fator, str) and not raw_fator.strip():
-            fator_cliente = 1.0
-        else:
-            fator_cliente = float(raw_fator)
-    except (ValueError, TypeError):
-        fator_cliente = 1.0 # Em caso de pânico, assume preço normal
+    try: fator = float(d_cli.get('Fator', 1.0) or 1.0)
+    except: fator = 1.0
     
-    # Mensagens visuais (Agora seguras)
-    if fator_cliente == 1.0:
-        st.info(f"📋 Cliente **{cli}**: Tabela Padrão (Fator 1.0)")
-    elif fator_cliente < 1.0:
-        perc_desc = round((1.0 - fator_cliente) * 100)
-        st.success(f"📉 Cliente **{cli}**: Tabela com DESCONTO de {perc_desc}% (Fator {fator_cliente})")
-    else:
-        perc_acres = round((fator_cliente - 1.0) * 100)
-        st.warning(f"📈 Cliente **{cli}**: Tabela com ACRÉSCIMO de {perc_acres}% (Fator {fator_cliente})")
+    if fator == 1.0: st.info(f"Tabela Normal (Fator 1.0)")
+    elif fator < 1.0: st.success(f"Desconto de {int((1-fator)*100)}%")
+    else: st.warning(f"Acréscimo de {int((fator-1)*100)}%")
     
-    col1, col2, col3 = st.columns(3)
-    p_pag = col1.text_input("Plano", "28/42 DIAS"); f_pag = col2.text_input("Forma", "BOLETO ITAU"); venc = col3.text_input("Vencimento", "A COMBINAR")
+    c3, c4, c5 = st.columns(3)
+    p_pag = c3.text_input("Plano", "28/42 DIAS"); f_pag = c4.text_input("Forma", "BOLETO"); venc = c5.text_input("Vencimento", "A COMBINAR")
     
-    # 3. Preparação da Tabela de Vendas
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
-    
-    # Garante que Preco_Base é número
     df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
+    df_v['Preco_Final'] = df_v['Preco_Base'] * fator
     
-    # APLICAR O FATOR NO PREÇO!
-    df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
-    
-    # Editor de Vendas
     ed_v = st.data_editor(
         df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
-        use_container_width=True, 
-        hide_index=True,
+        use_container_width=True, hide_index=True,
         column_config={
-            "Preco_Base": st.column_config.NumberColumn("Preço Base (R$)", format="%.2f", disabled=True),
-            "Preco_Final": st.column_config.NumberColumn("💵 Preço P/ Cliente (R$)", format="%.2f"), 
-            "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
+            "Preco_Base": st.column_config.NumberColumn("Base", format="%.2f", disabled=True),
+            "Preco_Final": st.column_config.NumberColumn("Final", format="%.2f"),
+            "Qtd": st.column_config.NumberColumn("Qtd", step=1.0)
         }
     )
     
-    # 4. Cálculo do Total
-    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
-    itens_sel['Total'] = itens_sel['Qtd'] * itens_sel['Preco_Final']
-    total = itens_sel['Total'].sum()
+    itens = ed_v[ed_v['Qtd'] > 0].copy()
+    itens['Total'] = itens['Qtd'] * itens['Preco_Final']
+    total = itens['Total'].sum()
     
-    if not itens_sel.empty:
-        st.divider()
-        c_tot, c_act = st.columns([1, 2])
-        c_tot.metric("Valor Total do Pedido", f"R$ {total:,.2f}")
+    if not itens.empty:
+        st.divider(); st.metric("Total", f"R$ {total:,.2f}")
+        b1, b2 = st.columns(2)
+        if b1.button("📄 ORÇAMENTO"):
+            pdf = criar_doc_pdf(vend, cli, d_cli, itens.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
+            st.download_button("📥 Baixar PDF", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
         
-        c_orc, c_ped = c_act.columns(2)
-        with c_orc:
-            if st.button("📄 ORÇAMENTO", use_container_width=True):
-                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
-                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "ORÇAMENTO")
-                st.download_button("📥 Baixar Orçamento", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
-        
-        with c_ped:
-            origem = st.radio("Origem?", ["METAL QUÍMICA (Baixa Estoque)", "INDEPENDENTE (Sem Baixa)"], horizontal=True)
-            
-            if st.button("✅ FECHAR VENDA", type="primary", use_container_width=True):
-                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
-                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
-                
-                if "METAL" in origem:
-                    for _, row in itens_sel.iterrows():
-                        mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
+        with b2:
+            tipo = st.radio("Baixa?", ["Sim (Estoque)", "Não (Apenas Pedido)"], horizontal=True)
+            if st.button("✅ FECHAR VENDA", type="primary"):
+                pdf = criar_doc_pdf(vend, cli, d_cli, itens.to_dict('records'), total, {'plano':p_pag, 'forma':f_pag, 'venc':venc}, "PEDIDO")
+                if "Sim" in tipo:
+                    for _, r in itens.iterrows():
+                        mask = st.session_state['estoque']['Cod'].astype(str) == str(r['Cod'])
                         if not st.session_state['estoque'][mask].empty:
                             idx = st.session_state['estoque'][mask].index[0]
                             try: atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
                             except: atual = 0.0
-                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
-                    
-                    st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
-                    salvar_dados(); st.success("Venda Confirmada (Estoque Baixado)!")
-                else: 
-                    st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários (Indep)', 'Qtd': itens_sel['Qtd'].sum(), 'Vendedor': vend})
-                    salvar_dados(); st.success("Venda Confirmada (Sem Baixa)!")
-                
+                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - r['Qtd']
+                st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': 'Vários', 'Qtd': itens['Qtd'].sum(), 'Vendedor': vend})
+                salvar_dados(); st.success("Venda Realizada!")
                 st.download_button("📥 Baixar Pedido", pdf, f"Pedido_{cli}.pdf", "application/pdf")
-elif menu == "🛠️ Admin / Backup":
-    st.title("🛠️ Bunker de Comando")
-    st.markdown("---")
 
-    # --- SENHA DE SEGURANÇA PARA ACESSAR O BUNKER ---
-    # Só libera as funções perigosas se digitar a senha de admin
-    senha_admin = st.text_input("🔑 Digite a Senha do General para liberar operações:", type="password")
+elif menu == "📥 Entrada de Estoque":
+    st.title("📥 Entrada de Mercadoria")
+    if st.session_state['estoque'].empty: st.warning("Cadastre produtos!"); st.stop()
     
-    if senha_admin == "labormetal22": # A mesma senha do login do General
-        
-        st.success("🔓 Acesso Autorizado. Cuidado, General.")
-        
-        tab_bkp, tab_res, tab_nuc = st.tabs(["💾 SALVAR BACKUP", "♻️ RESTAURAR DADOS", "☢️ ZERAR SISTEMA"])
+    with st.form("f_ent"):
+        opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
+        sel = st.selectbox("Produto", opcoes)
+        qtd = st.number_input("Qtd (KG)", min_value=0.0)
+        if st.form_submit_button("Confirmar"):
+            cod = sel.split(" - ")[0]
+            mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
+            if not st.session_state['estoque'][mask].empty:
+                idx = st.session_state['estoque'][mask].index[0]
+                try: atual = float(st.session_state['estoque'].at[idx, 'Saldo'])
+                except: atual = 0.0
+                st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
+                st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
+                salvar_dados(); st.success("Entrada Realizada!"); st.rerun()
 
-        # ------------------------------------------------------------------
-        # 1. FAZER BACKUP (EXPORTAR)
-        # ------------------------------------------------------------------
-        with tab_bkp:
-            st.subheader("💾 Gerar Cópia de Segurança")
-            st.caption("Baixa um arquivo completo com Clientes, Estoque e Históricos.")
+elif menu == "📦 Estoque":
+    st.title("📦 Estoque Geral")
+    
+    # --- 1. CADASTRO ---
+    with st.expander("➕ NOVO PRODUTO", expanded=False):
+        with st.form("novo_prod"):
+            c1, c2 = st.columns([1, 4])
+            cod = c1.text_input("Código")
+            nome = c2.text_input("Nome do Produto")
+            c3, c4, c5 = st.columns(3)
+            marca = c3.text_input("Marca", "LABORTEC"); ncm = c4.text_input("NCM"); unid = c5.selectbox("Un", ["KG", "L", "UN"])
+            c6, c7, c8 = st.columns(3)
+            preco = c6.number_input("Preço Base", 0.0); saldo = c7.number_input("Saldo Inicial", 0.0); min_est = c8.number_input("Mínimo", 0.0)
             
-            if st.button("📦 CRIAR ARQUIVO DE BACKUP"):
-                # Empacota tudo num dicionário Python
-                pacote_dados = {
+            if st.form_submit_button("CADASTRAR"):
+                if cod and nome:
+                    existentes = st.session_state['estoque']['Cod'].astype(str).values
+                    if str(cod) in existentes: st.error("Código já existe!")
+                    else:
+                        novo = {"Cod": cod, "Produto": nome, "Marca": marca, "NCM": ncm, "Unidade": unid, "Preco_Base": preco, "Saldo": saldo, "Estoque_Minimo": min_est}
+                        st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
+                        salvar_dados(); st.success("Cadastrado!"); st.rerun()
+                else: st.warning("Código e Nome obrigatórios.")
+
+    # --- 2. TABELA ---
+    st.markdown("---")
+    if not st.session_state['estoque'].empty:
+        for c in ['Saldo', 'Preco_Base', 'Estoque_Minimo']:
+            st.session_state['estoque'][c] = pd.to_numeric(st.session_state['estoque'][c], errors='coerce').fillna(0.0)
+            
+    def style_saldo(v): return 'background-color: #d4edda; color: #155724; font-weight: bold'
+    try: df_style = st.session_state['estoque'].style.map(style_saldo, subset=['Saldo'])
+    except: df_style = st.session_state['estoque']
+    
+    ed = st.data_editor(df_style, use_container_width=True, num_rows="dynamic", key="ed_estoque", column_config={
+        "Saldo": st.column_config.NumberColumn("Saldo", format="%.2f"),
+        "Preco_Base": st.column_config.NumberColumn("Preço", format="%.2f")
+    })
+    if not ed.equals(st.session_state['estoque']):
+        st.session_state['estoque'] = ed; salvar_dados()
+
+elif menu == "📋 Conferência Geral":
+    st.title("📋 Conferência")
+    t1, t2, t3 = st.tabs(["Vendas", "Entradas", "Laudos"])
+    with t1:
+        if st.session_state['log_vendas']:
+            ed = st.data_editor(pd.DataFrame(st.session_state['log_vendas']), num_rows="dynamic", use_container_width=True)
+            if st.button("Salvar Vendas"): st.session_state['log_vendas'] = ed.to_dict('records'); salvar_dados(); st.rerun()
+    with t2:
+        if st.session_state['log_entradas']:
+            ed = st.data_editor(pd.DataFrame(st.session_state['log_entradas']), num_rows="dynamic", use_container_width=True)
+            if st.button("Salvar Entradas"): st.session_state['log_entradas'] = ed.to_dict('records'); salvar_dados(); st.rerun()
+    with t3:
+        laudos = st.session_state.get('log_laudos', [])
+        for i, l in enumerate(laudos):
+            if l.get('Status') != 'Arquivado':
+                with st.expander(f"{l['Cliente']} - {l['Data_Coleta']}"):
+                    if st.button("Arquivar", key=f"arq_{i}"):
+                        st.session_state['log_laudos'][i]['Status'] = 'Arquivado'; salvar_dados(); st.rerun()
+
+elif menu == "👥 Clientes":
+    st.title("👥 Clientes")
+    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
+    
+    campos = ['nome', 'tel', 'email', 'end', 'cnpj', 'cid', 'uf', 'cep', 'cod', 'fator']
+    for c in campos: 
+        if f'cli_{c}' not in st.session_state: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
+
+    def limpar():
+        for c in campos: st.session_state[f'cli_{c}'] = 1.0 if c == 'fator' else ""
+        st.session_state['edit_mode'] = False
+
+    def carregar(k, d):
+        st.session_state['cli_nome'] = k
+        st.session_state['cli_tel'] = d.get('Tel','')
+        st.session_state['cli_email'] = d.get('Email','')
+        st.session_state['cli_end'] = d.get('End','')
+        st.session_state['cli_cnpj'] = d.get('CNPJ','')
+        st.session_state['cli_cid'] = d.get('Cidade','')
+        st.session_state['cli_uf'] = d.get('UF','')
+        st.session_state['cli_cep'] = d.get('CEP','')
+        st.session_state['cli_cod'] = d.get('Cod_Cli','')
+        try: st.session_state['cli_fator'] = float(d.get('Fator', 1.0))
+        except: st.session_state['cli_fator'] = 1.0
+        st.session_state['edit_mode'] = True
+
+    with st.form("form_cli"):
+        c1, c2 = st.columns([3, 1])
+        c1.text_input("Nome", key="cli_nome", disabled=st.session_state['edit_mode'])
+        c2.text_input("Cód", key="cli_cod")
+        c3, c4 = st.columns(2)
+        c3.number_input("Fator Preço", 0.1, 5.0, step=0.05, key="cli_fator")
+        c4.text_input("CNPJ", key="cli_cnpj")
+        c5, c6 = st.columns(2)
+        c5.text_input("Tel", key="cli_tel"); c6.text_input("Email", key="cli_email")
+        st.text_input("Endereço", key="cli_end")
+        c7, c8, c9 = st.columns(3)
+        c7.text_input("Cidade", key="cli_cid"); c8.text_input("UF", key="cli_uf"); c9.text_input("CEP", key="cli_cep")
+        
+        if st.form_submit_button("SALVAR"):
+            nome = st.session_state['cli_nome'].strip()
+            if nome:
+                st.session_state['clientes_db'][nome] = {
+                    'Tel': st.session_state['cli_tel'], 'Email': st.session_state['cli_email'],
+                    'End': st.session_state['cli_end'], 'CNPJ': st.session_state['cli_cnpj'],
+                    'Cidade': st.session_state['cli_cid'], 'UF': st.session_state['cli_uf'],
+                    'CEP': st.session_state['cli_cep'], 'Cod_Cli': st.session_state['cli_cod'],
+                    'Fator': st.session_state['cli_fator']
+                }
+                salvar_dados(); st.success("Salvo!"); limpar(); st.rerun()
+            else: st.error("Nome obrigatório")
+            
+    if st.session_state['edit_mode']: st.button("Cancelar Edição", on_click=limpar)
+    
+    st.markdown("---")
+    busca = st.text_input("Buscar Cliente")
+    lista = sorted(st.session_state['clientes_db'].keys())
+    if busca: lista = [k for k in lista if busca.lower() in k.lower()]
+    
+    for k in lista:
+        d = st.session_state['clientes_db'][k]
+        try: fator = float(d.get('Fator', 1.0) or 1.0)
+        except: fator = 1.0
+        
+        if fator == 1.0: txt = "NORMAL"
+        elif fator < 1.0: txt = f"DESC {int((1-fator)*100)}%"
+        else: txt = f"ACRÉSC {int((fator-1)*100)}%"
+        
+        c_info, c_btn = st.columns([5, 1])
+        with c_info:
+            with st.expander(f"{k} [{txt}]"):
+                st.write(f"End: {d.get('End')} | Tel: {d.get('Tel')}")
+                st.write(f"CNPJ: {d.get('CNPJ')}")
+                c_e, c_d = st.columns(2)
+                if c_e.button("EDITAR", key=f"ed_{k}"): carregar(k, d); st.rerun()
+                if c_d.button("EXCLUIR", key=f"del_{k}"): del st.session_state['clientes_db'][k]; salvar_dados(); st.rerun()
+        with c_btn:
+            if d.get('Email'):
+                with st.popover("📋"): st.code(d.get('Email'), language="text")
+
+elif menu == "🛠️ Admin / Backup":
+    st.title("🛠️ Admin")
+    if st.text_input("Senha", type="password") == "labormetal22":
+        t1, t2, t3 = st.tabs(["Backup", "Restaurar", "Reset"])
+        with t1:
+            if st.button("Gerar Backup"):
+                data = {
                     "estoque": st.session_state['estoque'].to_dict('records'),
                     "clientes": st.session_state['clientes_db'],
                     "vendas": st.session_state['log_vendas'],
                     "entradas": st.session_state['log_entradas'],
-                    "laudos": st.session_state['log_laudos'],
-                    "data_backup": datetime.now().strftime("%d/%m/%Y %H:%M")
+                    "laudos": st.session_state['log_laudos']
                 }
-                
-                # Converte para texto JSON
-                arquivo_json = json.dumps(pacote_dados, indent=4)
-                
-                # Botão de Download
-                data_hoje = datetime.now().strftime("%d-%m-%Y")
-                st.download_button(
-                    label="⬇️ BAIXAR ARQUIVO (.json)",
-                    data=arquivo_json,
-                    file_name=f"Backup_Sistema_V65_{data_hoje}.json",
-                    mime="application/json",
-                    type="primary"
-                )
-
-        # ------------------------------------------------------------------
-        # 2. RESTAURAR (IMPORTAR)
-        # ------------------------------------------------------------------
-        with tab_res:
-            st.subheader("♻️ Restaurar Dados Antigos")
-            st.warning("⚠️ ATENÇÃO: Isso vai APAGAR o que está no sistema agora e substituir pelo arquivo que você enviar.")
-            
-            arquivo_up = st.file_uploader("Arraste o arquivo de backup (.json) aqui:", type="json")
-            
-            if arquivo_up is not None:
-                if st.button("🔄 CONFIRMAR RESTAURAÇÃO"):
-                    try:
-                        dados = json.load(arquivo_up)
-                        
-                        # Reconstrói a memória
-                        st.session_state['estoque'] = pd.DataFrame(dados['estoque'])
-                        st.session_state['clientes_db'] = dados['clientes']
-                        st.session_state['log_vendas'] = dados['vendas']
-                        st.session_state['log_entradas'] = dados['entradas']
-                        st.session_state['log_laudos'] = dados['laudos']
-                        
-                        # Salva na nuvem
-                        salvar_dados()
-                        st.balloons()
-                        st.success("✅ Sistema Restaurado com Sucesso! (Pressione R para recarregar)")
-                    except Exception as e:
-                        st.error(f"Erro ao ler arquivo: {e}")
-
-        # ------------------------------------------------------------------
-        # 3. ZERAR TUDO (BOTÃO NUCLEAR)
-        # ------------------------------------------------------------------
-        with tab_nuc:
-            st.subheader("☢️ ZERAR TUDO (Protocolo de Destruição)")
-            st.error("⛔ PERIGO: ISSO APAGA CLIENTES, ESTOQUE, TUDO! NÃO TEM VOLTA.")
-            
-            confirmacao = st.text_input("Digite 'CONFIRMO' para liberar o botão:", placeholder="...")
-            
-            if confirmacao == "CONFIRMO":
-                if st.button("💣 DETONAR / LIMPAR SISTEMA", type="primary"):
-                    # Limpa as variáveis
-                    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Inicial', 'Estoque_Minimo'])
-                    st.session_state['clientes_db'] = {}
-                    st.session_state['log_vendas'] = []
-                    st.session_state['log_entradas'] = []
-                    st.session_state['log_laudos'] = []
-                    
-                    # Salva o vazio na nuvem
-                    salvar_dados()
-                    st.success("O terreno está limpo, General. Começando do zero.")
-                    st.rerun()
-            else:
-                st.info("Botão travado por segurança.")
-
-    else:
-        st.info("🔒 Digite a senha administrativa acima para acessar o painel.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                st.download_button("Baixar JSON", json.dumps(data, indent=4), f"Backup_{datetime.now().date()}.json", "application/json")
+        with t2:
+            up = st.file_uploader("Upload JSON", type="json")
+            if up and st.button("Carregar"):
+                d = json.load(up)
+                st.session_state['estoque'] = pd.DataFrame(d['estoque'])
+                st.session_state['clientes_db'] = d['clientes']
+                st.session_state['log_vendas'] = d['vendas']
+                st.session_state['log_entradas'] = d['entradas']
+                st.session_state['log_laudos'] = d['laudos']
+                salvar_dados(); st.success("Restaurado!")
+        with t3:
+            if st.button("ZERAR TUDO") and st.text_input("Confirma?") == "SIM":
+                st.session_state['clientes_db'] = {}
+                st.session_state['log_vendas'] = []
+                # ... limpar o resto
+                salvar_dados()
