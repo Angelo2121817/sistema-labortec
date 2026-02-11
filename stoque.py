@@ -9,6 +9,25 @@ from pypdf import PdfReader
 from fpdf import FPDF
 import streamlit.components.v1 as components
 
+# --- 📡 DIAGNÓSTICO DE CONEXÃO (COLE ISSO NO TOPO) ---
+st.write("---")
+st.write("📡 TESTANDO CONEXÃO COM A PLANILHA...")
+try:
+    # Tenta ler a aba Estoque na marra
+    conn_teste = st.connection("gsheets", type=GSheetsConnection)
+    df_teste = conn_teste.read(worksheet="Estoque", ttl=0)
+    
+    if df_teste.empty:
+        st.warning("⚠️ CONEXÃO OK, MAS A ABA 'Estoque' ESTÁ VAZIA!")
+    else:
+        st.success(f"✅ CONEXÃO OK! Encontrei {len(df_teste)} produtos.")
+        st.dataframe(df_teste.head(3)) # Mostra os 3 primeiros
+        
+except Exception as e:
+    st.error(f"❌ A CONEXÃO QUEBROU AQUI: {e}")
+    st.info("Dica: Verifique se o nome da aba no Google Sheets é exatamente 'Estoque'.")
+    st.stop() # Para tudo pra gente ver o erro
+st.write("---")
 # ============================================================================
 # CONFIGURAÇÃO INICIAL - ESTADO DA SESSÃO
 # ============================================================================
@@ -798,3 +817,4 @@ elif menu == "🛠️ Admin / Backup":
                 salvar_dados()
                 st.success("Sistema resetado!")
                 st.rerun()
+
