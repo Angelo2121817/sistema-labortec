@@ -346,53 +346,101 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # 8. PÁGINAS DO SISTEMA
 # ==============================================================================
 
-if menu == "📊 Dashboard":
-    st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
+elif menu == "📊 Dashboard":
+    st.markdown('<div class="centered-title">📊 Centro de Comando (Dashboard)</div>', unsafe_allow_html=True)
     
-    # --- 1. MURAL DE AVISOS (O GRANDE ALERTA VERMELHO) ---
-    if st.session_state['aviso_geral']:
+    # --- 1. MURAL DE AVISOS (O GRANDE ALERTA GERAL) ---
+    if st.session_state.get('aviso_geral'):
         st.markdown(f"""
-        <div style='background-color:#ffebee; border:2px solid #ff1744; color:#b71c1c; padding:15px; border-radius:10px; text-align:center; font-weight:bold; font-size:1.2em; margin-bottom:20px;'>
-            📢 {st.session_state['aviso_geral']}
+        <div style='background-color:#ffebee; border-left: 5px solid #ff1744; color:#b71c1c; padding:15px; border-radius:5px; font-weight:bold; margin-bottom:20px;'>
+            📢 MURAL: {st.session_state['aviso_geral']}
         </div>
         """, unsafe_allow_html=True)
 
-    # --- 2. RADAR DE LAUDOS PENDENTES (A LINHA DO TEMPO) ---
+    # --- 2. RADAR DE ESTOQUE CRÍTICO (A NOVIDADE) ---
+    st.markdown("### 🚨 Alerta de Abastecimento")
+    
+    # Prepara os dados
+    df_radar = st.session_state.get('estoque', pd.DataFrame()).copy()
+    
+    if not df_radar.empty:
+        # Garante que são números para fazer a conta
+        df_radar['Saldo'] = pd.to_numeric(df_radar['Saldo'], errors='coerce').fillna(0)
+        # Se não tiver a coluna Mínimo, cria padrão 10
+        if 'Estoque_Min' not in df_radar.columns: df_radar['Estoque_Min'] = 10.0
+        df_radar['Estoque_Min'] = pd.to_numeric(df_radar['Estoque_Min'], errors='coerce').fillna(0)
+        
+        # FILTRO TÁTICO: Pega só quem está abaixo ou igual ao mínimo
+        criticos = df_radar[df_radar['Saldo'] <= df_radar['Estoque_Min']].copy()
+        
+        if not criticos.empty:
+            # Mostra o alerta vermelho
+            st.error(f"⚠️ ATENÇÃO: {len(criticos)} itens estão com estoque CRÍTICO ou ZERADO!")
+            
+            # Mostra a lista "Discreta mas Relevante"
+            st.dataframe(
+                criticos[['Produto', 'Saldo', 'Estoque_Min', 'Unidade']],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Produto": st.column_config.TextColumn("Item Crítico", width="large"),
+                    "Saldo": st.column_config.NumberColumn("🔻 Atual", format="%.2f"),
+                    "Estoque_Min": st.column_config.NumberColumn("🎯 Mínimo", format="%.1f"),
+                    "Unidade": st.column_config.TextColumn("Emb.", width="small")
+                }
+            )
+        else:
+            st.success("✅ Abastecimento Seguro: Nenhum item em nível crítico.")
+    else:
+        st.info("Estoque vazio.")
+
+    # --- 3. MONITORAMENTO DE LAUDOS PENDENTES ---
     st.markdown("---")
-    st.markdown("<h4 style='color: #1e3d59;'>📡 Monitoramento de Coletas (Pendentes)</h4>", unsafe_allow_html=True)
+    st.markdown("### 📡 Radar de Coletas (Laudos)")
     laudos_atuais = st.session_state.get("log_laudos", [])
-    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
+    
+    # Filtra tudo que NÃO está arquivado nem concluído (ou seja, Pendente/Em Análise)
+    ativos = [l for l in laudos_atuais if l.get("Status") in ["Pendente", "Em Análise"]]
     
     if not ativos: 
-        st.success("✅ Radar Limpo! Nenhuma coleta pendente.")
+        st.info("👍 Nenhuma coleta pendente no momento.")
     else:
-        items_html = ""
-        for l in ativos:
-            items_html += f"""
-            <div style='min-width:250px; background:#fff; border-radius:10px; padding:15px; box-shadow:0 4px 6px rgba(0,0,0,0.1); border:1px solid #ddd; margin-right:20px;'>
-                <div style='font-weight:bold; color:#1e3d59; border-bottom:2px solid #ffb400; padding-bottom:5px;'>🏢 {l.get('Cliente','?')}</div>
-                <div style='margin-top:10px;'>📅 Coleta: <b>{l.get('Data_Coleta','--')}</b></div>
-                <div style='margin-top:5px;'>🧪 Previsão: <b>{l.get('Data_Resultado','--')}</b></div>
-                <div style='margin-top:10px; text-align:center; background:#e3f2fd; color:#1565c0; border-radius:15px; font-size:0.8em; padding:3px;'>⏳ AGUARDANDO COLETA</div>
-            </div>"""
-        components.html(f"<div style='display:flex; overflow-x:auto; padding:10px;'>{items_html}</div>", height=220)
+        # Mostra em cards lado a lado
+        cols = st.columns(min(len(ativos), 4)) # Máximo 4 colunas para não espremer
+        for i, l in enumerate(ativos):
+            # Garante que não estoure o layout se tiver muitos
+            with cols[i % 4]:
+                cor_borda = "#ffb400" if l.get("Status") == "Pendente" else "#29b6f6" # Laranja ou Azul
+                st.markdown(f"""
+                <div style='background:#fff; border-top: 4px solid {cor_borda}; border-radius:8px; padding:10px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:10px;'>
+                    <div style='font-weight:bold; font-size:0.9em;'>🏢 {l.get('Cliente','?')}</div>
+                    <div style='font-size:0.8em; color:#555;'>📅 Coleta: {l.get('Data_Coleta','--')}</div>
+                    <div style='font-size:0.8em; color:#555;'>🧪 Prev: {l.get('Data_Resultado','--')}</div>
+                    <div style='margin-top:5px; font-weight:bold; color:{cor_borda}; font-size:0.8em;'>{l.get('Status').upper()}</div>
+                </div>""", unsafe_allow_html=True)
 
-    # --- 3. GRÁFICOS (MANTIDOS) ---
+    # --- 4. GRÁFICOS E ESTATÍSTICAS ---
     st.markdown("---")
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("### 📈 Vendas Diárias")
+        st.markdown("#### 📈 Fluxo de Vendas")
         log_v = st.session_state.get('log_vendas', [])
         if log_v:
             df_v = pd.DataFrame(log_v)
+            # Tenta converter data para agrupar
             df_v['Dia'] = pd.to_datetime(df_v['Data'], dayfirst=True, errors='coerce').dt.date
-            st.area_chart(df_v.groupby('Dia')['Qtd'].sum())
-        else: st.caption("Sem dados.")
+            # Agrupa por dia e soma qtd
+            dados_grafico = df_v.groupby('Dia')['Qtd'].sum()
+            st.line_chart(dados_grafico, color="#004aad")
+        else: st.caption("Sem dados de vendas recentes.")
+        
     with c2:
-        st.markdown("### 🏆 Top Produtos")
+        st.markdown("#### 🏆 Top Saída (Produtos)")
         if log_v:
             df_v = pd.DataFrame(log_v)
-            st.bar_chart(df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5), horizontal=True)
+            top_prod = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
+            st.bar_chart(top_prod, color="#2e7d32", horizontal=True)
+        else: st.caption("Aguardando primeiras vendas.")
 elif menu == "📦 Estoque":
     st.title("📦 Controle Tático de Estoque")
     
@@ -980,6 +1028,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
