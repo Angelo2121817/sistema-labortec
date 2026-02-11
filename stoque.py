@@ -396,6 +396,10 @@ if menu == "📊 Dashboard":
 elif menu == "📦 Estoque":
     st.title("📦 Controle Tático de Estoque")
     
+    # --- 1. GARANTIA DE DADOS (CRIA O CAMPO MÍNIMO SE NÃO EXISTIR) ---
+    if 'Estoque_Min' not in st.session_state['estoque'].columns:
+        st.session_state['estoque']['Estoque_Min'] = 10.0 # Padrão inicial
+    
     # Busca e Ferramentas
     c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
     with c_busca:
@@ -411,17 +415,20 @@ elif menu == "📦 Estoque":
             st.markdown("### ➕ Novo Item")
             with st.form("add_prod", clear_on_submit=True):
                 c1, c2 = st.columns([1,2])
-                # Aqui definimos a Embalagem/Unidade
                 emb_n = c1.selectbox("Embalagem", ["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX"])
                 nome_n = c2.text_input("Nome do Produto")
+                
                 c3, c4 = st.columns(2)
-                preco_n = c3.number_input("Custo Base", min_value=0.0)
-                saldo_n = c4.number_input("Estoque Inicial", min_value=0.0)
+                saldo_n = c3.number_input("Estoque Inicial", min_value=0.0)
+                minimo_n = c4.number_input("Estoque Mínimo (Alerta)", min_value=1.0, value=10.0)
                 
                 if st.form_submit_button("Cadastrar"):
-                    # Gera um código aleatório simples se não informado, ou usa timestamp
                     cod_auto = datetime.now().strftime("%H%M%S")
-                    novo = {"Cod": cod_auto, "Produto": nome_n, "Preco_Base": preco_n, "Saldo": saldo_n, "Marca": "GERAL", "Unidade": emb_n}
+                    novo = {
+                        "Cod": cod_auto, "Produto": nome_n, "Preco_Base": 0.0, 
+                        "Saldo": saldo_n, "Estoque_Min": minimo_n, 
+                        "Marca": "GERAL", "Unidade": emb_n
+                    }
                     st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
                     salvar_dados(); st.rerun()
             
@@ -438,63 +445,74 @@ elif menu == "📦 Estoque":
                     st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Produto'] != alvo]
                     salvar_dados(); st.rerun()
 
-    # Tabela Principal
+    # --- 2. PREPARAÇÃO DO RADAR (TABELA) ---
     df_exibir = st.session_state['estoque'].copy()
     
     # Filtro de Busca
     if busca:
         df_exibir = df_exibir[df_exibir['Produto'].str.contains(busca, case=False)]
     
-    # --- CÁLCULO PARA A BARRA DE PROGRESSO ---
-    # Descobre qual é o maior estoque para usar como referência (100% da barra)
-    if not df_exibir.empty:
-        try: 
-            df_exibir['Saldo'] = pd.to_numeric(df_exibir['Saldo'], errors='coerce').fillna(0)
-            max_estoque = float(df_exibir['Saldo'].max())
-            if max_estoque == 0: max_estoque = 100.0
-        except: max_estoque = 100.0
-    else: max_estoque = 100.0
-
-    st.markdown("###") # Espaço para respirar
+    # Conversão para números (Segurança)
+    df_exibir['Saldo'] = pd.to_numeric(df_exibir['Saldo'], errors='coerce').fillna(0)
+    df_exibir['Estoque_Min'] = pd.to_numeric(df_exibir['Estoque_Min'], errors='coerce').fillna(0)
     
-    # O VISUAL NOVO
+    # Lógica do Radar: Cria a coluna visual "Status"
+    def definir_status(row):
+        if row['Saldo'] <= row['Estoque_Min']:
+            return "🔴 CRÍTICO"
+        elif row['Saldo'] <= (row['Estoque_Min'] * 1.2): # 20% acima do mínimo
+            return "⚠️ BAIXO"
+        else:
+            return "🟢 OK"
+            
+    if not df_exibir.empty:
+        df_exibir['Status'] = df_exibir.apply(definir_status, axis=1)
+        max_barra = df_exibir['Saldo'].max()
+        if max_barra == 0: max_barra = 100
+    else:
+        max_barra = 100
+
+    st.markdown("###") 
+    
+    # O EDITOR VISUAL
     ed = st.data_editor(
         df_exibir, 
         use_container_width=True, 
         hide_index=True,
-        # AQUI MUDAMOS A ORDEM: Embalagem primeiro, Código e Marca sumiram
-        column_order=["Unidade", "Produto", "Saldo"],
+        # ORDEM TÁTICA: Status primeiro para alertar
+        column_order=["Status", "Unidade", "Produto", "Saldo", "Estoque_Min"],
         
         column_config={
-            # Transformamos "Unidade" em "Tipo de Embalagem"
-            "Unidade": st.column_config.SelectboxColumn(
-                "📦 Tipo Embalagem",
-                options=["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX", "L"],
-                required=True,
-                width="small"
-            ),
-            "Produto": st.column_config.TextColumn(
-                "📋 Descrição do Material",
-                disabled=True, # Trava o nome para evitar acidentes
-                width="large"
-            ),
-            # O GRANDE DESTAQUE VISUAL
+            "Status": st.column_config.TextColumn("🚨 Radar", width="small", disabled=True),
+            "Unidade": st.column_config.SelectboxColumn("📦 Emb.", options=["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX", "L"], width="small", required=True),
+            "Produto": st.column_config.TextColumn("📋 Material", disabled=True, width="large"),
+            
+            # A BARRA AGORA MOSTRA O SALDO
             "Saldo": st.column_config.ProgressColumn(
-                "📊 NÍVEL DE ESTOQUE (SALDO)",
-                help="Barra cheia indica o produto com maior estoque na casa.",
-                format="%.2f",
-                min_value=0,
-                max_value=max_estoque, # A barra é relativa ao produto com mais estoque
+                "📊 Atual", 
+                format="%.2f", 
+                min_value=0, 
+                max_value=max_barra,
                 width="medium"
+            ),
+            
+            # A REFERÊNCIA TÁTICA (MÍNIMO)
+            "Estoque_Min": st.column_config.NumberColumn(
+                "🎯 Mínimo", 
+                help="Se o atual for menor que este, o radar fica vermelho.",
+                step=1.0,
+                width="small"
             )
         }
     )
     
-    # Lógica de Salvamento Inteligente
+    # Lógica de Salvamento
     if not ed.equals(df_exibir):
-        # Atualiza apenas o que mudou (Unidade ou Saldo) mantendo as colunas ocultas intactas
-        st.session_state["estoque"].update(ed)
+        # Remove a coluna 'Status' antes de salvar, pois ela é calculada na hora e não vai pro banco
+        ed_limpo = ed.drop(columns=['Status'])
+        st.session_state["estoque"].update(ed_limpo)
         salvar_dados()
+        st.rerun() # Atualiza para recalcular os status (Vermelho/Verde)
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     
@@ -962,6 +980,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
