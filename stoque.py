@@ -77,12 +77,12 @@ def extrair_dados_cetesb(f):
                 d["CNPJ"] = cnpj_m.group(1)
                 d["Nome"] = line.replace(d["CNPJ"], "").strip()
 
-                if i + 1 < len(lines):
+                if i + 1 &lt; len(lines):
                     prox = lines[i + 1]
                     cad_m = re.search(r"(\d+-\d+-\d+)", prox)
                     d["End"] = prox.replace(cad_m.group(1), "").strip() if cad_m else prox
 
-                if i + 2 < len(lines):
+                if i + 2 &lt; len(lines):
                     addr_line = lines[i + 2]
                     cep_m = re.search(r"(\d{5}-\d{3})", addr_line)
                     if cep_m:
@@ -125,7 +125,7 @@ def ler_pdf_antigo(f):
             min_idx = len(fragment)
             for stop in stops:
                 stop_match = re.search(re.escape(stop), fragment, re.IGNORECASE)
-                if stop_match and stop_match.start() < min_idx:
+                if stop_match and stop_match.start() &lt; min_idx:
                     min_idx = stop_match.start()
             return fragment[:min_idx].strip(" :/-|").strip()
 
@@ -161,8 +161,8 @@ def obter_horario_br():
 
 def obter_saudacao():
     hora = obter_horario_br().hour
-    if 5 <= hora < 12: return "Bom dia"
-    elif 12 <= hora < 18: return "Boa tarde"
+    if 5 &lt;= hora &lt; 12: return "Bom dia"
+    elif 12 &lt;= hora &lt; 18: return "Boa tarde"
     return "Boa noite"
 
 def verificar_senha():
@@ -448,7 +448,7 @@ def gerar_pdf_estoque(usuario, df_estoque):
         pdf.cell(w[2], 6, str(row.get('Marca', ''))[:15], 1, 0, "C")
         pdf.cell(w[3], 6, str(row.get('Unidade', 'UN')), 1, 0, "C")
         
-        if saldo <= 0: pdf.set_text_color(200, 0, 0)
+        if saldo &lt;= 0: pdf.set_text_color(200, 0, 0)
         else: pdf.set_text_color(0, 0, 0)
         
         pdf.cell(w[4], 6, f"{saldo:,.2f}", 1, 0, "R")
@@ -544,7 +544,7 @@ if menu == "📊 Dashboard":
     df_est = st.session_state.get('estoque')
     if df_est is not None and not df_est.empty:
         try:
-            criticos = df_est[ (pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0) < pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)) ].copy()
+            criticos = df_est[ (pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0) &lt; pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)) ].copy()
             if not criticos.empty: st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True)
             else: st.info("👍 Estoque OK.")
         except: st.info("Erro ao calcular estoque.")
