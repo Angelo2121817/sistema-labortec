@@ -9,6 +9,7 @@ from pypdf import PdfReader
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 import streamlit.components.v1 as components
+
 # --- BLOCO DE SEGURANÇA INICIAL ---
 if 'estoque' not in st.session_state:
     st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
@@ -16,6 +17,8 @@ if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
 if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
 if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
+if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
+
 # ==============================================================================
 # 0. FUNÇÕES DE EXTRAÇÃO PDF (CETESB & PADRÃO)
 # ==============================================================================
@@ -161,25 +164,6 @@ def _fix_datetime_br(val):
     try: return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
     except: return val
 
-import json
-import os
-
-def realizar_backup_local():
-    """Função interna para salvar uma cópia de segurança no HD"""
-    try:
-        dados_backup = {
-            "estoque": st.session_state.get("estoque", pd.DataFrame()).to_dict("records"),
-            "clientes": st.session_state.get("clientes_db", {}),
-            "log_vendas": st.session_state.get("log_vendas", []),
-            "log_entradas": st.session_state.get("log_entradas", []),
-            "log_laudos": st.session_state.get("log_laudos", []),
-            "aviso": st.session_state.get("aviso_geral", "")
-        }
-        with open("backup_seguranca.json", "w", encoding="utf-8") as f:
-            json.dump(dados_backup, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"Erro ao criar backup local: {e}")
-
 def carregar_dados():
     try:
         # 1. Carrega Estoque
@@ -257,6 +241,7 @@ def salvar_dados():
     except Exception as e:
         st.error(f"⚠️ ERRO CRÍTICO AO SALVAR: {e}")
         st.stop()
+
 # ==============================================================================
 # 4. TEMAS E CSS
 # ==============================================================================
@@ -321,39 +306,35 @@ def criar_doc_pdf(vendedor, cliente, dados_cli, itens, total, condicoes, titulo)
     pdf.set_font("Arial", "", 8); pdf.set_xy(25, y + 2); pdf.cell(65, 4, "Assinatura Cliente", 0, 0, "C")
     pdf.set_xy(120, y + 2); pdf.cell(65, 4, "Assinatura Labortec", 0, 1, "C")
     return pdf.output(dest="S").encode("latin-1")
-    # ... (Cole isso logo abaixo da função criar_doc_pdf existente) ...
 
 def gerar_pdf_estoque(usuario, df_estoque):
     pdf = PDF()
     pdf.vendedor_nome = usuario
-    pdf.titulo_doc = "RELATÓRIO DE ESTOQUE" # Muda o título no cabeçalho
+    pdf.titulo_doc = "RELATÓRIO DE ESTOQUE"
     pdf.add_page()
     
-    # 1. Cabeçalho do Relatório
+    # 1. Cabeçalho
     pdf.set_font("Arial", "B", 10)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(0, 8, f" POSIÇÃO DE ESTOQUE EM: {obter_horario_br().strftime('%d/%m/%Y às %H:%M')}", 1, 1, "L", fill=True)
     pdf.ln(5)
     
     # 2. Configuração das Colunas
-    # Larguras: Cod, Produto, Marca, Un, Saldo, Custo, Total
     w = [15, 75, 25, 15, 20, 20, 25] 
     cols = ["Cód", "Produto", "Marca", "Un", "Saldo", "Custo", "Total R$"]
     
     pdf.set_font("Arial", "B", 8)
     pdf.set_fill_color(225, 225, 225)
     
-    # Desenha Cabeçalho da Tabela
     for i, c in enumerate(cols):
         pdf.cell(w[i], 8, c, 1, 0, "C", fill=True)
     pdf.ln()
     
-    # 3. Preenchimento dos Itens
+    # 3. Preenchimento
     pdf.set_font("Arial", "", 7)
     valor_total_estoque = 0.0
     
     for _, row in df_estoque.iterrows():
-        # Tratamento de dados para evitar erros matemáticos
         try:
             saldo = float(row.get('Saldo', 0))
             custo = float(row.get('Preco_Base', 0))
@@ -368,12 +349,11 @@ def gerar_pdf_estoque(usuario, df_estoque):
         pdf.cell(w[2], 6, str(row.get('Marca', ''))[:15], 1, 0, "C")
         pdf.cell(w[3], 6, str(row.get('Unidade', 'UN')), 1, 0, "C")
         
-        # Cores para saldo negativo ou zero
-        if saldo <= 0: pdf.set_text_color(200, 0, 0) # Vermelho
+        if saldo <= 0: pdf.set_text_color(200, 0, 0)
         else: pdf.set_text_color(0, 0, 0)
         
         pdf.cell(w[4], 6, f"{saldo:,.2f}", 1, 0, "R")
-        pdf.set_text_color(0, 0, 0) # Reseta cor
+        pdf.set_text_color(0, 0, 0)
         
         pdf.cell(w[5], 6, f"{custo:,.2f}", 1, 0, "R")
         pdf.cell(w[6], 6, f"{total_item:,.2f}", 1, 1, "R")
@@ -386,8 +366,6 @@ def gerar_pdf_estoque(usuario, df_estoque):
     
     pdf.ln(15)
     y = pdf.get_y()
-    
-    # Linhas de Assinatura para Conferência
     pdf.line(60, y, 150, y)
     pdf.set_font("Arial", "", 8)
     pdf.set_xy(60, y + 2)
@@ -403,17 +381,18 @@ st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}
 
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
-with st.sidebar.expander("📢 DEFINIR AVISO"):
-    aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
-    c1, c2 = st.columns(2)
-    # --- CORREÇÃO APLICADA AQUI: SALVAR DADOS ANTES DO RERUN ---
-    if c1.button("💾 Gravar"): 
+with st.sidebar.expander("📢 MURAL DE AVISOS"):
+    aviso_txt = st.text_area("Mensagem:", value=st.session_state['aviso_geral'], height=100)
+    c_salv, c_limp = st.columns(2)
+    
+    if c_salv.button("💾 PUBLICAR"):
         st.session_state['aviso_geral'] = aviso_txt
-        salvar_dados() # Chama a função que salva na planilha
+        salvar_dados()
         st.rerun()
-    if c2.button("🗑️ Apagar"): 
+        
+    if c_limp.button("🗑️ APAGAR"):
         st.session_state['aviso_geral'] = ""
-        salvar_dados() # Chama a função que salva na planilha
+        salvar_dados()
         st.rerun()
 
 st.sidebar.markdown("---")
@@ -592,7 +571,6 @@ elif menu == "💰 Vendas & Orçamentos":
                             atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
                             st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
                     
-                    # Mensagem de Sucesso Robusta (COM BAIXA)
                     st.success(f"""
                     ### 🚀 VENDA FINALIZADA COM SUCESSO!
                     **Ação:** O estoque foi **BAIXADO** no sistema.
@@ -601,7 +579,6 @@ elif menu == "💰 Vendas & Orçamentos":
                     **Total:** R$ {total:,.2f}
                     """)
                 else:
-                    # Mensagem de Info (SEM BAIXA)
                     st.info(f"""
                     ### 📄 PEDIDO REGISTRADO!
                     **Ação:** Registro realizado **SEM ALTERAR** o estoque.
@@ -650,21 +627,16 @@ elif menu == "📥 Entrada de Estoque":
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência Tática de Movimentações")
     
-    # Abas para organizar o quartel-general
     tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
 
     # --- ABA 1: VENDAS ---
     with tab1:
         st.subheader("🛒 Registro de Vendas Realizadas")
         st.caption("💡 Dica: Para apagar um erro, selecione a linha e aperte 'Delete' no teclado.")
-        
-        # Busca o log de vendas na memória do sistema
         log_vendas_data = st.session_state.get('log_vendas', [])
         
         if log_vendas_data:
             df_vendas_log = pd.DataFrame(log_vendas_data)
-            
-            # Editor para correções rápidas
             vendas_editadas = st.data_editor(
                 df_vendas_log, 
                 use_container_width=True, 
@@ -672,7 +644,6 @@ elif menu == "📋 Conferência Geral":
                 key="editor_conferencia_vendas",
                 hide_index=True
             )
-            
             if st.button("💾 SALVAR ALTERAÇÕES EM VENDAS", type="primary"):
                 st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
                 salvar_dados()
@@ -684,12 +655,10 @@ elif menu == "📋 Conferência Geral":
     # --- ABA 2: ENTRADAS ---
     with tab2:
         st.subheader("📥 Registro de Entradas de Mercadoria")
-        
         log_entradas_data = st.session_state.get('log_entradas', [])
         
         if log_entradas_data:
             df_entradas_log = pd.DataFrame(log_entradas_data)
-            
             entradas_editadas = st.data_editor(
                 df_entradas_log, 
                 use_container_width=True, 
@@ -697,7 +666,6 @@ elif menu == "📋 Conferência Geral":
                 key="editor_conferencia_entradas",
                 hide_index=True
             )
-            
             if st.button("💾 SALVAR ALTERAÇÕES EM ENTRADAS", type="primary"):
                 st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
                 salvar_dados()
@@ -742,25 +710,18 @@ elif menu == "📦 Estoque":
     st.title("📦 Estoque & Inventário")
 
     # =========================================================
-    # ÁREA DO MENU SUPERIOR (BUSCA + RELATÓRIO + FERRAMENTAS)
+    # ÁREA DO MENU SUPERIOR
     # =========================================================
-    # Dividi em 3 colunas: Busca (grande), Relatório (médio), Ferramentas (pequeno)
     c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
     
     with c_busca:
         busca = st.text_input("Filtrar:", placeholder="🔍 Pesquisar por nome ou SKU...", label_visibility="collapsed")
     
-    # --- AQUI ESTÁ O NOVO BOTÃO DE RELATÓRIO ---
     with c_relat:
-        # Primeiro verificamos se o usuário quer baixar
-        # Se ele clicar em "📄 Gerar PDF", o botão de download aparece logo abaixo
         if st.button("📄 Gerar PDF", use_container_width=True):
             if not st.session_state['estoque'].empty:
                 try:
-                    # Chama a função nova que criamos no Passo 1
                     pdf_bytes = gerar_pdf_estoque(st.session_state['usuario_nome'], st.session_state['estoque'])
-                    
-                    # Cria um botão de download temporário
                     st.download_button(
                         label="⬇️ BAIXAR",
                         data=pdf_bytes,
@@ -774,7 +735,6 @@ elif menu == "📦 Estoque":
                 st.warning("Estoque vazio.")
 
     with c_ferramentas:
-        # O Popover esconde a bagunça e libera espaço na tela
         with st.popover("🛠️ GERENCIAR", use_container_width=True):
             st.markdown("### ➕ Adicionar Produto")
             with st.form("form_add_compacto", clear_on_submit=True):
@@ -801,25 +761,31 @@ elif menu == "📦 Estoque":
 
             st.markdown("---")
             st.markdown("### 🗑️ Remover Produto")
-           # --- NOVO TRECHO SEGURO ---
-df_seguro = st.session_state.get('estoque', pd.DataFrame())
+            
+            # --- ÁREA CORRIGIDA (INDENTAÇÃO ARRUMADA) ---
+            df_seguro = st.session_state.get('estoque', pd.DataFrame())
 
-if not df_seguro.empty and 'Cod' in df_seguro.columns:
-    opcoes_del = df_seguro.apply(lambda x: f"{x.get('Cod', '')} - {x.get('Produto', '')}", axis=1).tolist()
-else:
-    opcoes_del = ["Estoque Vazio ou Erro de Carga"]
+            if not df_seguro.empty and 'Cod' in df_seguro.columns:
+                opcoes_del = df_seguro.apply(lambda x: f"{x.get('Cod', '')} - {x.get('Produto', '')}", axis=1).tolist()
+            else:
+                opcoes_del = ["Estoque Vazio"]
+            
             alvo = st.selectbox("Apagar qual?", [""] + opcoes_del)
-            if alvo != "" and st.button("💣 CONFIRMAR EXCLUSÃO", type="primary"):
-                c_alvo = alvo.split(" - ")[0]
-                st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(c_alvo)]
-                salvar_dados()
-                st.success("💥 Removido!")
-                st.rerun()
+            
+            if st.button("💣 CONFIRMAR EXCLUSÃO", type="primary"):
+                if alvo and alvo != "Estoque Vazio":
+                    try:
+                        c_alvo = alvo.split(" - ")[0]
+                        st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(c_alvo)]
+                        salvar_dados()
+                        st.success("💥 Removido!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
 
-    # --- 2. TABELA DE ESTOQUE (IGUAL A ANTES) ---
+    # --- 2. TABELA DE ESTOQUE ---
     df_exibir = st.session_state['estoque'].copy()
 
-    # Blindagem para não dar pau na matemática
     for col in ["Saldo", "Estoque_Minimo", "Preco_Base"]:
         if col in df_exibir.columns:
             df_exibir[col] = pd.to_numeric(df_exibir[col], errors='coerce').fillna(0.0)
@@ -827,7 +793,6 @@ else:
     if busca:
         df_exibir = df_exibir[df_exibir['Produto'].str.contains(busca, case=False) | df_exibir['Cod'].astype(str).str.contains(busca)]
 
-    # Visual tático (Verde para saldo positivo)
     def style_saldo(v): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
     try: df_styled = df_exibir.style.map(style_saldo, subset=["Saldo"])
     except: df_styled = df_exibir
@@ -848,6 +813,7 @@ else:
         st.session_state["estoque"] = ed 
         salvar_dados()
         st.toast("Alteração salva!", icon="💾")
+
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes & Precificação")
     
@@ -855,7 +821,6 @@ elif menu == "👥 Clientes":
     if 'edit_mode' not in st.session_state: 
         st.session_state['edit_mode'] = False
 
-    # Define os campos padrão para não dar erro de chave
     campos_padrao = ['form_nome', 'form_tel', 'form_email', 'form_end', 'form_cnpj', 
                      'form_cid', 'form_uf', 'form_cep', 'form_cod', 'form_fator']
     
@@ -870,25 +835,21 @@ elif menu == "👥 Clientes":
         st.session_state['edit_mode'] = False
 
     def salvar_cliente():
-        # Limpeza básica dos dados
         nome = str(st.session_state.get('form_nome', '')).strip()
         
         if not nome:
             st.toast("Erro: O nome é obrigatório!", icon="❌")
             return
 
-        # Bloqueio de duplicidade (apenas se for novo cadastro)
         if not st.session_state['edit_mode'] and nome in st.session_state['clientes_db']:
             st.error(f"⛔ O cliente '{nome}' já existe. Use a busca para editar.")
             return
         
-        # Tratamento do Fator para garantir que é número
         try:
             fator_seguro = float(st.session_state.get('form_fator', 1.0))
         except:
             fator_seguro = 1.0
 
-        # Gravação no Banco de Dados
         st.session_state['clientes_db'][nome] = {
             'Tel': st.session_state.get('form_tel', ''),
             'Email': st.session_state.get('form_email', ''),
@@ -937,7 +898,6 @@ elif menu == "👥 Clientes":
         arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
         if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
             try:
-                # Chama a função que já existe no seu código lá em cima
                 dados_lidos = ler_pdf_antigo(arquivo_pdf) 
                 if dados_lidos:
                     st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
@@ -980,27 +940,23 @@ elif menu == "👥 Clientes":
         
         st.form_submit_button("💾 SALVAR DADOS", on_click=salvar_cliente)
 
-    # Botão de Cancelar fora do form para não submeter
     if st.session_state['edit_mode']:
         st.button("❌ Cancelar Edição", on_click=limpar_campos)
     else:
         st.button("🧹 Limpar Campos", on_click=limpar_campos)
     
-    # --- 5. LISTAGEM DE CLIENTES (ÁREA DO ERRO CORRIGIDA) ---
+    # --- 5. LISTAGEM DE CLIENTES ---
     st.markdown("---")
     st.subheader("📇 Carteira de Clientes")
     
     if st.session_state['clientes_db']:
         busca = st.text_input("🔍 Buscar Cliente...", placeholder="Digite o nome...")
         
-        # Ordena a lista
         lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
         
-        # Filtra se tiver busca
         if busca: 
             lista_clientes = [k for k in lista_clientes if busca.lower() in k.lower()]
         
-        # Cabeçalho Visual
         h1, h2 = st.columns([5, 1])
         h1.caption("DADOS DO CLIENTE")
         h2.caption("AÇÕES")
@@ -1008,21 +964,17 @@ elif menu == "👥 Clientes":
         for nome in lista_clientes:
             dados = st.session_state['clientes_db'][nome]
             
-            # --- BLINDAGEM MATEMÁTICA DA LISTA (AQUI ESTAVA O ERRO) ---
             try:
                 raw_fator = dados.get('Fator', 1.0)
-                # Força conversão para float, se falhar, usa 1.0
                 fator = float(raw_fator) if raw_fator else 1.0
             except (ValueError, TypeError):
                 fator = 1.0
 
-            # Lógica de Exibição do Texto (Blindada com try/except e round)
             try:
                 if fator == 1.0:
                     txt_fator = "NORMAL"
                     cor_fator = "blue"
                 elif fator < 1.0:
-                    # round resolve problemas de dizima periodica
                     desc = int(round((1.0 - fator) * 100))
                     txt_fator = f"DESC. {desc}%"
                     cor_fator = "green"
@@ -1036,7 +988,6 @@ elif menu == "👥 Clientes":
             
             email = dados.get('Email', '')
 
-            # Layout da Linha
             col_info, col_btn = st.columns([5, 1])
             
             with col_info:
@@ -1051,7 +1002,6 @@ elif menu == "👥 Clientes":
             
             with col_btn:
                 if email:
-                    # Popover Discreto
                     with st.popover("📋", help="Copiar Email"):
                         st.code(email, language="text")
                 else:
@@ -1090,10 +1040,3 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
-
-
-
-
-
-
-
