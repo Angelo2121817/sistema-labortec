@@ -346,7 +346,7 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # 8. PÁGINAS DO SISTEMA
 # ==============================================================================
 
-elif menu == "📊 Dashboard":
+if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Centro de Comando (Dashboard)</div>', unsafe_allow_html=True)
     
     # --- 1. MURAL DE AVISOS (O GRANDE ALERTA GERAL) ---
@@ -1028,6 +1028,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
