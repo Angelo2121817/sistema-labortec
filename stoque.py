@@ -327,9 +327,37 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 
 if menu == "📊 Dashboard":
     st.markdown('<div class="centered-title">📊 Dashboard Gerencial</div>', unsafe_allow_html=True)
-    if st.session_state['aviso_geral']:
-        st.info(f"📢 AVISO: {st.session_state['aviso_geral']}")
     
+    # --- 1. MURAL DE AVISOS (O GRANDE ALERTA VERMELHO) ---
+    if st.session_state['aviso_geral']:
+        st.markdown(f"""
+        <div style='background-color:#ffebee; border:2px solid #ff1744; color:#b71c1c; padding:15px; border-radius:10px; text-align:center; font-weight:bold; font-size:1.2em; margin-bottom:20px;'>
+            📢 {st.session_state['aviso_geral']}
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --- 2. RADAR DE LAUDOS PENDENTES (A LINHA DO TEMPO) ---
+    st.markdown("---")
+    st.markdown("<h4 style='color: #1e3d59;'>📡 Monitoramento de Coletas (Pendentes)</h4>", unsafe_allow_html=True)
+    laudos_atuais = st.session_state.get("log_laudos", [])
+    ativos = [l for l in laudos_atuais if str(l.get("Status", "Pendente")) == "Pendente"]
+    
+    if not ativos: 
+        st.success("✅ Radar Limpo! Nenhuma coleta pendente.")
+    else:
+        items_html = ""
+        for l in ativos:
+            items_html += f"""
+            <div style='min-width:250px; background:#fff; border-radius:10px; padding:15px; box-shadow:0 4px 6px rgba(0,0,0,0.1); border:1px solid #ddd; margin-right:20px;'>
+                <div style='font-weight:bold; color:#1e3d59; border-bottom:2px solid #ffb400; padding-bottom:5px;'>🏢 {l.get('Cliente','?')}</div>
+                <div style='margin-top:10px;'>📅 Coleta: <b>{l.get('Data_Coleta','--')}</b></div>
+                <div style='margin-top:5px;'>🧪 Previsão: <b>{l.get('Data_Resultado','--')}</b></div>
+                <div style='margin-top:10px; text-align:center; background:#e3f2fd; color:#1565c0; border-radius:15px; font-size:0.8em; padding:3px;'>⏳ AGUARDANDO COLETA</div>
+            </div>"""
+        components.html(f"<div style='display:flex; overflow-x:auto; padding:10px;'>{items_html}</div>", height=220)
+
+    # --- 3. GRÁFICOS (MANTIDOS) ---
+    st.markdown("---")
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("### 📈 Vendas Diárias")
@@ -344,7 +372,6 @@ if menu == "📊 Dashboard":
         if log_v:
             df_v = pd.DataFrame(log_v)
             st.bar_chart(df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5), horizontal=True)
-
 elif menu == "📦 Estoque":
     st.title("📦 Estoque & Inventário")
     
@@ -525,3 +552,4 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
