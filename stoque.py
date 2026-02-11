@@ -7,16 +7,20 @@ import html
 import json
 from pypdf import PdfReader
 from fpdf import FPDF
-from streamlit_gsheets import GSheetsConnection  # <--- TEM QUE TER ESSA LINHA
+from streamlit_gsheets import GSheetsConnection
 import streamlit.components.v1 as components
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E CONEXÃO (A IGNIÇÃO)
+# 1. CONFIGURAÇÃO E CONEXÃO (TOPO DO ARQUIVO)
 # ==============================================================================
-st.set_page_config(page_title="Sistema Integrado v82", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v83", layout="wide", page_icon="🧪")
 
-# --- BLOCO DE SEGURANÇA INICIAL ---
-if 'estoque' not in st.session_state:
+# --- AQUI ESTAVA FALTANDO A CHAVE 'dados_carregados' ---
+if 'dados_carregados' not in st.session_state: 
+    st.session_state['dados_carregados'] = False  # <--- ESSA LINHA É A SALVAÇÃO
+
+# --- GARANTIA DAS OUTRAS GAVETAS ---
+if 'estoque' not in st.session_state: 
     st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
@@ -24,12 +28,16 @@ if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
 if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 
-# --- A CONEXÃO GLOBAL (O SEGREDO ESTÁ AQUI) ---
+# --- CONEXÃO COM A PLANILHA ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
     st.error(f"Erro Crítico de Conexão: {e}")
     st.stop()
+
+# ==============================================================================
+# DAQUI PARA BAIXO COMEÇAM AS FUNÇÕES (NÃO APAGUE O RESTO)
+# ==============================================================================
 
 def extrair_dados_cetesb(f):
     try:
@@ -801,6 +809,7 @@ elif menu == "🛠️ Admin / Backup":
                 salvar_dados()
                 st.success("Sistema resetado!")
                 st.rerun()
+
 
 
 
