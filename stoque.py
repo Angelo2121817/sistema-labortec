@@ -550,23 +550,23 @@ elif menu == "💰 Vendas & Orçamentos":
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
 
-    # --- 1. PREPARAÇÃO DO TERRENO (Variáveis) ---
-    # Define os valores padrão se não existirem
+    # --- 1. DEFINIÇÃO DE VARIÁVEIS E FUNÇÕES (CALLBACKS) ---
     campos = ['form_nome', 'form_cod', 'form_cnpj', 'form_tel', 'form_end', 'form_cid', 'form_uf', 'form_cep', 'form_email']
-    for campo in campos:
-        if campo not in st.session_state: st.session_state[campo] = ""
     
+    # Garante que as variáveis existem
+    for c in campos:
+        if c not in st.session_state: st.session_state[c] = ""
     if 'form_fator' not in st.session_state: st.session_state['form_fator'] = 1.0
     if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
 
-    # Função Limpeza
-    def limpar():
+    # FUNÇÃO DE LIMPEZA (CALLBACK)
+    def limpar_callback():
         for c in campos: st.session_state[c] = ""
         st.session_state['form_fator'] = 1.0
         st.session_state['edit_mode'] = False
 
-    # Função Carregar Edição (BLINDADA)
-    def carregar_edicao(nome, dados):
+    # FUNÇÃO DE CARREGAR EDIÇÃO (CALLBACK)
+    def editar_callback(nome, dados):
         st.session_state['form_nome'] = str(nome)
         st.session_state['form_cod'] = str(dados.get('Cod_Cli', ''))
         st.session_state['form_cnpj'] = str(dados.get('CNPJ', ''))
@@ -580,13 +580,33 @@ elif menu == "👥 Clientes":
         except: st.session_state['form_fator'] = 1.0
         st.session_state['edit_mode'] = True
 
+    # FUNÇÃO DE SALVAR (CALLBACK)
+    def salvar_callback():
+        nome = st.session_state['form_nome']
+        if nome:
+            st.session_state['clientes_db'][nome] = {
+                'Cod_Cli': st.session_state['form_cod'],
+                'Fator': st.session_state['form_fator'],
+                'CNPJ': st.session_state['form_cnpj'],
+                'Tel': st.session_state['form_tel'],
+                'End': st.session_state['form_end'],
+                'Cidade': st.session_state['form_cid'],
+                'UF': st.session_state['form_uf'],
+                'CEP': st.session_state['form_cep'],
+                'Email': st.session_state['form_email']
+            }
+            salvar_dados()
+            st.toast("Cliente Salvo com Sucesso!", icon="✅")
+            limpar_callback() # Limpa tudo após salvar
+        else:
+            st.toast("Erro: O nome é obrigatório.", icon="❌")
+
     # --- 2. IMPORTAÇÃO PDF ---
     with st.expander("📂 Importar Dados (PDF)", expanded=False):
         arq = st.file_uploader("PDF da Licença:", type="pdf")
         if arq and st.button("🔄 Extrair Dados"):
             d = ler_pdf_antigo(arq)
             if d:
-                # Preenche as variáveis
                 st.session_state['form_nome'] = str(d.get('Nome', ''))
                 st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
                 st.session_state['form_end'] = str(d.get('End', ''))
@@ -596,23 +616,21 @@ elif menu == "👥 Clientes":
                 st.session_state['form_tel'] = str(d.get('Tel', ''))
                 st.session_state['form_email'] = str(d.get('Email', ''))
                 st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-                st.success("✅ Dados extraídos! O formulário abaixo foi preenchido.")
-                st.rerun() # Atualiza a tela para mostrar os dados
+                st.success("✅ Dados extraídos! O formulário foi preenchido.")
+                st.rerun()
 
-    # --- 3. FORMULÁRIO (O CORAÇÃO DO MÓDULO) ---
+    # --- 3. FORMULÁRIO ---
     titulo = "✏️ Editando Cliente" if st.session_state['edit_mode'] else "➕ Novo Cliente"
-    
     st.markdown("---")
     st.subheader(titulo)
     
     with st.form("form_cli_principal"):
         c1, c2 = st.columns([3, 1])
-        # Nome travado na edição para evitar duplicidade de chave
         c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode'])
         c2.text_input("Cód. Interno", key="form_cod")
         
         c3, c4 = st.columns([1, 2])
-        c3.number_input("Fator de Preço", 0.1, 5.0, step=0.05, key="form_fator", help="1.0 é preço normal. 0.9 é 10% de desconto.")
+        c3.number_input("Fator de Preço", 0.1, 5.0, step=0.05, key="form_fator")
         c4.text_input("CNPJ", key="form_cnpj")
         
         c5, c6 = st.columns([1, 2])
@@ -627,35 +645,15 @@ elif menu == "👥 Clientes":
         c9.text_input("CEP", key="form_cep")
         
         st.markdown("###")
-        # Botão de Salvar Grande
-        if st.form_submit_button("💾 SALVAR DADOS", type="primary", use_container_width=True):
-            nome = st.session_state['form_nome']
-            if nome:
-                st.session_state['clientes_db'][nome] = {
-                    'Cod_Cli': st.session_state['form_cod'],
-                    'Fator': st.session_state['form_fator'],
-                    'CNPJ': st.session_state['form_cnpj'],
-                    'Tel': st.session_state['form_tel'],
-                    'End': st.session_state['form_end'],
-                    'Cidade': st.session_state['form_cid'],
-                    'UF': st.session_state['form_uf'],
-                    'CEP': st.session_state['form_cep'],
-                    'Email': st.session_state['form_email']
-                }
-                salvar_dados()
-                st.toast("Cliente Salvo!", icon="✅")
-                limpar()
-                st.rerun()
-            else:
-                st.warning("O nome é obrigatório.")
+        
+        # O SEGREDO ESTÁ AQUI: on_click no Botão de Submit
+        st.form_submit_button("💾 SALVAR DADOS", type="primary", use_container_width=True, on_click=salvar_callback)
 
-    # Botão Cancelar (Só aparece se estiver editando)
+    # Botão Cancelar (Fora do form, com callback)
     if st.session_state['edit_mode']:
-        if st.button("❌ Cancelar Edição"):
-            limpar()
-            st.rerun()
+        st.button("❌ Cancelar Edição", on_click=limpar_callback)
 
-    # --- 4. LISTA DE CLIENTES (COM ÍCONE CORRIGIDO) ---
+    # --- 4. LISTA DE CLIENTES ---
     st.markdown("---")
     st.subheader("📇 Carteira de Clientes")
     
@@ -668,26 +666,21 @@ elif menu == "👥 Clientes":
             d = st.session_state['clientes_db'][cli]
             ft = d.get('Fator', 1.0)
             
-            # Layout
             col_info, col_btn = st.columns([5, 2])
-            
             with col_info:
                 st.markdown(f"**🏢 {cli}** (Fator: {ft})")
                 st.caption(f"CNPJ: {d.get('CNPJ')} | Tel: {d.get('Tel')}")
-                
-                # --- AQUI ESTÁ A CORREÇÃO DO EMAIL ---
                 mail = d.get('Email', '')
                 if mail:
-                    # Ícone de carta (envelope) e campo de texto somente leitura para copiar fácil
                     with st.popover("📧 Ver Email"):
                         st.text_input("Copie abaixo:", value=mail, disabled=True, key=f"mail_{cli}")
 
             with col_btn:
                 b_edit, b_del = st.columns(2)
-                # O Segredo da edição: callback 'on_click'
-                b_edit.button("✏️", key=f"ed_{cli}", on_click=carregar_edicao, args=(cli, d), help="Editar")
+                # Uso de callback no Editar
+                b_edit.button("✏️", key=f"ed_{cli}", on_click=editar_callback, args=(cli, d))
                 
-                if b_del.button("🗑️", key=f"del_{cli}", help="Excluir"):
+                if b_del.button("🗑️", key=f"del_{cli}"):
                     del st.session_state['clientes_db'][cli]
                     salvar_dados()
                     st.rerun()
@@ -896,6 +889,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
