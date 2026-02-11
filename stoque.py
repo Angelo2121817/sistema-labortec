@@ -9,7 +9,13 @@ from pypdf import PdfReader
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 import streamlit.components.v1 as components
-
+# --- BLOCO DE SEGURANÇA INICIAL ---
+if 'estoque' not in st.session_state:
+    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
+if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
+if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
+if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
+if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
 # ==============================================================================
 # 0. FUNÇÕES DE EXTRAÇÃO PDF (CETESB & PADRÃO)
 # ==============================================================================
@@ -795,7 +801,13 @@ elif menu == "📦 Estoque":
 
             st.markdown("---")
             st.markdown("### 🗑️ Remover Produto")
-            opcoes_del = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1).tolist()
+           # --- NOVO TRECHO SEGURO ---
+df_seguro = st.session_state.get('estoque', pd.DataFrame())
+
+if not df_seguro.empty and 'Cod' in df_seguro.columns:
+    opcoes_del = df_seguro.apply(lambda x: f"{x.get('Cod', '')} - {x.get('Produto', '')}", axis=1).tolist()
+else:
+    opcoes_del = ["Estoque Vazio ou Erro de Carga"]
             alvo = st.selectbox("Apagar qual?", [""] + opcoes_del)
             if alvo != "" and st.button("💣 CONFIRMAR EXCLUSÃO", type="primary"):
                 c_alvo = alvo.split(" - ")[0]
@@ -1078,6 +1090,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
