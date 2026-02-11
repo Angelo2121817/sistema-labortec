@@ -566,11 +566,66 @@ elif menu == "🧪 Laudos":
             salvar_dados(); st.rerun()
 
 elif menu == "📋 Conferência Geral":
-    st.title("📋 Logs do Sistema")
-    t1, t2 = st.tabs(["Vendas", "Entradas"])
-    with t1: st.dataframe(pd.DataFrame(st.session_state.get('log_vendas', [])))
-    with t2: st.dataframe(pd.DataFrame(st.session_state.get('log_entradas', [])))
+    st.title("📋 Conferência Tática de Movimentações")
+    
+    # Criamos 3 abas agora, incluindo a de Laudos que estava faltando
+    tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
 
+    # --- ABA 1: VENDAS ---
+    with tab1:
+        st.subheader("🛒 Vendas Realizadas")
+        df_v = pd.DataFrame(st.session_state.get('log_vendas', []))
+        if not df_v.empty:
+            # Editor permite corrigir lançamentos errados
+            ed_v = st.data_editor(df_v, num_rows="dynamic", use_container_width=True, key="ed_conf_vendas")
+            if st.button("💾 Salvar Correções Vendas"):
+                st.session_state['log_vendas'] = ed_v.to_dict('records')
+                salvar_dados(); st.success("Atualizado!"); st.rerun()
+        else: st.info("Sem vendas.")
+
+    # --- ABA 2: ENTRADAS ---
+    with tab2:
+        st.subheader("📥 Entradas de Estoque")
+        df_e = pd.DataFrame(st.session_state.get('log_entradas', []))
+        if not df_e.empty:
+            ed_e = st.data_editor(df_e, num_rows="dynamic", use_container_width=True, key="ed_conf_ent")
+            if st.button("💾 Salvar Correções Entradas"):
+                st.session_state['log_entradas'] = ed_e.to_dict('records')
+                salvar_dados(); st.success("Atualizado!"); st.rerun()
+        else: st.info("Sem entradas.")
+
+    # --- ABA 3: LAUDOS & ARQUIVO MORTO (A PARTE QUE FALTAVA) ---
+    with tab3:
+        st.subheader("🧪 Status e Arquivamento")
+        laudos_lista = st.session_state.get('log_laudos', [])
+        
+        # Separa o que está vivo do que está morto
+        pendentes = [l for l in laudos_lista if l.get('Status') != 'Arquivado']
+        arquivados = [l for l in laudos_lista if l.get('Status') == 'Arquivado']
+
+        if not pendentes:
+            st.success("✅ Nenhum laudo pendente de arquivamento.")
+        else:
+            # Lista cada laudo com um botão de arquivar individual
+            for i, item in enumerate(laudos_lista):
+                if item.get('Status') != 'Arquivado':
+                    with st.expander(f"📄 {item.get('Cliente', '?')} | Data: {item.get('Data_Coleta','--')}"):
+                        c1, c2 = st.columns([3, 1])
+                        link = c1.text_input("🔗 Link/Obs do PDF:", key=f"lk_{i}", value=item.get('Link_Arquivo', ''))
+                        
+                        if c2.button("📂 ARQUIVAR", key=f"bt_arq_{i}", use_container_width=True):
+                            st.session_state['log_laudos'][i]['Status'] = 'Arquivado'
+                            st.session_state['log_laudos'][i]['Link_Arquivo'] = link
+                            st.session_state['log_laudos'][i]['Data_Arquivamento'] = datetime.now().strftime("%d/%m/%Y")
+                            salvar_dados()
+                            st.rerun()
+
+        # O famoso Arquivo Morto
+        if arquivados:
+            st.markdown("---")
+            with st.expander(f"🗄️ Ver Arquivo Morto ({len(arquivados)} itens)"):
+                for item in arquivados:
+                    st.write(f"✅ **{item.get('Cliente')}** - {item.get('Data_Arquivamento')} | 🔗 {item.get('Link_Arquivo', '-')}")
 elif menu == "🛠️ Admin / Backup":
     st.title("🛠️ Admin")
     if st.text_input("Senha", type="password") == "labormetal22":
@@ -595,6 +650,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
