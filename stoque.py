@@ -454,37 +454,98 @@ elif menu == "📦 Estoque":
         st.session_state["estoque"] = ed; salvar_dados()
 
 elif menu == "💰 Vendas & Orçamentos":
-    st.title("💰 Vendas")
-    if not st.session_state['clientes_db']: st.warning("Cadastre clientes!"); st.stop()
+    st.title("💰 Vendas Inteligentes")
     
+    if not st.session_state.get('clientes_db'): 
+        st.warning("⚠️ Cadastre clientes primeiro."); st.stop()
+    
+    # 1. Seleção de Alvos (Cliente e Vendedor)
     c1, c2 = st.columns([2, 1])
-    cli = c1.selectbox("Cliente", sorted(list(st.session_state['clientes_db'].keys())))
-    vend = c2.text_input("Vendedor", st.session_state['usuario_nome'])
+    lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
+    cli = c1.selectbox("Selecione o Cliente", lista_clientes)
+    vend = c2.text_input("Vendedor", st.session_state.get('usuario_nome', 'Sistema'))
     d_cli = st.session_state['clientes_db'][cli]
-    fator = float(d_cli.get('Fator', 1.0))
     
+    # 2. Fator de Preço (Tabela do Cliente)
+    try: fator_cliente = float(d_cli.get('Fator', 1.0))
+    except: fator_cliente = 1.0
+    if fator_cliente <= 0: fator_cliente = 1.0
+    
+    # 3. Preparação do Radar (Tabela de Vendas)
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
-    df_v['Preco_Final'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0) * fator
+    df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
+    df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
     
-    ed_v = st.data_editor(df_v[['Qtd', 'Produto', 'Cod', 'Saldo', 'Preco_Final']], use_container_width=True, hide_index=True)
-    itens = ed_v[ed_v['Qtd'] > 0].copy()
+    st.write(f"📊 Tabela do Cliente: **{fator_cliente}x**")
     
-    if not itens.empty:
-        total = (itens['Qtd'] * itens['Preco_Final']).sum()
-        st.metric("Total", f"R$ {total:,.2f}")
-        if st.button("✅ FECHAR VENDA"):
-            for _, row in itens.iterrows():
-                mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
-                if not st.session_state['estoque'][mask].empty:
-                    idx = st.session_state['estoque'][mask].index[0]
-                    atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
-                    st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
+    # Editor de Vendas
+    ed_v = st.data_editor(
+        df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
+        use_container_width=True, hide_index=True,
+        column_config={
+            "Preco_Base": st.column_config.NumberColumn("Base", format="%.2f", disabled=True),
+            "Preco_Final": st.column_config.NumberColumn("💵 Preço Cliente", format="%.2f"), 
+            "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
+        }
+    )
+    
+    # 4. Processamento da Venda
+    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
+    
+    if not itens_sel.empty:
+        total = (itens_sel['Qtd'] * itens_sel['Preco_Final']).sum()
+        st.divider()
+        st.metric("💰 TOTAL DO PEDIDO", f"R$ {total:,.2f}")
+        
+        c_orc, c_ped = st.columns(2)
+        
+        # --- COLUNA 1: ORÇAMENTO (PDF SEM BAIXA) ---
+        with c_orc:
+            if st.button("📄 GERAR ORÇAMENTO (PDF)", use_container_width=True):
+                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
+                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "ORÇAMENTO")
+                st.download_button("📥 Baixar Orçamento PDF", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
+        
+        # --- COLUNA 2: FINALIZAR VENDA (COM OPÇÃO DE BAIXA) ---
+        with c_ped:
+            # AQUI ESTÁ A OPÇÃO QUE FALTAVA!
+            baixa = st.toggle("🚨 BAIXAR ESTOQUE AUTOMATICAMENTE?", value=True)
             
-            # Log
-            nomes = " + ".join(itens['Produto'].tolist())
-            st.session_state['log_vendas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 'Cliente': cli, 'Produto': nomes, 'Qtd': itens['Qtd'].sum(), 'Vendedor': vend})
-            salvar_dados(); st.success("Venda Realizada!"); st.rerun()
+            if st.button("✅ FINALIZAR VENDA AGORA", type="primary", use_container_width=True):
+                
+                # Captura os nomes para o log
+                nomes_dos_itens = itens_sel['Produto'].tolist()
+                nome_final_registro = " + ".join([str(n) for n in nomes_dos_itens])
+                
+                # Execução da Baixa (Só se o toggle estiver ligado)
+                if baixa:
+                    for _, row in itens_sel.iterrows():
+                        mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
+                        if not st.session_state['estoque'][mask].empty:
+                            idx = st.session_state['estoque'][mask].index[0]
+                            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
+                    
+                    msg_sucesso = f"""### 🚀 VENDA FINALIZADA! \n**Ação:** Estoque BAIXADO.\n**Total:** R$ {total:,.2f}"""
+                else:
+                    msg_sucesso = f"""### 📄 PEDIDO REGISTRADO! \n**Ação:** Estoque MANTIDO (Sem baixa).\n**Total:** R$ {total:,.2f}"""
+                
+                # Grava no Log
+                st.session_state['log_vendas'].append({
+                    'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
+                    'Cliente': cli, 
+                    'Produto': nome_final_registro, 
+                    'Qtd': float(itens_sel['Qtd'].sum()), 
+                    'Vendedor': vend
+                })
+                salvar_dados()
+                st.success(msg_sucesso)
+                
+                # Gera o PDF do Pedido Automaticamente para baixar
+                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
+                pdf_ped = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "PEDIDO")
+                st.download_button("📥 Baixar Pedido PDF", pdf_ped, f"Pedido_{cli}.pdf", "application/pdf")
 
 elif menu == "👥 Clientes":
     st.title("👥 Clientes")
@@ -650,6 +711,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
