@@ -391,7 +391,7 @@ if menu == "📊 Dashboard":
     if st.session_state.get('aviso_geral'):
         st.markdown(f"""
         <div class="alerta-critico">
-            📢 MURAL DO GENERAL: <br>{st.session_state['aviso_geral']}
+            📢 MURAL DE AVISOS: <br>{st.session_state['aviso_geral']}
         </div>
         """, unsafe_allow_html=True)
 
@@ -1073,6 +1073,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
