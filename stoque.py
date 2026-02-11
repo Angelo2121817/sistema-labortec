@@ -610,21 +610,97 @@ elif menu == "📥 Entrada de Estoque":
             salvar_dados(); st.success("Estoque atualizado!"); st.rerun()
 
 elif menu == "🧪 Laudos":
-    st.title("🧪 Laudos")
-    with st.form("add_laudo"):
-        cli = st.selectbox("Cliente", list(st.session_state['clientes_db'].keys()))
-        data = st.date_input("Data Coleta")
-        if st.form_submit_button("Agendar"):
-            st.session_state['log_laudos'].append({'Cliente': cli, 'Data_Coleta': data.strftime("%d/%m/%Y"), 'Status': 'Pendente'})
-            salvar_dados(); st.rerun()
+    st.title("🧪 Gestão de Laudos & Status")
     
+    # 1. Formulário de Cadastro (Recolhido para elegância)
+    with st.expander("📅 Agendar Nova Coleta", expanded=False):
+        with st.form("f_laudo"):
+            lista_cli = sorted(list(st.session_state['clientes_db'].keys()))
+            if not lista_cli: st.warning("Sem clientes cadastrados."); st.stop()
+            
+            cli_l = st.selectbox("Cliente", lista_cli)
+            c1, c2 = st.columns(2)
+            data_l = c1.date_input("Data da Coleta", format="DD/MM/YYYY")
+            data_r = c2.date_input("Previsão Resultado", value=data_l + timedelta(days=7), format="DD/MM/YYYY")
+            
+            if st.form_submit_button("✅ Agendar Coleta"):
+                st.session_state['log_laudos'].append({
+                    'Cliente': cli_l, 
+                    'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
+                    'Data_Resultado': data_r.strftime("%d/%m/%Y"), 
+                    'Status': 'Pendente',
+                    'Link_Arquivo': ''
+                })
+                salvar_dados(); st.success("Agendado com sucesso!"); st.rerun()
+
     st.markdown("---")
-    df_laudos = pd.DataFrame(st.session_state['log_laudos'])
-    if not df_laudos.empty:
-        edited_laudos = st.data_editor(df_laudos, num_rows="dynamic", use_container_width=True)
-        if st.button("💾 Salvar Laudos"):
-            st.session_state['log_laudos'] = edited_laudos.to_dict('records')
-            salvar_dados(); st.rerun()
+    st.subheader("📋 Controle de Status")
+    
+    # 2. Preparação dos Dados para Edição
+    laudos = st.session_state.get('log_laudos', [])
+    df_view = pd.DataFrame(laudos)
+    
+    if not df_view.empty:
+        # Garante que as colunas essenciais existem
+        if 'Status' not in df_view.columns: df_view['Status'] = 'Pendente'
+        if 'Link_Arquivo' not in df_view.columns: df_view['Link_Arquivo'] = ''
+        
+        # Adiciona índice original para salvar no lugar certo (Evita bagunça se filtrar)
+        df_view['ID_Original'] = df_view.index 
+        
+        # Filtra visualmente: Esconde os 'Arquivados' (eles vão para o Arquivo Morto)
+        df_ativos = df_view[df_view['Status'] != 'Arquivado'].copy()
+        
+        # Converte datas string para objetos de data (para o calendário funcionar)
+        df_ativos['Data_Coleta'] = pd.to_datetime(df_ativos['Data_Coleta'], dayfirst=True, errors='coerce')
+        df_ativos['Data_Resultado'] = pd.to_datetime(df_ativos['Data_Resultado'], dayfirst=True, errors='coerce')
+
+        # 3. O Editor "Elegante"
+        st.info("💡 Dica: Mude o status para **'Concluído'** para retirá-lo do Alerta do Dashboard.")
+        
+        edited_df = st.data_editor(
+            df_ativos,
+            use_container_width=True,
+            hide_index=True,
+            # Ordem das colunas
+            column_order=["Cliente", "Data_Coleta", "Data_Resultado", "Status", "Link_Arquivo"],
+            # Bloqueia edição do nome do cliente (segurança)
+            disabled=["Cliente"], 
+            column_config={
+                "Data_Coleta": st.column_config.DateColumn("📅 Coleta", format="DD/MM/YYYY"),
+                "Data_Resultado": st.column_config.DateColumn("🧪 Previsão", format="DD/MM/YYYY"),
+                "Status": st.column_config.SelectboxColumn(
+                    "📊 Status Atual", 
+                    options=["Pendente", "Em Análise", "Concluído", "Cancelado"],
+                    required=True,
+                    help="Mude para Concluído quando terminar."
+                ),
+                "Link_Arquivo": st.column_config.TextColumn("🔗 Link PDF/Drive")
+            }
+        )
+
+        # 4. Botão de Salvar com Lógica Robusta
+        if st.button("💾 ATUALIZAR STATUS"):
+            # Atualiza a lista original baseada nas edições
+            for i, row in edited_df.iterrows():
+                idx_real = int(row['ID_Original'])
+                
+                # Converte datas de volta para String BR (DD/MM/AAAA)
+                d_col = row['Data_Coleta'].strftime("%d/%m/%Y") if pd.notnull(row['Data_Coleta']) else ""
+                d_res = row['Data_Resultado'].strftime("%d/%m/%Y") if pd.notnull(row['Data_Resultado']) else ""
+                
+                # Atualiza na memória
+                st.session_state['log_laudos'][idx_real]['Data_Coleta'] = d_col
+                st.session_state['log_laudos'][idx_real]['Data_Resultado'] = d_res
+                st.session_state['log_laudos'][idx_real]['Status'] = row['Status']
+                st.session_state['log_laudos'][idx_real]['Link_Arquivo'] = row['Link_Arquivo']
+            
+            salvar_dados()
+            st.toast("Status atualizados! O Dashboard foi ajustado.", icon="✅")
+            st.rerun()
+            
+    else:
+        st.info("Nenhum laudo cadastrado.")
 
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência Tática de Movimentações")
@@ -711,6 +787,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
