@@ -155,10 +155,35 @@ def _fix_datetime_br(val):
     try: return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
     except: return val
 
+import json
+import os
+
+def realizar_backup_local():
+    """Função interna para salvar uma cópia de segurança no HD"""
+    try:
+        dados_backup = {
+            "estoque": st.session_state.get("estoque", pd.DataFrame()).to_dict("records"),
+            "clientes": st.session_state.get("clientes_db", {}),
+            "log_vendas": st.session_state.get("log_vendas", []),
+            "log_entradas": st.session_state.get("log_entradas", []),
+            "log_laudos": st.session_state.get("log_laudos", []),
+            "aviso": st.session_state.get("aviso_geral", "")
+        }
+        with open("backup_seguranca.json", "w", encoding="utf-8") as f:
+            json.dump(dados_backup, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"Erro ao criar backup local: {e}")
+
 def carregar_dados():
     try:
-        # Carrega Estoque
+        # Tenta carregar do Google Sheets normalmente
         df_est = conn.read(worksheet="Estoque", ttl=0)
+        
+        # --- VERIFICAÇÃO DE EMERGÊNCIA ---
+        # Se a planilha voltar vazia mas o backup local existir, avisa o General
+        if (df_est is None or df_est.empty) and os.path.exists("backup_seguranca.json"):
+            st.warning("⚠️ Planilha vazia detectada! Use o botão de 'Restaurar Backup Local' no menu Admin.")
+        
         if isinstance(df_est, pd.DataFrame) and not df_est.empty:
             df_est = _normalizar_colunas(df_est)
             st.session_state["estoque"] = df_est
@@ -167,111 +192,53 @@ def carregar_dados():
         df_cli = conn.read(worksheet="Clientes", ttl=0)
         if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
             df_cli = _normalizar_colunas(df_cli)
-            if "Email" not in df_cli.columns: df_cli["Email"] = ""
-            if "Nome" in df_cli.columns: st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
-            else: st.session_state["clientes_db"] = {}
-
-        # Carrega Logs
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos"]:
+            if "Nome" in df_cli.columns: 
+                st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
+        
+        # Carrega Logs e Avisos
+        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
             try:
                 df = conn.read(worksheet=aba, ttl=0)
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    df = _normalizar_colunas(df)
+                    if aba == "Avisos":
+                        st.session_state['aviso_geral'] = str(df.iloc[0].values[0])
+                    else:
+                        st.session_state[aba.lower()] = df.to_dict("records")
             except:
-                df = pd.DataFrame() 
-
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                df = _normalizar_colunas(df)
-                
-                if aba == "Log_Laudos":
-                    if "Cliente" not in df.columns: df["Cliente"] = ""
-                    if "Status" not in df.columns: df["Status"] = "Pendente"
-                    if "Data_Coleta" in df.columns: df["Data_Coleta"] = df["Data_Coleta"].apply(_fix_date_br)
-                    if "Data_Resultado" in df.columns: df["Data_Resultado"] = df["Data_Resultado"].apply(_fix_date_br)
-                    for c in ["Cliente", "Status"]: df[c] = df[c].fillna("").astype(str)
-                    st.session_state['log_laudos'] = df.to_dict("records")
-
-                elif aba in ["Log_Vendas", "Log_Entradas"]:
-                    if "Data" in df.columns: df["Data"] = df["Data"].apply(_fix_datetime_br)
-                    st.session_state[aba.lower()] = df.to_dict("records")
-            else:
-                st.session_state[aba.lower()] = []
-
-        # --- LÓGICA DO AVISO REFORÇADA (SEPARADA DO LOOP) ---
-        try:
-            df_aviso = conn.read(worksheet="Avisos", ttl=0)
-            # Se o DF não estiver vazio
-            if isinstance(df_aviso, pd.DataFrame) and not df_aviso.empty:
-                # Tenta pegar pela coluna 'Mensagem'
-                if "Mensagem" in df_aviso.columns:
-                    valor = str(df_aviso.iloc[0]["Mensagem"])
-                # Se não achar a coluna, pega a primeira célula (linha 0, coluna 0)
-                else:
-                    valor = str(df_aviso.iloc[0, 0])
-                
-                # Limpa valores nulos ou 'nan'
-                if valor.lower() == 'nan' or valor.lower() == 'none': valor = ""
-                st.session_state['aviso_geral'] = valor
-            else:
-                st.session_state['aviso_geral'] = ""
-        except Exception as e:
-            # Se a aba não existir ou der erro, define vazio
-            st.session_state['aviso_geral'] = ""
-
+                pass
+        
+        # Sempre que carregar com sucesso, atualiza o backup local
+        realizar_backup_local()
         return True
     except Exception as e:
+        st.error(f"Erro no Carregamento: {e}")
         return False
 
-# --- FUNÇÃO FUNDAMENTAL QUE ESTAVA FALTANDO ---
 def salvar_dados():
-    """Salva todas as tabelas importantes de volta para o Google Sheets."""
     try:
-        # 1. Salvar Estoque
-        if "estoque" in st.session_state:
-            conn.update(worksheet="Estoque", data=st.session_state["estoque"])
-
-        # 2. Salvar Clientes (Converter Dic -> DataFrame)
-        if "clientes_db" in st.session_state:
-            try:
-                df_c = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient='index')
-                df_c.reset_index(inplace=True)
-                df_c.rename(columns={'index': 'Nome'}, inplace=True)
-                conn.update(worksheet="Clientes", data=df_c)
-            except Exception as e:
-                print(f"Erro ao salvar clientes: {e}")
-
-        # 3. Salvar Logs
-        if "log_vendas" in st.session_state: 
-            conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state["log_vendas"]))
+        # 1. Salva na Nuvem (Google Sheets)
+        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
         
-        if "log_entradas" in st.session_state: 
-            conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state["log_entradas"]))
+        if st.session_state.get("clientes_db"):
+            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
+            conn.update(worksheet="Clientes", data=df_clis)
+            
+        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
+        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
+        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
         
-        if "log_laudos" in st.session_state: 
-            conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state["log_laudos"]))
-
-        # 4. SALVAR AVISOS (CORREÇÃO SOLICITADA)
-               # ... dentro de salvar_dados ...
-
-        # 4. SALVAR AVISOS (COM CABEÇALHO GARANTIDO)
-        msg_aviso = st.session_state.get('aviso_geral', '')
-        # Cria um DataFrame explícito com coluna Mensagem
-        df_aviso = pd.DataFrame({'Mensagem': [msg_aviso]})
+        df_aviso = pd.DataFrame({"Mensagem": [str(st.session_state.get('aviso_geral', ""))]})
         conn.update(worksheet="Avisos", data=df_aviso)
-
-        st.toast("✅ Dados sincronizados com a nuvem!", icon="☁️")
+        
+        # 2. Salva Cópia Local (A "Caixa-Preta")
+        realizar_backup_local()
+        
+        st.toast("✅ Dados Sincronizados e Backup Local Criado!", icon="🛡️")
+        
     except Exception as e:
-        st.error(f"Erro ao salvar dados na nuvem: {e}")
-
-# Inicialização
-if "dados_carregados" not in st.session_state:
-    carregar_dados()
-    st.session_state["dados_carregados"] = True
-
-for key in ["log_vendas", "log_entradas", "log_laudos"]:
-    if key not in st.session_state: st.session_state[key] = []
-if "estoque" not in st.session_state:
-    st.session_state["estoque"] = pd.DataFrame(columns=["Cod", "Produto", "Marca", "NCM", "Unidade", "Preco_Base", "Saldo", "Estoque_Inicial", "Estoque_Minimo"])
-if "clientes_db" not in st.session_state: st.session_state["clientes_db"] = {}
-
+        st.error(f"⚠️ ERRO CRÍTICO AO SALVAR: {e}")
+        st.stop()
 # ==============================================================================
 # 4. TEMAS E CSS
 # ==============================================================================
@@ -1099,6 +1066,7 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = []
                 # ... limpar o resto
                 salvar_dados()
+
 
 
 
