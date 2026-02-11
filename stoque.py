@@ -347,100 +347,145 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # ==============================================================================
 
 if menu == "📊 Dashboard":
-    st.markdown('<div class="centered-title">📊 Centro de Comando (Dashboard)</div>', unsafe_allow_html=True)
+    # --- CSS TÁTICO: ANIMAÇÃO DE PISCAR E CENTRALIZAR ---
+    st.markdown("""
+    <style>
+    @keyframes piscar {
+        0% { opacity: 1; box-shadow: 0 0 10px #ff0000; transform: scale(1); }
+        50% { opacity: 0.7; box-shadow: 0 0 20px #ff0000; transform: scale(1.02); }
+        100% { opacity: 1; box-shadow: 0 0 10px #ff0000; transform: scale(1); }
+    }
+    .alerta-critico {
+        background-color: #ffcccc;
+        color: #990000;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center; /* CENTRALIZADO */
+        font-weight: bold;
+        font-size: 22px;
+        border: 4px solid #cc0000;
+        animation: piscar 1.2s infinite; /* PISCA SEM PARAR */
+        margin-bottom: 25px;
+    }
+    .titulo-centro {
+        text-align: center;
+        color: #1e3d59;
+        font-size: 3em;
+        font-weight: 800;
+        padding-bottom: 20px;
+    }
+    .card-laudo {
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        text-align: center;
+        border: 1px solid #ddd;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="titulo-centro">📊 CENTRO DE COMANDO</div>', unsafe_allow_html=True)
     
-    # --- 1. MURAL DE AVISOS (O GRANDE ALERTA GERAL) ---
+    # --- 1. MURAL DE AVISOS (PISCANDO NO CENTRO) ---
     if st.session_state.get('aviso_geral'):
         st.markdown(f"""
-        <div style='background-color:#ffebee; border-left: 5px solid #ff1744; color:#b71c1c; padding:15px; border-radius:5px; font-weight:bold; margin-bottom:20px;'>
-            📢 MURAL: {st.session_state['aviso_geral']}
+        <div class="alerta-critico">
+            📢 MURAL DO GENERAL: <br>{st.session_state['aviso_geral']}
         </div>
         """, unsafe_allow_html=True)
 
-    # --- 2. RADAR DE ESTOQUE CRÍTICO (A NOVIDADE) ---
-    st.markdown("### 🚨 Alerta de Abastecimento")
-    
-    # Prepara os dados
+    # --- 2. RADAR DE ESTOQUE CRÍTICO (PISCANDO SE TIVER PERIGO) ---
     df_radar = st.session_state.get('estoque', pd.DataFrame()).copy()
     
     if not df_radar.empty:
-        # Garante que são números para fazer a conta
+        # Garante números
         df_radar['Saldo'] = pd.to_numeric(df_radar['Saldo'], errors='coerce').fillna(0)
-        # Se não tiver a coluna Mínimo, cria padrão 10
         if 'Estoque_Min' not in df_radar.columns: df_radar['Estoque_Min'] = 10.0
         df_radar['Estoque_Min'] = pd.to_numeric(df_radar['Estoque_Min'], errors='coerce').fillna(0)
         
-        # FILTRO TÁTICO: Pega só quem está abaixo ou igual ao mínimo
+        # Filtra Críticos
         criticos = df_radar[df_radar['Saldo'] <= df_radar['Estoque_Min']].copy()
         
         if not criticos.empty:
-            # Mostra o alerta vermelho
-            st.error(f"⚠️ ATENÇÃO: {len(criticos)} itens estão com estoque CRÍTICO ou ZERADO!")
+            # O ALERTA PISCANTE CENTRALIZADO
+            st.markdown(f"""
+            <div class="alerta-critico" style="background-color: #ffe6e6; border-color: #ff0000;">
+                🚨 ALERTA VERMELHO: {len(criticos)} ITENS COM ESTOQUE CRÍTICO!
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Mostra a lista "Discreta mas Relevante"
-            st.dataframe(
-                criticos[['Produto', 'Saldo', 'Estoque_Min', 'Unidade']],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Produto": st.column_config.TextColumn("Item Crítico", width="large"),
-                    "Saldo": st.column_config.NumberColumn("🔻 Atual", format="%.2f"),
-                    "Estoque_Min": st.column_config.NumberColumn("🎯 Mínimo", format="%.1f"),
-                    "Unidade": st.column_config.TextColumn("Emb.", width="small")
-                }
-            )
+            # Mostra a lista centralizada
+            c1, c2, c3 = st.columns([1, 4, 1])
+            with c2:
+                st.dataframe(
+                    criticos[['Produto', 'Saldo', 'Estoque_Min', 'Unidade']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Produto": st.column_config.TextColumn("Item em Perigo", width="large"),
+                        "Saldo": st.column_config.NumberColumn("🔻 Atual", format="%.2f"),
+                        "Estoque_Min": st.column_config.NumberColumn("🎯 Mínimo", format="%.1f"),
+                        "Unidade": st.column_config.TextColumn("Emb.", width="small")
+                    }
+                )
         else:
-            st.success("✅ Abastecimento Seguro: Nenhum item em nível crítico.")
-    else:
-        st.info("Estoque vazio.")
+            st.markdown("<div style='text-align:center; padding:15px; background-color:#d4edda; color:#155724; border-radius:10px; margin-bottom:20px;'>✅ Abastecimento Seguro: Nenhum item em nível crítico.</div>", unsafe_allow_html=True)
 
-    # --- 3. MONITORAMENTO DE LAUDOS PENDENTES ---
+    # --- 3. MONITORAMENTO DE LAUDOS (AGORA MOSTRA "EM ANÁLISE" TAMBÉM) ---
     st.markdown("---")
-    st.markdown("### 📡 Radar de Coletas (Laudos)")
+    st.markdown("<h3 style='text-align:center;'>📡 Radar de Coletas & Análises</h3>", unsafe_allow_html=True)
+    
     laudos_atuais = st.session_state.get("log_laudos", [])
     
-    # Filtra tudo que NÃO está arquivado nem concluído (ou seja, Pendente/Em Análise)
-    ativos = [l for l in laudos_atuais if l.get("Status") in ["Pendente", "Em Análise"]]
+    # LÓGICA CORRIGIDA: Pega Pendente E Em Análise
+    ativos = [l for l in laudos_atuais if str(l.get("Status")) in ["Pendente", "Em Análise"]]
     
     if not ativos: 
         st.info("👍 Nenhuma coleta pendente no momento.")
     else:
-        # Mostra em cards lado a lado
-        cols = st.columns(min(len(ativos), 4)) # Máximo 4 colunas para não espremer
+        # Layout de Cards
+        cols = st.columns(4)
         for i, l in enumerate(ativos):
-            # Garante que não estoure o layout se tiver muitos
             with cols[i % 4]:
-                cor_borda = "#ffb400" if l.get("Status") == "Pendente" else "#29b6f6" # Laranja ou Azul
+                status = str(l.get('Status')).upper()
+                # Cor muda conforme o status (Laranja pra Pendente, Azul pra Análise)
+                cor_status = "#ff9800" if status == "PENDENTE" else "#2196f3"
+                icone = "⏳" if status == "PENDENTE" else "🔬"
+                
                 st.markdown(f"""
-                <div style='background:#fff; border-top: 4px solid {cor_borda}; border-radius:8px; padding:10px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:10px;'>
-                    <div style='font-weight:bold; font-size:0.9em;'>🏢 {l.get('Cliente','?')}</div>
-                    <div style='font-size:0.8em; color:#555;'>📅 Coleta: {l.get('Data_Coleta','--')}</div>
-                    <div style='font-size:0.8em; color:#555;'>🧪 Prev: {l.get('Data_Resultado','--')}</div>
-                    <div style='margin-top:5px; font-weight:bold; color:{cor_borda}; font-size:0.8em;'>{l.get('Status').upper()}</div>
-                </div>""", unsafe_allow_html=True)
+                <div class="card-laudo" style="border-top: 5px solid {cor_status};">
+                    <div style='font-weight:bold; font-size:1.1em; color:#333;'>{l.get('Cliente','?')}</div>
+                    <hr style='margin:5px 0;'>
+                    <div style='font-size:0.9em;'>📅 Coleta: {l.get('Data_Coleta','--')}</div>
+                    <div style='font-size:0.9em;'>🏁 Prev: {l.get('Data_Resultado','--')}</div>
+                    <div style='margin-top:10px; font-weight:bold; color:{cor_status}; font-size:1em; background:#f4f4f4; padding:5px; border-radius:5px;'>
+                        {icone} {status}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-    # --- 4. GRÁFICOS E ESTATÍSTICAS ---
+    # --- 4. GRÁFICOS ---
     st.markdown("---")
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("#### 📈 Fluxo de Vendas")
+        st.markdown("<h4 style='text-align:center'>📈 Fluxo de Vendas</h4>", unsafe_allow_html=True)
         log_v = st.session_state.get('log_vendas', [])
         if log_v:
             df_v = pd.DataFrame(log_v)
-            # Tenta converter data para agrupar
             df_v['Dia'] = pd.to_datetime(df_v['Data'], dayfirst=True, errors='coerce').dt.date
-            # Agrupa por dia e soma qtd
             dados_grafico = df_v.groupby('Dia')['Qtd'].sum()
             st.line_chart(dados_grafico, color="#004aad")
-        else: st.caption("Sem dados de vendas recentes.")
+        else: st.caption("Sem dados.")
         
     with c2:
-        st.markdown("#### 🏆 Top Saída (Produtos)")
+        st.markdown("<h4 style='text-align:center'>🏆 Top Saída</h4>", unsafe_allow_html=True)
         if log_v:
             df_v = pd.DataFrame(log_v)
+            # Agrupa e soma, pegando os top 5
             top_prod = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top_prod, color="#2e7d32", horizontal=True)
-        else: st.caption("Aguardando primeiras vendas.")
+        else: st.caption("Sem dados.")
 elif menu == "📦 Estoque":
     st.title("📦 Controle Tático de Estoque")
     
@@ -1028,6 +1073,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
