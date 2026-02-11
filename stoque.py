@@ -381,6 +381,7 @@ if menu == "📊 Dashboard":
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         text-align: center;
         border: 1px solid #ddd;
+        margin-bottom: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -391,7 +392,7 @@ if menu == "📊 Dashboard":
     if st.session_state.get('aviso_geral'):
         st.markdown(f"""
         <div class="alerta-critico">
-            📢 MURAL DE AVISOS: <br>{st.session_state['aviso_geral']}
+            📢 MURAL DO GENERAL: <br>{st.session_state['aviso_geral']}
         </div>
         """, unsafe_allow_html=True)
 
@@ -432,35 +433,57 @@ if menu == "📊 Dashboard":
         else:
             st.markdown("<div style='text-align:center; padding:15px; background-color:#d4edda; color:#155724; border-radius:10px; margin-bottom:20px;'>✅ Abastecimento Seguro: Nenhum item em nível crítico.</div>", unsafe_allow_html=True)
 
-    # --- 3. MONITORAMENTO DE LAUDOS (AGORA MOSTRA "EM ANÁLISE" TAMBÉM) ---
+    # --- 3. MONITORAMENTO DE LAUDOS (CORRIGIDO: MOSTRA PENDENTE E ANÁLISE) ---
     st.markdown("---")
     st.markdown("<h3 style='text-align:center;'>📡 Radar de Coletas & Análises</h3>", unsafe_allow_html=True)
     
     laudos_atuais = st.session_state.get("log_laudos", [])
     
-    # LÓGICA CORRIGIDA: Pega Pendente E Em Análise
-    ativos = [l for l in laudos_atuais if str(l.get("Status")) in ["Pendente", "Em Análise"]]
+    # LISTA DE QUEM FICA NO DASHBOARD
+    status_visiveis = ["Pendente", "Em Análise"]
+    
+    # Filtro Tático (Ignora Cancelado e Concluído)
+    ativos = [l for l in laudos_atuais if str(l.get("Status")) in status_visiveis]
     
     if not ativos: 
-        st.info("👍 Nenhuma coleta pendente no momento.")
+        st.markdown("""
+        <div style='text-align:center; padding:20px; color:#666; background-color:#f9f9f9; border-radius:10px;'>
+            ✅ Tudo limpo! Nenhuma pendência no laboratório.
+        </div>
+        """, unsafe_allow_html=True)
     else:
         # Layout de Cards
         cols = st.columns(4)
         for i, l in enumerate(ativos):
             with cols[i % 4]:
-                status = str(l.get('Status')).upper()
-                # Cor muda conforme o status (Laranja pra Pendente, Azul pra Análise)
-                cor_status = "#ff9800" if status == "PENDENTE" else "#2196f3"
-                icone = "⏳" if status == "PENDENTE" else "🔬"
+                status_real = str(l.get('Status'))
                 
+                # DEFINIÇÃO DE CORES E ÍCONES
+                if status_real == "Pendente":
+                    cor_status = "#ff9800" # Laranja (Alerta)
+                    icone = "⏳"
+                    texto_status = "AGUARDANDO"
+                elif status_real == "Em Análise":
+                    cor_status = "#2196f3" # Azul (Processando)
+                    icone = "🔬"
+                    texto_status = "EM LABORATÓRIO"
+                else:
+                    cor_status = "#999"
+                    icone = "❓"
+                    texto_status = status_real.upper()
+                
+                # O CARD VISUAL
                 st.markdown(f"""
                 <div class="card-laudo" style="border-top: 5px solid {cor_status};">
-                    <div style='font-weight:bold; font-size:1.1em; color:#333;'>{l.get('Cliente','?')}</div>
-                    <hr style='margin:5px 0;'>
-                    <div style='font-size:0.9em;'>📅 Coleta: {l.get('Data_Coleta','--')}</div>
-                    <div style='font-size:0.9em;'>🏁 Prev: {l.get('Data_Resultado','--')}</div>
-                    <div style='margin-top:10px; font-weight:bold; color:{cor_status}; font-size:1em; background:#f4f4f4; padding:5px; border-radius:5px;'>
-                        {icone} {status}
+                    <div style='font-weight:bold; font-size:1.1em; color:#333; min-height:50px; display:flex; align-items:center; justify-content:center;'>
+                        {l.get('Cliente','?')}
+                    </div>
+                    <hr style='margin:5px 0; border-top: 1px solid #eee;'>
+                    <div style='font-size:0.85em; color:#555;'>📅 Coleta: {l.get('Data_Coleta','--')}</div>
+                    <div style='font-size:0.85em; color:#555;'>🏁 Prev: {l.get('Data_Resultado','--')}</div>
+                    
+                    <div style='margin-top:10px; font-weight:bold; color:{cor_status}; font-size:0.9em; background:#f4f4f4; padding:5px; border-radius:5px;'>
+                        {icone} {texto_status}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -482,7 +505,6 @@ if menu == "📊 Dashboard":
         st.markdown("<h4 style='text-align:center'>🏆 Top Saída</h4>", unsafe_allow_html=True)
         if log_v:
             df_v = pd.DataFrame(log_v)
-            # Agrupa e soma, pegando os top 5
             top_prod = df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top_prod, color="#2e7d32", horizontal=True)
         else: st.caption("Sem dados.")
@@ -1073,6 +1095,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
