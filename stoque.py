@@ -347,58 +347,30 @@ menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vend
 # ==============================================================================
 
 if menu == "📊 Dashboard":
-    # --- CSS DE ALTA PRECISÃO: BLINDAGEM DE LAYOUT ---
+    # --- CSS: APENAS PARA O PISCA-PISCA E TÍTULO ---
     st.markdown("""
     <style>
     @keyframes piscar {
-        0% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.6; transform: scale(1.01); }
-        100% { opacity: 1; transform: scale(1); }
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
     }
-    .main-title {
-        text-align: center; color: #1e3d59; font-size: 45px; font-weight: 900; margin-bottom: 30px;
-    }
-    .alerta-box {
-        background-color: #ff4b4b; color: white; padding: 25px; border-radius: 15px;
-        text-align: center; font-weight: bold; font-size: 24px;
-        animation: piscar 1.5s infinite; border: 3px solid #b22222; margin-bottom: 30px;
-    }
-    /* CONTAINER DOS CARDS */
-    .dashboard-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 20px;
-        width: 100%;
-        padding: 10px 0;
-    }
-    /* ESTILO DO CARD */
-    .card-analise {
-        background: #ffffff;
-        border-radius: 12px;
-        padding: 20px;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        border-top: 8px solid #ccc; /* Cor dinâmica via Python */
-        min-height: 200px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .card-cliente { font-weight: 800; font-size: 1.2em; color: #333; margin-bottom: 10px; }
-    .card-info { font-size: 0.9em; color: #666; margin: 3px 0; }
-    .status-tag {
-        margin-top: 15px; padding: 8px; border-radius: 8px; font-weight: bold; font-size: 0.95em;
+    .titulo-centro { text-align: center; color: #1e3d59; font-size: 40px; font-weight: 800; }
+    .alerta-piscante {
+        background-color: #ff4b4b; color: white; padding: 15px; border-radius: 10px;
+        text-align: center; font-weight: bold; animation: piscar 1s infinite;
+        margin-bottom: 20px; border: 2px solid white;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="main-title">📊 CENTRO DE COMANDO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="titulo-centro">📊 CENTRO DE COMANDO</div>', unsafe_allow_html=True)
     
-    # --- 1. MURAL E ALERTAS (PISCANTES) ---
+    # --- 1. MURAL E ESTOQUE (ALERTAS GIGANTES) ---
     if st.session_state.get('aviso_geral'):
-        st.markdown(f'<div class="alerta-box">📢 {st.session_state["aviso_geral"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="alerta-piscante">📢 {st.session_state["aviso_geral"]}</div>', unsafe_allow_html=True)
 
-    # Radar de Estoque Crítico
+    # Radar de Estoque
     stk_df = st.session_state.get('estoque', pd.DataFrame())
     if not stk_df.empty:
         stk_df['Saldo'] = pd.to_numeric(stk_df['Saldo'], errors='coerce').fillna(0)
@@ -406,66 +378,59 @@ if menu == "📊 Dashboard":
         criticos = stk_df[stk_df['Saldo'] <= stk_df['Estoque_Min']]
         
         if not criticos.empty:
-            st.markdown(f'<div class="alerta-box" style="font-size: 20px;">🚨 {len(criticos)} PRODUTOS COM ESTOQUE CRÍTICO!</div>', unsafe_allow_html=True)
-            with st.expander("Ver lista de materiais em falta"):
+            st.markdown(f'<div class="alerta-piscante">🚨 {len(criticos)} PRODUTOS EM NÍVEL CRÍTICO!</div>', unsafe_allow_html=True)
+            with st.expander("Clique para ver a lista de materiais em falta"):
                 st.table(criticos[['Produto', 'Saldo', 'Estoque_Min']])
 
-    # --- 2. CARDS DE ANÁLISES (SISTEMA DE GRADE RÍGIDA) ---
+    # --- 2. RADAR DE LAUDOS (VOLTANDO AO FORMATO DE CARDS SEGUROS) ---
     st.markdown("---")
-    st.markdown("<h2 style='text-align:center;'>📡 Radar de Laudos</h2>", unsafe_allow_html=True)
+    st.subheader("📡 Radar de Laudos (Pendente / Em Análise)")
     
     laudos = st.session_state.get("log_laudos", [])
-    # Filtro: Só Pendente e Em Análise
     ativos = [l for l in laudos if str(l.get("Status")) in ["Pendente", "Em Análise"]]
     
     if not ativos:
-        st.info("Nenhuma análise ativa no radar.")
+        st.info("Tudo limpo no laboratório.")
     else:
-        # Iniciamos a Grid em HTML
-        grid_html = '<div class="dashboard-grid">'
-        
-        for l in ativos:
-            st_atual = str(l.get('Status'))
-            # Cores Táticas
-            cor_borda = "#ff9800" if st_atual == "Pendente" else "#2196f3"
-            fundo_tag = "#fff3e0" if st_atual == "Pendente" else "#e3f2fd"
-            icone = "⏳" if st_atual == "Pendente" else "🔬"
-            
-            grid_html += f"""
-            <div class="card-analise" style="border-top-color: {cor_borda};">
-                <div>
-                    <div class="card-cliente">{l.get('Cliente','?')}</div>
-                    <div class="card-info">📅 Coleta: {l.get('Data_Coleta','--')}</div>
-                    <div class="card-info">🏁 Previsão: {l.get('Data_Resultado','--')}</div>
+        # Criamos as colunas nativas (4 por linha)
+        cols = st.columns(4)
+        for i, l in enumerate(ativos):
+            with cols[i % 4]:
+                st_atual = str(l.get('Status'))
+                cor_borda = "orange" if st_atual == "Pendente" else "blue"
+                icone = "⏳" if st_atual == "Pendente" else "🔬"
+                
+                # Card em HTML bem simples para não quebrar
+                st.markdown(f"""
+                <div style="border: 1px solid #ddd; border-top: 5px solid {cor_borda}; 
+                            padding: 10px; border-radius: 10px; background: white; 
+                            text-align: center; margin-bottom: 10px; height: 180px;">
+                    <b style="font-size: 14px; color: #333;">{l.get('Cliente','?')}</b><br>
+                    <small>📅 {l.get('Data_Coleta','--')}</small><br>
+                    <small>🏁 {l.get('Data_Resultado','--')}</small><br><br>
+                    <div style="color: {cor_borda}; font-weight: bold; font-size: 12px; 
+                                background: #f0f2f6; padding: 5px; border-radius: 5px;">
+                        {icone} {st_atual.upper()}
+                    </div>
                 </div>
-                <div class="status-tag" style="background: {fundo_tag}; color: {cor_borda};">
-                    {icone} {st_atual.upper()}
-                </div>
-            </div>
-            """
-        
-        grid_html += '</div>'
-        st.markdown(grid_html, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
-    # --- 3. GRÁFICOS OPERACIONAIS ---
+    # --- 3. GRÁFICOS ---
     st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("📈 Tendência de Vendas")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.write("📈 **Vendas por Dia**")
         vendas = st.session_state.get('log_vendas', [])
         if vendas:
             dv = pd.DataFrame(vendas)
             dv['Dia'] = pd.to_datetime(dv['Data'], dayfirst=True, errors='coerce').dt.date
             st.line_chart(dv.groupby('Dia')['Qtd'].sum())
-        else: st.caption("Sem dados.")
-
-    with col2:
-        st.subheader("🏆 Materiais Top Saída")
+    with c2:
+        st.write("🏆 **Top Produtos**")
         if vendas:
             dv = pd.DataFrame(vendas)
             top = dv.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top, horizontal=True)
-        else: st.caption("Sem dados.")
 elif menu == "📦 Estoque":
     st.title("📦 Controle Tático de Estoque")
     
@@ -1053,6 +1018,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
