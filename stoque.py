@@ -310,14 +310,27 @@ def gerar_pdf_estoque(usuario, df_estoque):
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
-if st.session_state['aviso_geral']:
+# --- QUADRO DE AVISOS LATERAL (RESTAURADO) ---
+    if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
+    
     st.sidebar.markdown("---")
-    st.sidebar.warning(f"📢 {st.session_state['aviso_geral']}")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎨 Personalizar Tela")
-tema_sel = st.sidebar.selectbox("Visual:", ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"])
-aplicar_tema(tema_sel)
+    with st.sidebar.expander("📢 MURAL DE AVISOS"):
+        aviso_txt = st.text_area("Escreva o aviso:", value=st.session_state['aviso_geral'], height=100)
+        c_salv, c_limp = st.columns(2)
+        
+        if c_salv.button("💾 GRAVAR"):
+            st.session_state['aviso_geral'] = aviso_txt
+            salvar_dados() # Salva na planilha "Avisos"
+            st.rerun()
+            
+        if c_limp.button("🗑️ APAGAR"):
+            st.session_state['aviso_geral'] = ""
+            salvar_dados()
+            st.rerun()
+            
+    # Se tiver aviso, mostra um alerta fixo na barra lateral também
+    if st.session_state['aviso_geral']:
+        st.sidebar.warning(f"🔔 {st.session_state['aviso_geral']}")
 
 menu = st.sidebar.radio("Navegar:", ["📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", "📦 Estoque", "📋 Conferência Geral", "👥 Clientes", "🛠️ Admin / Backup"])
 
@@ -574,5 +587,6 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
