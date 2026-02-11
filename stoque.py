@@ -394,90 +394,107 @@ if menu == "📊 Dashboard":
             df_v = pd.DataFrame(log_v)
             st.bar_chart(df_v.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5), horizontal=True)
 elif menu == "📦 Estoque":
-    st.title("📦 Estoque Operacional")
+    st.title("📦 Controle Tático de Estoque")
     
     # Busca e Ferramentas
     c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
     with c_busca:
-        busca = st.text_input("Filtrar:", placeholder="🔍 Digite nome ou código...", label_visibility="collapsed")
+        busca = st.text_input("Filtrar:", placeholder="🔍 Buscar Produto...", label_visibility="collapsed")
     with c_relat:
-        if st.button("📄 PDF Estoque", use_container_width=True):
+        if st.button("📄 Relatório PDF", use_container_width=True):
             if not st.session_state['estoque'].empty:
                 pdf_bytes = gerar_pdf_estoque(st.session_state['usuario_nome'], st.session_state['estoque'])
                 st.download_button("⬇️ BAIXAR", data=pdf_bytes, file_name="Estoque.pdf", mime="application/pdf", type="primary")
     
     with c_ferramentas:
         with st.popover("🛠️ OPÇÕES", use_container_width=True):
-            st.markdown("### ➕ Adicionar Item")
+            st.markdown("### ➕ Novo Item")
             with st.form("add_prod", clear_on_submit=True):
                 c1, c2 = st.columns([1,2])
-                cod_n = c1.text_input("Cód")
-                nome_n = c2.text_input("Nome")
+                # Aqui definimos a Embalagem/Unidade
+                emb_n = c1.selectbox("Embalagem", ["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX"])
+                nome_n = c2.text_input("Nome do Produto")
                 c3, c4 = st.columns(2)
-                # Preço fica escondido aqui, mas entra no cadastro
-                preco_n = c3.number_input("Preço Base", min_value=0.0)
-                saldo_n = c4.number_input("Saldo Inicial", min_value=0.0)
+                preco_n = c3.number_input("Custo Base", min_value=0.0)
+                saldo_n = c4.number_input("Estoque Inicial", min_value=0.0)
                 
-                if st.form_submit_button("Salvar Novo Item"):
-                    novo = {"Cod": cod_n, "Produto": nome_n, "Preco_Base": preco_n, "Saldo": saldo_n, "Marca": "LABORTEC", "Unidade": "KG"}
+                if st.form_submit_button("Cadastrar"):
+                    # Gera um código aleatório simples se não informado, ou usa timestamp
+                    cod_auto = datetime.now().strftime("%H%M%S")
+                    novo = {"Cod": cod_auto, "Produto": nome_n, "Preco_Base": preco_n, "Saldo": saldo_n, "Marca": "GERAL", "Unidade": emb_n}
                     st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
                     salvar_dados(); st.rerun()
             
             st.markdown("---")
-            st.markdown("### 🗑️ Excluir Item")
+            st.markdown("### 🗑️ Baixa Definitiva")
             df_seguro = st.session_state.get('estoque', pd.DataFrame())
-            if not df_seguro.empty and 'Cod' in df_seguro.columns:
-                opcoes_del = df_seguro.apply(lambda x: f"{x.get('Cod', '')} - {x.get('Produto', '')}", axis=1).tolist()
+            if not df_seguro.empty and 'Produto' in df_seguro.columns:
+                opcoes_del = df_seguro['Produto'].tolist()
             else: opcoes_del = ["Vazio"]
             
-            alvo = st.selectbox("Item para apagar:", [""] + opcoes_del)
-            if st.button("💣 EXCLUIR DEFINITIVAMENTE"):
+            alvo = st.selectbox("Apagar Item:", [""] + opcoes_del)
+            if st.button("💣 APAGAR ITEM"):
                 if alvo and alvo != "Vazio":
-                    c_alvo = alvo.split(" - ")[0]
-                    st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(c_alvo)]
+                    st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Produto'] != alvo]
                     salvar_dados(); st.rerun()
 
-    # Tabela Principal (LIMPA E FOCADA)
+    # Tabela Principal
     df_exibir = st.session_state['estoque'].copy()
     
     # Filtro de Busca
     if busca:
-        df_exibir = df_exibir[df_exibir['Produto'].str.contains(busca, case=False) | df_exibir['Cod'].astype(str).str.contains(busca)]
+        df_exibir = df_exibir[df_exibir['Produto'].str.contains(busca, case=False)]
     
-    # Destaque Visual para o Saldo
-    st.markdown("###") # Espaçamento
+    # --- CÁLCULO PARA A BARRA DE PROGRESSO ---
+    # Descobre qual é o maior estoque para usar como referência (100% da barra)
+    if not df_exibir.empty:
+        try: 
+            df_exibir['Saldo'] = pd.to_numeric(df_exibir['Saldo'], errors='coerce').fillna(0)
+            max_estoque = float(df_exibir['Saldo'].max())
+            if max_estoque == 0: max_estoque = 100.0
+        except: max_estoque = 100.0
+    else: max_estoque = 100.0
+
+    st.markdown("###") # Espaço para respirar
     
+    # O VISUAL NOVO
     ed = st.data_editor(
         df_exibir, 
         use_container_width=True, 
         hide_index=True,
-        # AQUI ESTÁ A MÁGICA: Definimos EXATAMENTE o que aparece
-        column_order=["Cod", "Produto", "Marca", "Unidade", "Saldo"],
+        # AQUI MUDAMOS A ORDEM: Embalagem primeiro, Código e Marca sumiram
+        column_order=["Unidade", "Produto", "Saldo"],
         
         column_config={
-            "Cod": st.column_config.TextColumn("🔖 Cód", disabled=True, width="small"),
-            "Produto": st.column_config.TextColumn("📦 Produto / Descrição", disabled=True, width="large"),
-            "Marca": st.column_config.TextColumn("🏷️ Marca", width="small"),
-            "Unidade": st.column_config.TextColumn("📏 Un.", width="small"),
-            
-            # O GRANDE DESTAQUE NO SALDO
-            "Saldo": st.column_config.NumberColumn(
-                "✅ SALDO DISPONÍVEL", 
-                help="Quantidade real em estoque",
+            # Transformamos "Unidade" em "Tipo de Embalagem"
+            "Unidade": st.column_config.SelectboxColumn(
+                "📦 Tipo Embalagem",
+                options=["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX", "L"],
+                required=True,
+                width="small"
+            ),
+            "Produto": st.column_config.TextColumn(
+                "📋 Descrição do Material",
+                disabled=True, # Trava o nome para evitar acidentes
+                width="large"
+            ),
+            # O GRANDE DESTAQUE VISUAL
+            "Saldo": st.column_config.ProgressColumn(
+                "📊 NÍVEL DE ESTOQUE (SALDO)",
+                help="Barra cheia indica o produto com maior estoque na casa.",
                 format="%.2f",
-                step=1.0,
+                min_value=0,
+                max_value=max_estoque, # A barra é relativa ao produto com mais estoque
                 width="medium"
             )
         }
     )
     
-    # Salvar alterações feitas direto na tabela
+    # Lógica de Salvamento Inteligente
     if not ed.equals(df_exibir):
-        # Precisamos ter cuidado para não perder as colunas ocultas (Preço, NCM) ao salvar
-        # Lógica: Atualizamos apenas as linhas editadas no dataframe original
+        # Atualiza apenas o que mudou (Unidade ou Saldo) mantendo as colunas ocultas intactas
         st.session_state["estoque"].update(ed)
         salvar_dados()
-
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     
@@ -945,6 +962,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
