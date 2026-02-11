@@ -551,15 +551,32 @@ elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes")
 
     # --- 1. CONFIGURAÇÃO E CALLBACKS ---
-    # Definição de chaves padrão
     campos = ['form_nome', 'form_cod', 'form_cnpj', 'form_tel', 'form_end', 'form_cid', 'form_uf', 'form_cep', 'form_email']
     for c in campos:
         if c not in st.session_state: st.session_state[c] = ""
-    
     if 'form_fator' not in st.session_state: st.session_state['form_fator'] = 1.0
     if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
 
-    # --- CALLBACKS COM FEEDBACK VISUAL (SPINNER) ---
+    # --- FUNÇÃO VISUAL: O FRASQUINHO PISCANDO (CSS) ---
+    def mostrar_frasquinho_animado():
+        # Cria um container vazio para a animação
+        placeholder = st.empty()
+        # Injeta HTML/CSS para fazer o emoji pular
+        placeholder.markdown("""
+            <div style="display:flex; justify-content:center; align-items:center; flex-direction:column; padding:20px; background-color:#f0f2f6; border-radius:10px; margin-bottom:20px;">
+                <div style="font-size:60px; animation: bounce 1s infinite;">🧪</div>
+                <div style="color:#1e3d59; font-weight:bold; margin-top:10px; font-size:18px;">Misturando os elementos... Aguarde!</div>
+            </div>
+            <style>
+            @keyframes bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-20px); }
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        return placeholder
+
+    # CALLBACKS
     def limpar_callback():
         for c in campos: st.session_state[c] = ""
         st.session_state['form_fator'] = 1.0
@@ -581,47 +598,55 @@ elif menu == "👥 Clientes":
         st.toast(f"Editando {nome}...", icon="✏️")
 
     def salvar_callback():
-        # AQUI ESTÁ O AVISO QUE VOCÊ PEDIU
-        with st.spinner("⏳ O Tio está cadastrando... Aguarde, General!"):
-            nome = st.session_state['form_nome']
-            if nome:
-                st.session_state['clientes_db'][nome] = {
-                    'Cod_Cli': st.session_state['form_cod'],
-                    'Fator': st.session_state['form_fator'],
-                    'CNPJ': st.session_state['form_cnpj'],
-                    'Tel': st.session_state['form_tel'],
-                    'End': st.session_state['form_end'],
-                    'Cidade': st.session_state['form_cid'],
-                    'UF': st.session_state['form_uf'],
-                    'CEP': st.session_state['form_cep'],
-                    'Email': st.session_state['form_email']
-                }
-                salvar_dados() # Isso demora, então o spinner fica rodando aqui
-                st.toast("Cliente Salvo com Sucesso!", icon="✅")
-                limpar_callback()
-            else:
-                st.toast("Erro: O nome é obrigatório.", icon="❌")
+        # Chama o Frasquinho
+        animacao = mostrar_frasquinho_animado()
+        
+        # Faz o trabalho pesado
+        nome = st.session_state['form_nome']
+        if nome:
+            st.session_state['clientes_db'][nome] = {
+                'Cod_Cli': st.session_state['form_cod'],
+                'Fator': st.session_state['form_fator'],
+                'CNPJ': st.session_state['form_cnpj'],
+                'Tel': st.session_state['form_tel'],
+                'End': st.session_state['form_end'],
+                'Cidade': st.session_state['form_cid'],
+                'UF': st.session_state['form_uf'],
+                'CEP': st.session_state['form_cep'],
+                'Email': st.session_state['form_email']
+            }
+            salvar_dados()
+            
+            # Remove a animação e avisa
+            animacao.empty()
+            st.toast("Sucesso! Elemento estabilizado.", icon="✅")
+            limpar_callback()
+        else:
+            animacao.empty()
+            st.toast("Erro: O nome é obrigatório.", icon="❌")
 
     # --- 2. IMPORTAÇÃO PDF ---
     with st.expander("📂 Importar Dados (PDF)", expanded=False):
         arq = st.file_uploader("PDF da Licença:", type="pdf")
         if arq and st.button("🔄 Extrair Dados"):
-            with st.spinner("📄 Lendo o PDF... Calma lá!"):
-                d = ler_pdf_antigo(arq)
-                if d:
-                    st.session_state['form_nome'] = str(d.get('Nome', ''))
-                    st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
-                    st.session_state['form_end'] = str(d.get('End', ''))
-                    st.session_state['form_cid'] = str(d.get('Cidade', ''))
-                    st.session_state['form_uf'] = str(d.get('UF', ''))
-                    st.session_state['form_cep'] = str(d.get('CEP', ''))
-                    st.session_state['form_tel'] = str(d.get('Tel', ''))
-                    st.session_state['form_email'] = str(d.get('Email', ''))
-                    st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
-                    st.success("✅ Dados extraídos!")
-                    st.rerun()
-                else:
-                    st.error("❌ Falha na leitura.")
+            anim = mostrar_frasquinho_animado()
+            d = ler_pdf_antigo(arq)
+            anim.empty() # Tira a animação
+            
+            if d:
+                st.session_state['form_nome'] = str(d.get('Nome', ''))
+                st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
+                st.session_state['form_end'] = str(d.get('End', ''))
+                st.session_state['form_cid'] = str(d.get('Cidade', ''))
+                st.session_state['form_uf'] = str(d.get('UF', ''))
+                st.session_state['form_cep'] = str(d.get('CEP', ''))
+                st.session_state['form_tel'] = str(d.get('Tel', ''))
+                st.session_state['form_email'] = str(d.get('Email', ''))
+                st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
+                st.success("✅ Dados extraídos!")
+                st.rerun()
+            else:
+                st.error("❌ Falha na leitura.")
 
     # --- 3. FORMULÁRIO ---
     titulo = "✏️ Editando Cliente" if st.session_state['edit_mode'] else "➕ Novo Cliente"
@@ -649,7 +674,6 @@ elif menu == "👥 Clientes":
         c9.text_input("CEP", key="form_cep")
         
         st.markdown("###")
-        # Botão de Salvar com Callback
         st.form_submit_button("💾 SALVAR DADOS", type="primary", use_container_width=True, on_click=salvar_callback)
 
     if st.session_state['edit_mode']:
@@ -668,28 +692,33 @@ elif menu == "👥 Clientes":
             d = st.session_state['clientes_db'][cli]
             ft = d.get('Fator', 1.0)
             
+            # Layout Ajustado
             col_info, col_btn = st.columns([5, 2])
             with col_info:
                 st.markdown(f"**🏢 {cli}** (Fator: {ft})")
                 st.caption(f"CNPJ: {d.get('CNPJ')} | Tel: {d.get('Tel')}")
+                
+                # --- SOLUÇÃO DEFINITIVA DO EMAIL ---
                 mail = d.get('Email', '')
                 if mail:
-                    with st.popover("📧 Ver Email"):
-                        st.text_input("Copie abaixo:", value=mail, disabled=True, key=f"mail_{cli}")
+                    # st.code gera uma caixa com botão de copiar nativo
+                    st.code(mail, language="text") 
+                else:
+                    st.caption("Sem e-mail cadastrado")
 
             with col_btn:
                 b_edit, b_del = st.columns(2)
                 b_edit.button("✏️", key=f"ed_{cli}", on_click=editar_callback, args=(cli, d), help="Editar")
                 
                 if b_del.button("🗑️", key=f"del_{cli}"):
-                    with st.spinner("🗑️ Apagando..."):
-                        del st.session_state['clientes_db'][cli]
-                        salvar_dados()
+                    anim = mostrar_frasquinho_animado()
+                    del st.session_state['clientes_db'][cli]
+                    salvar_dados()
+                    anim.empty()
                     st.rerun()
             st.divider()
     else:
         st.info("Nenhum cliente cadastrado.")
-
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada")
     opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
@@ -891,6 +920,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
