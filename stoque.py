@@ -106,8 +106,8 @@ def ler_pdf_antigo(f):
 st.set_page_config(page_title="Sistema Integrado v80", layout="wide", page_icon="🧪")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    st.error("Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud.")
+except Exception as e:
+    st.error(f"Erro Crítico: Verifique o 'Secrets' no Streamlit Cloud. Detalhes: {e}")
     st.stop()
 
 # ==============================================================================
@@ -163,6 +163,22 @@ def _fix_datetime_br(val):
     if not val or pd.isna(val) or str(val).strip() == "": return ""
     try: return pd.to_datetime(val, dayfirst=True).strftime("%d/%m/%Y %H:%M")
     except: return val
+
+def realizar_backup_local():
+    """Função interna para salvar uma cópia de segurança no HD"""
+    try:
+        dados_backup = {
+            "estoque": st.session_state.get("estoque", pd.DataFrame()).to_dict("records"),
+            "clientes": st.session_state.get("clientes_db", {}),
+            "log_vendas": st.session_state.get("log_vendas", []),
+            "log_entradas": st.session_state.get("log_entradas", []),
+            "log_laudos": st.session_state.get("log_laudos", []),
+            "aviso": st.session_state.get("aviso_geral", "")
+        }
+        with open("backup_seguranca.json", "w", encoding="utf-8") as f:
+            json.dump(dados_backup, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"Erro ao criar backup local: {e}")
 
 def carregar_dados():
     try:
@@ -237,6 +253,7 @@ def salvar_dados():
         conn.update(worksheet="Avisos", data=df_aviso)
         
         st.toast("✅ Dados Sincronizados!", icon="☁️")
+        realizar_backup_local()
         
     except Exception as e:
         st.error(f"⚠️ ERRO CRÍTICO AO SALVAR: {e}")
@@ -313,13 +330,11 @@ def gerar_pdf_estoque(usuario, df_estoque):
     pdf.titulo_doc = "RELATÓRIO DE ESTOQUE"
     pdf.add_page()
     
-    # 1. Cabeçalho
     pdf.set_font("Arial", "B", 10)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(0, 8, f" POSIÇÃO DE ESTOQUE EM: {obter_horario_br().strftime('%d/%m/%Y às %H:%M')}", 1, 1, "L", fill=True)
     pdf.ln(5)
     
-    # 2. Configuração das Colunas
     w = [15, 75, 25, 15, 20, 20, 25] 
     cols = ["Cód", "Produto", "Marca", "Un", "Saldo", "Custo", "Total R$"]
     
@@ -330,7 +345,6 @@ def gerar_pdf_estoque(usuario, df_estoque):
         pdf.cell(w[i], 8, c, 1, 0, "C", fill=True)
     pdf.ln()
     
-    # 3. Preenchimento
     pdf.set_font("Arial", "", 7)
     valor_total_estoque = 0.0
     
@@ -358,7 +372,6 @@ def gerar_pdf_estoque(usuario, df_estoque):
         pdf.cell(w[5], 6, f"{custo:,.2f}", 1, 0, "R")
         pdf.cell(w[6], 6, f"{total_item:,.2f}", 1, 1, "R")
         
-    # 4. Totais e Rodapé
     pdf.ln(2)
     pdf.set_font("Arial", "B", 9)
     pdf.cell(sum(w)-25, 8, "VALOR TOTAL EM ESTOQUE:", 0, 0, "R")
@@ -366,6 +379,7 @@ def gerar_pdf_estoque(usuario, df_estoque):
     
     pdf.ln(15)
     y = pdf.get_y()
+    
     pdf.line(60, y, 150, y)
     pdf.set_font("Arial", "", 8)
     pdf.set_xy(60, y + 2)
@@ -379,25 +393,22 @@ def gerar_pdf_estoque(usuario, df_estoque):
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
 
-if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 st.sidebar.markdown("---")
-with st.sidebar.expander("📢 MURAL DE AVISOS"):
-    aviso_txt = st.text_area("Mensagem:", value=st.session_state['aviso_geral'], height=100)
-    c_salv, c_limp = st.columns(2)
-    
-    if c_salv.button("💾 PUBLICAR"):
+with st.sidebar.expander("📢 DEFINIR AVISO"):
+    aviso_txt = st.text_area("Mensagem do Mural:", value=st.session_state['aviso_geral'], height=100)
+    c1, c2 = st.columns(2)
+    if c1.button("💾 Gravar"): 
         st.session_state['aviso_geral'] = aviso_txt
         salvar_dados()
         st.rerun()
-        
-    if c_limp.button("🗑️ APAGAR"):
+    if c2.button("🗑️ Apagar"): 
         st.session_state['aviso_geral'] = ""
         salvar_dados()
         st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Personalizar Tela")
-opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)", "🟠 Metal Industrial", "🌃 Cyber Dark"]
+opcoes_temas = ["⚪ Padrão (Clean)", "🔵 Azul Labortec", "🌿 Verde Natureza", "⚫ Dark Mode (Noturno)"]
 tema_sel = st.sidebar.selectbox("Escolha o visual:", opcoes_temas)
 aplicar_tema(tema_sel)
 
@@ -405,6 +416,9 @@ menu = st.sidebar.radio("Navegar:", [
     "📊 Dashboard", "🧪 Laudos", "💰 Vendas & Orçamentos", "📥 Entrada de Estoque", 
     "📦 Estoque", "📋 Conferência Geral", "👥 Clientes", "🛠️ Admin / Backup"
 ])
+
+# CARREGA DADOS APÓS AUTENTICAÇÃO
+carregar_dados()
 
 # ==============================================================================
 # 7. PÁGINAS DO SISTEMA
@@ -472,9 +486,12 @@ elif menu == "🧪 Laudos":
                     'Cliente': cli_l, 'Data_Coleta': data_l.strftime("%d/%m/%Y"), 
                     'Data_Resultado': data_r.strftime("%d/%m/%Y"), 'Status': 'Pendente'
                 })
-                salvar_dados(); st.success("Agendado!"); st.rerun()
+                salvar_dados()
+                st.success("Agendado!")
+                st.rerun()
 
-    st.markdown("---"); st.subheader("📋 Editar Previsões")
+    st.markdown("---")
+    st.subheader("📋 Editar Previsões")
     laudos = st.session_state.get('log_laudos', [])
     laudos_ativos = [l for l in laudos if l.get('Status') != 'Arquivado']
     if not laudos_ativos: st.info("Sem laudos ativos.")
@@ -500,28 +517,28 @@ elif menu == "🧪 Laudos":
                 c = row['Data_Coleta'].strftime("%d/%m/%Y") if hasattr(row['Data_Coleta'], 'strftime') else str(row['Data_Coleta'])
                 r = row['Data_Resultado'].strftime("%d/%m/%Y") if hasattr(row['Data_Resultado'], 'strftime') else str(row['Data_Resultado'])
                 st.session_state['log_laudos'][idx].update({'Data_Coleta': c, 'Data_Resultado': r, 'Status': row['Status']})
-            salvar_dados(); st.success("Salvo!"); st.rerun()
+            salvar_dados()
+            st.success("Salvo!")
+            st.rerun()
 
 elif menu == "💰 Vendas & Orçamentos":
     st.title("💰 Vendas Inteligentes")
     
     if not st.session_state.get('clientes_db'): 
-        st.warning("⚠️ Cadastre clientes primeiro."); st.stop()
+        st.warning("⚠️ Cadastre clientes primeiro.")
+        st.stop()
     
-    # 1. Seleção de Alvos
     c1, c2 = st.columns([2, 1])
     lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
     cli = c1.selectbox("Selecione o Cliente", lista_clientes)
     vend = c2.text_input("Vendedor", st.session_state.get('usuario_nome', 'Sistema'))
     d_cli = st.session_state['clientes_db'][cli]
     
-    # 2. Fator de Preço (Segurança Máxima)
     try:
         fator_cliente = float(d_cli.get('Fator', 1.0))
         if fator_cliente <= 0: fator_cliente = 1.0
     except: fator_cliente = 1.0
     
-    # 3. Preparação do Radar (Tabela)
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
     df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
@@ -538,7 +555,6 @@ elif menu == "💰 Vendas & Orçamentos":
         }
     )
     
-    # 4. Processamento da Venda
     itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
     
     if not itens_sel.empty:
@@ -558,11 +574,9 @@ elif menu == "💰 Vendas & Orçamentos":
             baixa = st.toggle("🚨 BAIXAR ESTOQUE AUTOMATICAMENTE?", value=True)
             if st.button("✅ FINALIZAR VENDA AGORA", type="primary", use_container_width=True):
                 
-                # Captura os nomes reais (compostos)
                 nomes_dos_itens = itens_sel['Produto'].tolist()
                 nome_final_registro = " + ".join([str(n) for n in nomes_dos_itens])
                 
-                # Execução da Baixa
                 if baixa:
                     for _, row in itens_sel.iterrows():
                         mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
@@ -587,7 +601,6 @@ elif menu == "💰 Vendas & Orçamentos":
                     **Total:** R$ {total:,.2f}
                     """)
                 
-                # Grava no Log
                 st.session_state['log_vendas'].append({
                     'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
                     'Cliente': cli, 
@@ -597,14 +610,15 @@ elif menu == "💰 Vendas & Orçamentos":
                 })
                 salvar_dados()
                 
-                # Botão de Download do Pedido
                 dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
                 pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "PEDIDO")
                 st.download_button("📥 Baixar Pedido PDF", pdf, f"Pedido_{cli}.pdf", "application/pdf")
 
 elif menu == "📥 Entrada de Estoque":
     st.title("📥 Entrada de Mercadoria")
-    if st.session_state['estoque'].empty: st.warning("Cadastre produtos!"); st.stop()
+    if st.session_state['estoque'].empty: 
+        st.warning("Cadastre produtos!")
+        st.stop()
     
     with st.form("f_ent"):
         opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
@@ -619,24 +633,24 @@ elif menu == "📥 Entrada de Estoque":
                 except: atual = 0.0
                 st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
                 st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'Usuario': st.session_state['usuario_nome']})
-                salvar_dados(); st.success("Entrada Realizada!"); st.rerun()
+                salvar_dados()
+                st.success("Entrada Realizada!")
+                st.rerun()
 
-# ==============================================================================
-# 8. CONFERÊNCIA GERAL (MÓDULO REINSTALADO)
-# ==============================================================================
 elif menu == "📋 Conferência Geral":
     st.title("📋 Conferência Tática de Movimentações")
     
     tab1, tab2, tab3 = st.tabs(["📊 Histórico de Vendas", "📥 Histórico de Entradas", "🧪 Gestão de Laudos"])
 
-    # --- ABA 1: VENDAS ---
     with tab1:
         st.subheader("🛒 Registro de Vendas Realizadas")
         st.caption("💡 Dica: Para apagar um erro, selecione a linha e aperte 'Delete' no teclado.")
+        
         log_vendas_data = st.session_state.get('log_vendas', [])
         
         if log_vendas_data:
             df_vendas_log = pd.DataFrame(log_vendas_data)
+            
             vendas_editadas = st.data_editor(
                 df_vendas_log, 
                 use_container_width=True, 
@@ -644,6 +658,7 @@ elif menu == "📋 Conferência Geral":
                 key="editor_conferencia_vendas",
                 hide_index=True
             )
+            
             if st.button("💾 SALVAR ALTERAÇÕES EM VENDAS", type="primary"):
                 st.session_state['log_vendas'] = vendas_editadas.to_dict('records')
                 salvar_dados()
@@ -652,13 +667,14 @@ elif menu == "📋 Conferência Geral":
         else:
             st.info("Nenhuma venda registrada no sistema até o momento.")
 
-    # --- ABA 2: ENTRADAS ---
     with tab2:
         st.subheader("📥 Registro de Entradas de Mercadoria")
+        
         log_entradas_data = st.session_state.get('log_entradas', [])
         
         if log_entradas_data:
             df_entradas_log = pd.DataFrame(log_entradas_data)
+            
             entradas_editadas = st.data_editor(
                 df_entradas_log, 
                 use_container_width=True, 
@@ -666,6 +682,7 @@ elif menu == "📋 Conferência Geral":
                 key="editor_conferencia_entradas",
                 hide_index=True
             )
+            
             if st.button("💾 SALVAR ALTERAÇÕES EM ENTRADAS", type="primary"):
                 st.session_state['log_entradas'] = entradas_editadas.to_dict('records')
                 salvar_dados()
@@ -674,7 +691,6 @@ elif menu == "📋 Conferência Geral":
         else:
             st.info("Nenhuma entrada de estoque registrada no sistema.")
 
-    # --- ABA 3: LAUDOS ---
     with tab3:
         st.subheader("🧪 Status e Arquivamento de Laudos")
         laudos_lista = st.session_state.get('log_laudos', [])
@@ -709,9 +725,6 @@ elif menu == "📋 Conferência Geral":
 elif menu == "📦 Estoque":
     st.title("📦 Estoque & Inventário")
 
-    # =========================================================
-    # ÁREA DO MENU SUPERIOR
-    # =========================================================
     c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
     
     with c_busca:
@@ -762,28 +775,20 @@ elif menu == "📦 Estoque":
             st.markdown("---")
             st.markdown("### 🗑️ Remover Produto")
             
-            # --- ÁREA CORRIGIDA (INDENTAÇÃO ARRUMADA) ---
             df_seguro = st.session_state.get('estoque', pd.DataFrame())
-
             if not df_seguro.empty and 'Cod' in df_seguro.columns:
                 opcoes_del = df_seguro.apply(lambda x: f"{x.get('Cod', '')} - {x.get('Produto', '')}", axis=1).tolist()
             else:
-                opcoes_del = ["Estoque Vazio"]
+                opcoes_del = ["Estoque Vazio ou Erro de Carga"]
             
             alvo = st.selectbox("Apagar qual?", [""] + opcoes_del)
-            
-            if st.button("💣 CONFIRMAR EXCLUSÃO", type="primary"):
-                if alvo and alvo != "Estoque Vazio":
-                    try:
-                        c_alvo = alvo.split(" - ")[0]
-                        st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(c_alvo)]
-                        salvar_dados()
-                        st.success("💥 Removido!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
+            if alvo != "" and st.button("💣 CONFIRMAR EXCLUSÃO", type="primary"):
+                c_alvo = alvo.split(" - ")[0]
+                st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Cod'].astype(str) != str(c_alvo)]
+                salvar_dados()
+                st.success("💥 Removido!")
+                st.rerun()
 
-    # --- 2. TABELA DE ESTOQUE ---
     df_exibir = st.session_state['estoque'].copy()
 
     for col in ["Saldo", "Estoque_Minimo", "Preco_Base"]:
@@ -817,7 +822,6 @@ elif menu == "📦 Estoque":
 elif menu == "👥 Clientes":
     st.title("👥 Gestão de Clientes & Precificação")
     
-    # --- 1. CONFIGURAÇÃO INICIAL E ESTADO ---
     if 'edit_mode' not in st.session_state: 
         st.session_state['edit_mode'] = False
 
@@ -828,7 +832,6 @@ elif menu == "👥 Clientes":
         if campo not in st.session_state:
             st.session_state[campo] = 1.0 if campo == 'form_fator' else ""
 
-    # --- 2. FUNÇÕES DE COMANDO ---
     def limpar_campos():
         for campo in campos_padrao:
             st.session_state[campo] = 1.0 if campo == 'form_fator' else ""
@@ -893,7 +896,6 @@ elif menu == "👥 Clientes":
         st.session_state['edit_mode'] = True
         st.toast(f"Editando: {chave}", icon="✏️")
 
-    # --- 3. ÁREA DE IMPORTAÇÃO (PDF) ---
     with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
         arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
         if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
@@ -910,12 +912,9 @@ elif menu == "👥 Clientes":
                     st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
                     st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
                     st.success("Dados extraídos com sucesso!")
-            except NameError: 
-                st.error("Erro: Função de leitura não encontrada. Verifique o início do código.")
             except Exception as e:
                 st.error(f"Erro ao processar: {e}")
 
-    # --- 4. FORMULÁRIO DE CADASTRO ---
     with st.form("form_cliente_principal"):
         st.markdown(f"#### {'✏️ Editando Cliente' if st.session_state['edit_mode'] else '➕ Novo Cliente'}")
         
@@ -945,7 +944,6 @@ elif menu == "👥 Clientes":
     else:
         st.button("🧹 Limpar Campos", on_click=limpar_campos)
     
-    # --- 5. LISTAGEM DE CLIENTES ---
     st.markdown("---")
     st.subheader("📇 Carteira de Clientes")
     
@@ -1033,10 +1031,14 @@ elif menu == "🛠️ Admin / Backup":
                 st.session_state['log_vendas'] = d['vendas']
                 st.session_state['log_entradas'] = d['entradas']
                 st.session_state['log_laudos'] = d['laudos']
-                salvar_dados(); st.success("Restaurado!")
+                salvar_dados()
+                st.success("Restaurado!")
         with t3:
             if st.button("ZERAR TUDO") and st.text_input("Confirma?") == "SIM":
                 st.session_state['clientes_db'] = {}
                 st.session_state['log_vendas'] = []
-                # ... limpar o resto
+                st.session_state['log_entradas'] = []
+                st.session_state['log_laudos'] = []
+                st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
                 salvar_dados()
+                st.success("Sistema resetado!")
