@@ -639,25 +639,27 @@ elif menu == "🧪 Laudos":
     st.markdown("---")
     st.subheader("📋 Controle de Status")
     
-    # 2. Tratamento de Dados (A BLINDAGEM CONTRA O ERRO)
+    # 2. Tratamento de Dados (A BLINDAGEM CONTRA O ERRO DE TIPO)
     laudos = st.session_state.get('log_laudos', [])
     
     if laudos:
         df_view = pd.DataFrame(laudos)
         
-        # Garante que todas as colunas existem para não dar erro de chave
-        for col in ['Status', 'Link_Arquivo', 'Data_Coleta', 'Data_Resultado']:
-            if col not in df_view.columns: df_view[col] = ""
-
-        # Cria ID para saber quem é quem depois de filtrar
+        # Cria ID Original para salvar no lugar certo
         df_view['ID_Original'] = df_view.index 
 
         # Filtra (Tira os Arquivados da tela)
         df_ativos = df_view[df_view['Status'] != 'Arquivado'].copy()
         
-        # --- CORREÇÃO DO ERRO DE DATA (Força conversão limpa) ---
+        # --- CORREÇÃO DO ERRO DE DATA ---
         df_ativos['Data_Coleta'] = pd.to_datetime(df_ativos['Data_Coleta'], dayfirst=True, errors='coerce')
         df_ativos['Data_Resultado'] = pd.to_datetime(df_ativos['Data_Resultado'], dayfirst=True, errors='coerce')
+
+        # --- CORREÇÃO DO ERRO "FLOAT vs TEXT" (AQUI ESTÁ A CURA) ---
+        # Força as colunas de texto a serem string, mesmo se estiverem vazias
+        df_ativos['Link_Arquivo'] = df_ativos['Link_Arquivo'].astype(str).replace('nan', '')
+        df_ativos['Status'] = df_ativos['Status'].astype(str).replace('nan', 'Pendente')
+        df_ativos['Cliente'] = df_ativos['Cliente'].astype(str)
 
         st.info("💡 Dica: Mude para **'Concluído'** ou **'Em Análise'** para atualizar o Dashboard.")
         
@@ -679,7 +681,7 @@ elif menu == "🧪 Laudos":
                     ),
                     "Link_Arquivo": st.column_config.TextColumn("🔗 Link/Obs")
                 },
-                key="editor_laudos_blindado"
+                key="editor_laudos_blindado_v2"
             )
             
             # 4. Botão Salvar
@@ -695,8 +697,8 @@ elif menu == "🧪 Laudos":
                     st.session_state['log_laudos'][idx_real].update({
                         'Data_Coleta': d_c,
                         'Data_Resultado': d_r,
-                        'Status': row['Status'],
-                        'Link_Arquivo': row['Link_Arquivo']
+                        'Status': str(row['Status']),
+                        'Link_Arquivo': str(row['Link_Arquivo'])
                     })
                 
                 salvar_dados()
@@ -705,7 +707,6 @@ elif menu == "🧪 Laudos":
                 
         except Exception as e:
             st.error(f"Erro de compatibilidade: {e}")
-            st.warning("Tente limpar os dados ou contate o suporte.")
             
     else:
         st.info("Nenhum laudo cadastrado.")
@@ -794,6 +795,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
