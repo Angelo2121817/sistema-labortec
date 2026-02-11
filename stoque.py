@@ -3,31 +3,33 @@ import pandas as pd
 from datetime import datetime, timedelta
 import re
 import os
+import html
 import json
-import time
 from pypdf import PdfReader
 from fpdf import FPDF
-from streamlit_gsheets import GSheetsConnection
+from streamlit_gsheets import GSheetsConnection  # <--- TEM QUE TER ESSA LINHA
 import streamlit.components.v1 as components
 
-# ============================================================================
-# CONFIGURAÇÃO INICIAL - ESTADO DA SESSÃO
-# ============================================================================
+# ==============================================================================
+# 1. CONFIGURAÇÃO E CONEXÃO (A IGNIÇÃO)
+# ==============================================================================
+st.set_page_config(page_title="Sistema Integrado v82", layout="wide", page_icon="🧪")
 
+# --- BLOCO DE SEGURANÇA INICIAL ---
 if 'estoque' not in st.session_state:
-    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Minimo'])
+    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
 if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
 if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
-if 'dados_carregados' not in st.session_state: st.session_state['dados_carregados'] = False
 
-BACKUP_FILE = "backup_labortec.json"
-
-# ============================================================================
-# FUNÇÕES DE EXTRAÇÃO PDF
-# ============================================================================
+# --- A CONEXÃO GLOBAL (O SEGREDO ESTÁ AQUI) ---
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception as e:
+    st.error(f"Erro Crítico de Conexão: {e}")
+    st.stop()
 
 def extrair_dados_cetesb(f):
     try:
@@ -40,11 +42,11 @@ def extrair_dados_cetesb(f):
             if cnpj_m:
                 d["CNPJ"] = cnpj_m.group(1)
                 d["Nome"] = line.replace(d["CNPJ"], "").strip()
-                if i + 1 &lt; len(lines):
+                if i + 1 < len(lines):
                     prox = lines[i + 1]
                     cad_m = re.search(r"(\d+-\d+-\d+)", prox)
                     d["End"] = prox.replace(cad_m.group(1), "").strip() if cad_m else prox
-                if i + 2 &lt; len(lines):
+                if i + 2 < len(lines):
                     addr_line = lines[i + 2]
                     cep_m = re.search(r"(\d{5}-\d{3})", addr_line)
                     if cep_m:
@@ -81,7 +83,7 @@ def ler_pdf_antigo(f):
             min_idx = len(fragment)
             for stop in stops:
                 stop_match = re.search(re.escape(stop), fragment, re.IGNORECASE)
-                if stop_match and stop_match.start() &lt; min_idx: min_idx = stop_match.start()
+                if stop_match and stop_match.start() < min_idx: min_idx = stop_match.start()
             return fragment[:min_idx].strip(" :/-|").strip()
         d["Nome"] = extract("Cliente", ["CNPJ", "CPF", "Endereço", "Data:", "Código:"])
         cnpj_match = re.search(r"(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})", core)
@@ -102,17 +104,6 @@ def ler_pdf_antigo(f):
 st.set_page_config(page_title="Sistema Labortec v80", layout="wide", page_icon="🧪")
 
 # ============================================================================
-# CONEXÃO COM GOOGLE SHEETS
-# ============================================================================
-
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    conexao_ok = True
-except Exception as e:
-    st.warning(f"⚠️ Conexão com Google Sheets indisponível: {e}")
-    conexao_ok = False
-
-# ============================================================================
 # FUNÇÕES DE BACKUP E SINCRONIZAÇÃO
 # ============================================================================
 
@@ -121,12 +112,11 @@ def obter_horario_br():
 
 def obter_saudacao():
     hora = obter_horario_br().hour
-    if 5 &lt;= hora &lt; 12: return "Bom dia"
-    elif 12 &lt;= hora &lt; 18: return "Boa tarde"
+    if 5 <= hora < 12: return "Bom dia"
+    elif 12 <= hora < 18: return "Boa tarde"
     return "Boa noite"
 
 def realizar_backup_local():
-    """Salva dados no arquivo JSON local"""
     try:
         dados_backup = {
             "estoque": st.session_state.get("estoque", pd.DataFrame()).to_dict("records"),
@@ -138,13 +128,10 @@ def realizar_backup_local():
         }
         with open(BACKUP_FILE, "w", encoding="utf-8") as f:
             json.dump(dados_backup, f, ensure_ascii=False, indent=4)
-        return True
     except Exception as e:
-        st.error(f"Erro ao fazer backup local: {e}")
-        return False
+        st.error(f"Erro ao fazer backup: {e}")
 
 def carregar_backup_local():
-    """Carrega dados do arquivo JSON local"""
     try:
         if os.path.exists(BACKUP_FILE):
             with open(BACKUP_FILE, "r", encoding="utf-8") as f:
@@ -161,98 +148,13 @@ def carregar_backup_local():
         st.error(f"Erro ao carregar backup: {e}")
     return False
 
-def carregar_dados_gsheets():
-    """Carrega dados do Google Sheets com tratamento de erro"""
-    if not conexao_ok:
-        return False
-    
-    try:
-        # Carrega Estoque
-        df_est = conn.read(worksheet="Estoque", ttl=0)
-        if isinstance(df_est, pd.DataFrame) and not df_est.empty:
-            st.session_state["estoque"] = df_est
-        time.sleep(1)
-        
-        # Carrega Clientes
-        df_cli = conn.read(worksheet="Clientes", ttl=0)
-        if isinstance(df_cli, pd.DataFrame) and not df_cli.empty:
-            if "Nome" in df_cli.columns:
-                st.session_state["clientes_db"] = df_cli.set_index("Nome").to_dict("index")
-        time.sleep(1)
-        
-        # Carrega Logs
-        for aba in ["Log_Vendas", "Log_Entradas", "Log_Laudos", "Avisos"]:
-            try:
-                df = conn.read(worksheet=aba, ttl=0)
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    if aba == "Log_Laudos":
-                        st.session_state['log_laudos'] = df.to_dict("records")
-                    elif aba in ["Log_Vendas", "Log_Entradas"]:
-                        st.session_state[aba.lower()] = df.to_dict("records")
-                    elif aba == "Avisos":
-                        try:
-                            st.session_state['aviso_geral'] = str(df.iloc[0].values[0])
-                        except:
-                            st.session_state['aviso_geral'] = ""
-                else:
-                    if aba == "Avisos": st.session_state['aviso_geral'] = ""
-                    else: st.session_state[aba.lower()] = []
-            except:
-                pass
-            time.sleep(1)
-        
-        st.session_state['dados_carregados'] = True
-        realizar_backup_local()
-        return True
-    except Exception as e:
-        st.warning(f"⚠️ Erro ao carregar Google Sheets: {e}")
-        return False
-
-def salvar_dados_gsheets():
-    """Salva dados no Google Sheets"""
-    if not conexao_ok:
-        st.warning("⚠️ Google Sheets indisponível. Dados salvos localmente.")
-        realizar_backup_local()
-        return False
-    
-    try:
-        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
-        time.sleep(1)
-        
-        if st.session_state.get("clientes_db"):
-            df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
-            conn.update(worksheet="Clientes", data=df_clis)
-        time.sleep(1)
-        
-        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
-        time.sleep(1)
-        
-        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
-        time.sleep(1)
-        
-        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
-        time.sleep(1)
-        
-        df_aviso = pd.DataFrame({"Mensagem": [str(st.session_state.get('aviso_geral', ""))]})
-        conn.update(worksheet="Avisos", data=df_aviso)
-        
-        st.toast("✅ Dados sincronizados com Google Sheets!", icon="☁️")
-        realizar_backup_local()
-        return True
-    except Exception as e:
-        st.warning(f"⚠️ Erro ao salvar no Google Sheets: {e}")
-        realizar_backup_local()
-        return False
-
 def salvar_dados():
-    """Função principal de salvamento"""
-    salvar_dados_gsheets()
+    realizar_backup_local()
+    st.toast("✅ Dados salvos!", icon="💾")
 
 # Carrega dados na primeira execução
 if not st.session_state['dados_carregados']:
-    with st.spinner("⏳ Carregando dados..."):
-        if not carregar_dados_gsheets():
-            carregar_backup_local()
+    carregar_backup_local()
 
 # ============================================================================
 # SEGURANÇA E LOGIN
@@ -366,7 +268,7 @@ def gerar_pdf_estoque(usuario, df_estoque):
         pdf.cell(w[1], 6, str(row.get('Produto', ''))[:45], 1, 0, "L")
         pdf.cell(w[2], 6, str(row.get('Marca', ''))[:15], 1, 0, "C")
         pdf.cell(w[3], 6, str(row.get('Unidade', 'UN')), 1, 0, "C")
-        if saldo &lt;= 0: pdf.set_text_color(200, 0, 0)
+        if saldo <= 0: pdf.set_text_color(200, 0, 0)
         else: pdf.set_text_color(0, 0, 0)
         pdf.cell(w[4], 6, f"{saldo:,.2f}", 1, 0, "R")
         pdf.set_text_color(0, 0, 0)
@@ -390,11 +292,6 @@ def gerar_pdf_estoque(usuario, df_estoque):
 
 st.sidebar.title("🛠️ MENU GERAL")
 st.sidebar.success(f"👤 {obter_saudacao()}, {st.session_state['usuario_nome']}!")
-
-if conexao_ok:
-    st.sidebar.caption("✅ Google Sheets: Conectado")
-else:
-    st.sidebar.caption("⚠️ Google Sheets: Offline (usando backup)")
 
 st.sidebar.markdown("---")
 with st.sidebar.expander("📢 DEFINIR AVISO"):
@@ -420,7 +317,7 @@ menu = st.sidebar.radio("Navegar:", [
 ])
 
 # ============================================================================
-# PÁGINAS DO SISTEMA (RESTO DO CÓDIGO IGUAL AO ANTERIOR)
+# PÁGINAS DO SISTEMA
 # ============================================================================
 
 if menu == "📊 Dashboard":
@@ -442,7 +339,7 @@ if menu == "📊 Dashboard":
         try:
             df_est['Saldo_Num'] = pd.to_numeric(df_est['Saldo'], errors='coerce').fillna(0)
             df_est['Estoque_Minimo_Num'] = pd.to_numeric(df_est['Estoque_Minimo'], errors='coerce').fillna(0)
-            criticos = df_est[df_est['Saldo_Num'] &lt; df_est['Estoque_Minimo_Num']].copy()
+            criticos = df_est[df_est['Saldo_Num'] < df_est['Estoque_Minimo_Num']].copy()
             if not criticos.empty: st.dataframe(criticos[['Cod', 'Produto', 'Saldo', 'Estoque_Minimo']], use_container_width=True, hide_index=True)
             else: st.info("👍 Estoque OK.")
         except: st.info("Erro ao calcular estoque.")
@@ -521,7 +418,7 @@ elif menu == "💰 Vendas & Orçamentos":
     d_cli = st.session_state['clientes_db'][cli]
     try:
         fator_cliente = float(d_cli.get('Fator', 1.0))
-        if fator_cliente &lt;= 0: fator_cliente = 1.0
+        if fator_cliente <= 0: fator_cliente = 1.0
     except: fator_cliente = 1.0
     df_v = st.session_state['estoque'].copy()
     if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
@@ -827,7 +724,7 @@ elif menu == "👥 Clientes":
                 if fator == 1.0:
                     txt_fator = "NORMAL"
                     cor_fator = "blue"
-                elif fator &lt; 1.0:
+                elif fator < 1.0:
                     desc = int(round((1.0 - fator) * 100))
                     txt_fator = f"DESC. {desc}%"
                     cor_fator = "green"
@@ -904,3 +801,7 @@ elif menu == "🛠️ Admin / Backup":
                 salvar_dados()
                 st.success("Sistema resetado!")
                 st.rerun()
+
+
+
+
