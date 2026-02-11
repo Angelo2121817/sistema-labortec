@@ -10,22 +10,7 @@ from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection  # <--- ESTA LINHA É A QUE FALTAVA!
 import streamlit.components.v1 as components
 # --- 🕵️‍♂️ RAIO-X DO GOOGLE SHEETS ---
-st.write("--- INÍCIO DO RAIO-X ---")
-try:
-    # Força limpar o cache de dados antigos
-    st.cache_data.clear()
-    
-    conn_x = st.connection("gsheets", type=GSheetsConnection)
-    df_raw = conn_x.read(worksheet="Estoque", ttl=0) # Tenta ler a aba Estoque
-    
-    st.write(f"📂 O Google enviou {len(df_raw)} linhas.")
-    st.write("👇 Aqui está o que chegou cru (sem tratamento):")
-    st.dataframe(df_raw.head()) # Mostra as 5 primeiras linhas
-    
-except Exception as e:
-    st.error(f"❌ O Google devolveu erro: {e}")
-    st.warning("⚠️ DICA: Verifique se o nome da aba lá embaixo na planilha é EXATAMENTE 'Estoque' (com E maiúsculo).")
-st.write("--- FIM DO RAIO-X ---")
+
 # --- 📡 DIAGNÓSTICO DE CONEXÃO (AGORA VAI FUNCIONAR) ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -826,6 +811,7 @@ elif menu == "🛠️ Admin / Backup":
                 salvar_dados()
                 st.success("Sistema resetado!")
                 st.rerun()
+
 
 
 
