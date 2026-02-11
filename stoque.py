@@ -7,39 +7,29 @@ import html
 import json
 from pypdf import PdfReader
 from fpdf import FPDF
-from streamlit_gsheets import GSheetsConnection  # <--- ESTA LINHA É A QUE FALTAVA!
+from streamlit_gsheets import GSheetsConnection  # <--- TEM QUE TER ESSA LINHA
 import streamlit.components.v1 as components
-# --- 🕵️‍♂️ RAIO-X DO GOOGLE SHEETS ---
 
-# --- 📡 DIAGNÓSTICO DE CONEXÃO (AGORA VAI FUNCIONAR) ---
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # Tenta ler só o cabeçalho para ver se conecta
-    teste = conn.read(worksheet="Estoque", ttl=0, usecols=[0])
-    st.toast("✅ Conexão com Google Sheets: OK!", icon="📡")
-except Exception as e:
-    st.error(f"❌ ERRO CRÍTICO DE CONEXÃO: {e}")
-    st.stop()
+# ==============================================================================
+# 1. CONFIGURAÇÃO E CONEXÃO (A IGNIÇÃO)
+# ==============================================================================
+st.set_page_config(page_title="Sistema Integrado v82", layout="wide", page_icon="🧪")
 
-# ... O RESTO DO SEU CÓDIGO VEM ABAIXO DAQUI ...
-# ============================================================================
-# CONFIGURAÇÃO INICIAL - ESTADO DA SESSÃO
-# ============================================================================
-
+# --- BLOCO DE SEGURANÇA INICIAL ---
 if 'estoque' not in st.session_state:
-    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Saldo', 'Estoque_Minimo'])
+    st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
 if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
 if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
-if 'dados_carregados' not in st.session_state: st.session_state['dados_carregados'] = False
 
-BACKUP_FILE = "backup_labortec.json"
-
-# ============================================================================
-# FUNÇÕES DE EXTRAÇÃO PDF
-# ============================================================================
+# --- A CONEXÃO GLOBAL (O SEGREDO ESTÁ AQUI) ---
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception as e:
+    st.error(f"Erro Crítico de Conexão: {e}")
+    st.stop()
 
 def extrair_dados_cetesb(f):
     try:
@@ -811,6 +801,7 @@ elif menu == "🛠️ Admin / Backup":
                 salvar_dados()
                 st.success("Sistema resetado!")
                 st.rerun()
+
 
 
 
