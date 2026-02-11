@@ -467,7 +467,29 @@ elif menu == "💰 Vendas & Orçamentos":
 
 elif menu == "👥 Clientes":
     st.title("👥 Clientes")
-    
+# --- ÁREA DE IMPORTAÇÃO DE PDF (RESTAURADA) ---
+    with st.expander("📂 Importar Dados de Licença (CETESB/PDF)"):
+        arquivo_pdf = st.file_uploader("Arraste o PDF aqui:", type="pdf")
+        if arquivo_pdf is not None and st.button("🔄 Processar PDF"):
+            try:
+                # Chama a função que já existe lá no topo
+                dados_lidos = ler_pdf_antigo(arquivo_pdf) 
+                if dados_lidos:
+                    # Preenche o formulário automaticamente
+                    st.session_state['form_nome'] = str(dados_lidos.get('Nome', ''))
+                    st.session_state['form_cnpj'] = str(dados_lidos.get('CNPJ', ''))
+                    st.session_state['form_end'] = str(dados_lidos.get('End', ''))
+                    st.session_state['form_cid'] = str(dados_lidos.get('Cidade', ''))
+                    st.session_state['form_uf'] = str(dados_lidos.get('UF', ''))
+                    st.session_state['form_cep'] = str(dados_lidos.get('CEP', ''))
+                    st.session_state['form_tel'] = str(dados_lidos.get('Tel', ''))
+                    st.session_state['form_email'] = str(dados_lidos.get('Email', ''))
+                    st.session_state['form_cod'] = str(dados_lidos.get('Cod_Cli', ''))
+                    st.success("✅ Dados extraídos! Verifique o formulário abaixo.")
+                else:
+                    st.warning("Não consegui ler os dados desse PDF.")
+            except Exception as e:
+                st.error(f"Erro ao processar: {e}")    
     # Formulário Compacto
     with st.expander("➕ Novo / Editar Cliente", expanded=not st.session_state['clientes_db']):
         c1, c2 = st.columns([3, 1])
@@ -552,4 +574,5 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
