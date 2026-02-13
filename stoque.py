@@ -364,7 +364,7 @@ if menu == "📊 Dashboard":
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="titulo-centro">📊 CENTRO DE COMANDO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="titulo-centro">📊 SISTEMA DE CONTROLE LABORTEC/METAL QUÍMICA</div>', unsafe_allow_html=True)
     
     # --- 1. MURAL E ESTOQUE (ALERTAS GIGANTES) ---
     if st.session_state.get('aviso_geral'):
@@ -999,6 +999,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
