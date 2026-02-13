@@ -442,7 +442,7 @@ elif menu == "📦 Estoque":
     st.session_state['estoque']['Estoque_Min'] = pd.to_numeric(st.session_state['estoque']['Estoque_Min'], errors='coerce').fillna(1.0).astype(float)
 
     LISTA_EMBALAGENS = [
-        "Bombona de 30 kg", "Bombona de 35 kg", "Embalagem 1L", 
+        "Bombona de 30 kg", "Bombona de 35 kg", "Embalagem 1L", "Embalagem 50 Kg" 
         "Embalagem de 5 L", "Saco de 20 kg", "Saco de 25 kg", "Bombona de 25 kg"
     ]
 
@@ -999,6 +999,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
