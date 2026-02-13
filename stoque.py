@@ -435,13 +435,22 @@ elif menu == "📦 Estoque":
     st.title("📦 Controle Tático de Estoque")
     
     # --- 1. PADRONIZAÇÃO DE CALIBRE (FORÇA TIPO NUMÉRICO) ---
-    # Garantimos que as colunas existam
     if 'Estoque_Min' not in st.session_state['estoque'].columns:
         st.session_state['estoque']['Estoque_Min'] = 10.0
     
-    # FORÇA TUDO PARA FLOAT (Resolve o problema de 10 vs 10.00)
     st.session_state['estoque']['Saldo'] = pd.to_numeric(st.session_state['estoque']['Saldo'], errors='coerce').fillna(0).astype(float)
     st.session_state['estoque']['Estoque_Min'] = pd.to_numeric(st.session_state['estoque']['Estoque_Min'], errors='coerce').fillna(1.0).astype(float)
+
+    # Lista de embalagens padronizada conforme sua solicitação
+    LISTA_EMBALAGENS = [
+        "Bombona de 30 kg", 
+        "Bombona de 35 kg", 
+        "Embalagem 1L", 
+        "Embalagem de 5 L", 
+        "Saco de 20 kg", 
+        "Saco de 25 kg", 
+        "Bombona de 25 kg"
+    ]
 
     # Busca e Ferramentas
     c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
@@ -456,7 +465,8 @@ elif menu == "📦 Estoque":
     with c_ferramentas:
         with st.popover("🛠️ NOVO", use_container_width=True):
             with st.form("add_prod_v3", clear_on_submit=True):
-                emb_n = st.selectbox("Embalagem", ["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX"])
+                # AQUI MUDAMOS AS OPÇÕES DE EMBALAGEM NO CADASTRO
+                emb_n = st.selectbox("Embalagem", LISTA_EMBALAGENS)
                 nome_n = st.text_input("Nome do Produto")
                 c1, c2 = st.columns(2)
                 saldo_n = c1.number_input("Saldo Inicial", min_value=0.0, format="%.2f")
@@ -477,14 +487,12 @@ elif menu == "📦 Estoque":
     if busca:
         df_ex = df_ex[df_ex['Produto'].str.contains(busca, case=False)]
 
-    # Lógica do Radar (Bolinha de Status)
     def definir_radar(row):
         if row['Saldo'] <= row['Estoque_Min']: return "🔴 CRÍTICO"
         return "🟢 OK"
     
     if not df_ex.empty:
         df_ex['Status'] = df_ex.apply(definir_radar, axis=1)
-        # Referência para a barra de progresso (maior valor entre saldo e mínimo)
         max_valor = max(df_ex['Saldo'].max(), df_ex['Estoque_Min'].max(), 1.0)
     else:
         max_valor = 100.0
@@ -499,10 +507,10 @@ elif menu == "📦 Estoque":
         column_order=["Status", "Unidade", "Produto", "Saldo", "Estoque_Min"],
         column_config={
             "Status": st.column_config.TextColumn("🚨 Radar", width="small", disabled=True),
-            "Unidade": st.column_config.SelectboxColumn("📦 Emb.", options=["KG", "SC 25KG", "SC 50KG", "BB 20L", "BB 50L", "IBC", "UN", "CX"], width="small"),
+            # AQUI MUDAMOS AS OPÇÕES NA EDIÇÃO DA TABELA
+            "Unidade": st.column_config.SelectboxColumn("📦 Emb.", options=LISTA_EMBALAGENS, width="medium"),
             "Produto": st.column_config.TextColumn("📋 Material", disabled=True, width="large"),
             
-            # FORMATO PADRONIZADO PARA DUAS CASAS DECIMAIS
             "Saldo": st.column_config.ProgressColumn(
                 "📊 Saldo Atual",
                 format="%.2f", 
@@ -512,18 +520,15 @@ elif menu == "📦 Estoque":
             ),
             "Estoque_Min": st.column_config.NumberColumn(
                 "🎯 Mínimo", 
-                format="%.2f", # Força aparecer como 10.00
+                format="%.2f", 
                 step=0.01,
                 width="small"
             )
         }
     )
 
-    # Lógica de Salvamento
     if not ed.equals(df_ex):
-        # Remove a coluna calculada 'Status' antes de salvar
         ed_save = ed.drop(columns=['Status']) if 'Status' in ed.columns else ed
-        # Garante que os dados editados voltem como float
         ed_save['Saldo'] = ed_save['Saldo'].astype(float)
         ed_save['Estoque_Min'] = ed_save['Estoque_Min'].astype(float)
         
@@ -996,6 +1001,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
