@@ -434,22 +434,16 @@ if menu == "📊 Dashboard":
 elif menu == "📦 Estoque":
     st.title("📦 Controle Tático de Estoque")
     
-    # --- 1. PADRONIZAÇÃO DE CALIBRE (FORÇA TIPO NUMÉRICO) ---
+    # --- 1. PADRONIZAÇÃO DE CALIBRE ---
     if 'Estoque_Min' not in st.session_state['estoque'].columns:
         st.session_state['estoque']['Estoque_Min'] = 10.0
     
     st.session_state['estoque']['Saldo'] = pd.to_numeric(st.session_state['estoque']['Saldo'], errors='coerce').fillna(0).astype(float)
     st.session_state['estoque']['Estoque_Min'] = pd.to_numeric(st.session_state['estoque']['Estoque_Min'], errors='coerce').fillna(1.0).astype(float)
 
-    # Lista de embalagens padronizada conforme sua solicitação
     LISTA_EMBALAGENS = [
-        "Bombona de 30 kg", 
-        "Bombona de 35 kg", 
-        "Embalagem 1L", 
-        "Embalagem de 5 L", 
-        "Saco de 20 kg", 
-        "Saco de 25 kg", 
-        "Bombona de 25 kg"
+        "Bombona de 30 kg", "Bombona de 35 kg", "Embalagem 1L", 
+        "Embalagem de 5 L", "Saco de 20 kg", "Saco de 25 kg", "Bombona de 25 kg"
     ]
 
     # Busca e Ferramentas
@@ -463,16 +457,17 @@ elif menu == "📦 Estoque":
             st.download_button("⬇️ BAIXAR", data=pdf_bytes, file_name="Estoque.pdf", mime="application/pdf")
     
     with c_ferramentas:
-        with st.popover("🛠️ NOVO", use_container_width=True):
-            with st.form("add_prod_v3", clear_on_submit=True):
-                # AQUI MUDAMOS AS OPÇÕES DE EMBALAGEM NO CADASTRO
+        with st.popover("🛠️ FERRAMENTAS", use_container_width=True):
+            # --- SUB-ABA: CADASTRAR ---
+            st.markdown("### ➕ Novo Material")
+            with st.form("add_prod_v4", clear_on_submit=True):
                 emb_n = st.selectbox("Embalagem", LISTA_EMBALAGENS)
                 nome_n = st.text_input("Nome do Produto")
                 c1, c2 = st.columns(2)
                 saldo_n = c1.number_input("Saldo Inicial", min_value=0.0, format="%.2f")
                 min_n = c2.number_input("Estoque Mínimo", min_value=0.0, value=10.0, format="%.2f")
                 
-                if st.form_submit_button("Cadastrar"):
+                if st.form_submit_button("Cadastrar no Inventário"):
                     cod_auto = datetime.now().strftime("%H%M")
                     novo = {
                         "Cod": cod_auto, "Produto": nome_n, "Preco_Base": 0.0, 
@@ -481,6 +476,23 @@ elif menu == "📦 Estoque":
                     }
                     st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
                     salvar_dados(); st.rerun()
+
+            st.markdown("---")
+            
+            # --- SUB-ABA: EXCLUIR (A NOVIDADE) ---
+            st.markdown("### 🗑️ Eliminar Material")
+            lista_prods = sorted(st.session_state['estoque']['Produto'].tolist())
+            item_para_excluir = st.selectbox("Selecione para remover:", [""] + lista_prods)
+            
+            if st.button("💣 EXCLUIR DEFINITIVAMENTE", type="secondary", use_container_width=True):
+                if item_para_excluir and item_para_excluir != "":
+                    # Filtra o dataframe removendo o item selecionado
+                    st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Produto'] != item_para_excluir]
+                    salvar_dados()
+                    st.toast(f"Item {item_para_excluir} removido!", icon="🗑️")
+                    st.rerun()
+                else:
+                    st.warning("Selecione um item primeiro.")
 
     # --- 2. PREPARAÇÃO DA TABELA ---
     df_ex = st.session_state['estoque'].copy()
@@ -507,23 +519,10 @@ elif menu == "📦 Estoque":
         column_order=["Status", "Unidade", "Produto", "Saldo", "Estoque_Min"],
         column_config={
             "Status": st.column_config.TextColumn("🚨 Radar", width="small", disabled=True),
-            # AQUI MUDAMOS AS OPÇÕES NA EDIÇÃO DA TABELA
             "Unidade": st.column_config.SelectboxColumn("📦 Emb.", options=LISTA_EMBALAGENS, width="medium"),
             "Produto": st.column_config.TextColumn("📋 Material", disabled=True, width="large"),
-            
-            "Saldo": st.column_config.ProgressColumn(
-                "📊 Saldo Atual",
-                format="%.2f", 
-                min_value=0,
-                max_value=max_valor,
-                width="medium"
-            ),
-            "Estoque_Min": st.column_config.NumberColumn(
-                "🎯 Mínimo", 
-                format="%.2f", 
-                step=0.01,
-                width="small"
-            )
+            "Saldo": st.column_config.ProgressColumn("📊 Saldo Atual", format="%.2f", min_value=0, max_value=max_valor, width="medium"),
+            "Estoque_Min": st.column_config.NumberColumn("🎯 Mínimo", format="%.2f", step=0.01, width="small")
         }
     )
 
@@ -531,7 +530,6 @@ elif menu == "📦 Estoque":
         ed_save = ed.drop(columns=['Status']) if 'Status' in ed.columns else ed
         ed_save['Saldo'] = ed_save['Saldo'].astype(float)
         ed_save['Estoque_Min'] = ed_save['Estoque_Min'].astype(float)
-        
         st.session_state["estoque"].update(ed_save)
         salvar_dados(); st.rerun()
 elif menu == "💰 Vendas & Orçamentos":
@@ -1001,7 +999,6 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
-
 
 
 
