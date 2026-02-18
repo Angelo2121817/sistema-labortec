@@ -799,20 +799,60 @@ elif menu == "👥 Clientes":
     else:
         st.info("Nenhum cliente cadastrado.")
 elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Entrada")
-    opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
-    sel = st.selectbox("Produto", opcoes)
-    qtd = st.number_input("Qtd", min_value=0.0)
-    if st.button("Confirmar Entrada"):
-        cod = sel.split(" - ")[0]
-        mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
-        if not st.session_state['estoque'][mask].empty:
-            idx = st.session_state['estoque'][mask].index[0]
-            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
-            st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
-            st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'User': st.session_state['usuario_nome']})
-            salvar_dados(); st.success("Estoque atualizado!"); st.rerun()
+    st.title("📥 Entrada de Materiais")
+    
+    # --- RECONSTRUÇÃO DINÂMICA (Puxa os produtos atualizados) ---
+    df_stk_ref = st.session_state['estoque'].copy()
+    
+    if df_stk_ref.empty:
+        st.warning("⚠️ O estoque está vazio. Cadastre materiais no menu Estoque primeiro.")
+    else:
+        # Criamos a lista de seleção baseada no que REALMENTE existe no estoque agora
+        df_stk_ref['Opcao'] = df_stk_ref.apply(lambda x: f"{str(x.get('Cod', 'S/C'))} - {str(x.get('Produto', 'Sem Nome'))}", axis=1)
+        lista_opcoes = sorted(df_stk_ref['Opcao'].tolist())
 
+        with st.form("form_entrada_estoque", clear_on_submit=True):
+            sel = st.selectbox("Selecione o Material:", lista_opcoes)
+            
+            c1, c2 = st.columns(2)
+            qtd_entrada = c1.number_input("Qtd a Adicionar:", min_value=0.0, format="%.2f", step=1.0)
+            operador = c2.text_input("Operador:", value=st.session_state['usuario_nome'], disabled=True)
+            
+            if st.form_submit_button("📥 CONFIRMAR ENTRADA"):
+                if qtd_entrada > 0:
+                    # Extração cirúrgica do Código e Nome
+                    try:
+                        partes = sel.split(" - ")
+                        cod_alvo = partes[0]
+                        nome_alvo = partes[1]
+                        
+                        # Localiza o índice na memória (session_state)
+                        mask = (st.session_state['estoque']['Cod'].astype(str) == str(cod_alvo)) & \
+                               (st.session_state['estoque']['Produto'] == nome_alvo)
+                        
+                        if not st.session_state['estoque'][mask].empty:
+                            idx = st.session_state['estoque'][mask].index[0]
+                            # Soma no Saldo (que é o nome da sua coluna atual)
+                            saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+                            st.session_state['estoque'].at[idx, 'Saldo'] = saldo_atual + qtd_entrada
+                            
+                            # Registra no log
+                            st.session_state['log_entradas'].append({
+                                'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
+                                'Produto': nome_alvo,
+                                'Qtd': qtd_entrada,
+                                'User': st.session_state['usuario_nome']
+                            })
+                            
+                            salvar_dados()
+                            st.success(f"✅ Sucesso! {nome_alvo} atualizado.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Alvo não localizado no banco principal.")
+                    except Exception as e:
+                        st.error(f"Erro na operação: {e}")
+                else:
+                    st.warning("Informe uma quantidade válida.")
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos & Status")
     
@@ -999,6 +1039,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
