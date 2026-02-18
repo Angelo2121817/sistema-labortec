@@ -431,58 +431,388 @@ if menu == "📊 Dashboard":
             dv = pd.DataFrame(vendas)
             top = dv.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top, horizontal=True)
-elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Entrada de Materiais")
+elif menu == "📦 Estoque":
+    st.title("📦 Controle Tático de Estoque")
     
-    # --- RECONSTRUÇÃO DO RADAR (BUSCA DADOS FRESCOS) ---
-    df_stk = st.session_state['estoque'].copy()
+    # --- 1. PADRONIZAÇÃO DE CALIBRE ---
+    if 'Estoque_Min' not in st.session_state['estoque'].columns:
+        st.session_state['estoque']['Estoque_Min'] = 10.0
     
-    if df_stk.empty:
-        st.warning("⚠️ O estoque está vazio. Cadastre produtos primeiro.")
-        st.stop()
+    st.session_state['estoque']['Saldo'] = pd.to_numeric(st.session_state['estoque']['Saldo'], errors='coerce').fillna(0).astype(float)
+    st.session_state['estoque']['Estoque_Min'] = pd.to_numeric(st.session_state['estoque']['Estoque_Min'], errors='coerce').fillna(1.0).astype(float)
 
-    # Criamos a lista de opções garantindo que nomes novos apareçam
-    df_stk['Opcao'] = df_stk.apply(lambda x: f"{x.get('Cod', 'S/C')} - {x.get('Produto', 'Sem Nome')}", axis=1)
-    lista_opcoes = sorted(df_stk['Opcao'].tolist())
+    LISTA_EMBALAGENS = [
+        "Bombona de 30 kg", "Bombona de 35 kg", "Embalagem 1L", "Embalagem 50 Kg", 
+        "Embalagem de 5 L", "Saco de 20 kg", "Saco de 25 kg", "Bombona de 25 kg"
+    ]
 
-    with st.form("form_entrada", clear_on_submit=True):
-        sel = st.selectbox("Selecione o Produto para Abastecer:", lista_opcoes)
-        
-        c1, c2 = st.columns(2)
-        qtd_entrada = c1.number_input("Quantidade a Adicionar:", min_value=0.0, format="%.2f", step=1.0)
-        # Mostra quem está operando
-        operador = c2.text_input("Operador:", value=st.session_state['usuario_nome'], disabled=True)
-        
-        if st.form_submit_button("📥 CONFIRMAR ENTRADA NO ESTOQUE"):
-            if qtd_entrada > 0:
-                # Localiza o produto exato pelo nome/codigo
-                partes = sel.split(" - ")
-                cod_alvo = partes[0]
-                nome_alvo = partes[1]
+    # Busca e Ferramentas
+    c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
+    with c_busca:
+        busca = st.text_input("Filtrar:", placeholder="🔍 Buscar Produto...", label_visibility="collapsed")
+    
+    with c_relat:
+        if st.button("📄 PDF Estoque", use_container_width=True):
+            pdf_bytes = gerar_pdf_estoque(st.session_state['usuario_nome'], st.session_state['estoque'])
+            st.download_button("⬇️ BAIXAR", data=pdf_bytes, file_name="Estoque.pdf", mime="application/pdf")
+    
+    with c_ferramentas:
+        with st.popover("🛠️ FERRAMENTAS", use_container_width=True):
+            # --- SUB-ABA: CADASTRAR ---
+            st.markdown("### ➕ Novo Material")
+            with st.form("add_prod_v4", clear_on_submit=True):
+                emb_n = st.selectbox("Embalagem", LISTA_EMBALAGENS)
+                nome_n = st.text_input("Nome do Produto")
+                c1, c2 = st.columns(2)
+                saldo_n = c1.number_input("Saldo Inicial", min_value=0.0, format="%.2f")
+                min_n = c2.number_input("Estoque Mínimo", min_value=0.0, value=10.0, format="%.2f")
                 
-                # Aplica a carga no Saldo na memória principal (session_state)
-                mask = (st.session_state['estoque']['Cod'].astype(str) == str(cod_alvo)) & (st.session_state['estoque']['Produto'] == nome_alvo)
-                
-                if not st.session_state['estoque'][mask].empty:
-                    idx = st.session_state['estoque'][mask].index[0]
-                    saldo_antigo = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
-                    st.session_state['estoque'].at[idx, 'Saldo'] = saldo_antigo + qtd_entrada
-                    
-                    # Registra no log para conferência posterior
-                    st.session_state['log_entradas'].append({
-                        'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
-                        'Produto': nome_alvo,
-                        'Qtd': qtd_entrada,
-                        'User': st.session_state['usuario_nome']
-                    })
-                    
+                if st.form_submit_button("Cadastrar no Inventário"):
+                    cod_auto = datetime.now().strftime("%H%M")
+                    novo = {
+                        "Cod": cod_auto, "Produto": nome_n, "Preco_Base": 0.0, 
+                        "Saldo": float(saldo_n), "Estoque_Min": float(min_n), 
+                        "Marca": "GERAL", "Unidade": emb_n
+                    }
+                    st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
+                    salvar_dados(); st.rerun()
+
+            st.markdown("---")
+            
+            # --- SUB-ABA: EXCLUIR (A NOVIDADE) ---
+            st.markdown("### 🗑️ Eliminar Material")
+            lista_prods = sorted(st.session_state['estoque']['Produto'].tolist())
+            item_para_excluir = st.selectbox("Selecione para remover:", [""] + lista_prods)
+            
+            if st.button("💣 EXCLUIR DEFINITIVAMENTE", type="secondary", use_container_width=True):
+                if item_para_excluir and item_para_excluir != "":
+                    # Filtra o dataframe removendo o item selecionado
+                    st.session_state['estoque'] = st.session_state['estoque'][st.session_state['estoque']['Produto'] != item_para_excluir]
                     salvar_dados()
-                    st.success(f"✅ Carga confirmada! {nome_alvo}: +{qtd_entrada}")
+                    st.toast(f"Item {item_para_excluir} removido!", icon="🗑️")
                     st.rerun()
                 else:
-                    st.error("❌ Erro ao localizar produto no banco de dados.")
+                    st.warning("Selecione um item primeiro.")
+
+    # --- 2. PREPARAÇÃO DA TABELA ---
+    df_ex = st.session_state['estoque'].copy()
+    if busca:
+        df_ex = df_ex[df_ex['Produto'].str.contains(busca, case=False)]
+
+    def definir_radar(row):
+        if row['Saldo'] <= row['Estoque_Min']: return "🔴 CRÍTICO"
+        return "🟢 OK"
+    
+    if not df_ex.empty:
+        df_ex['Status'] = df_ex.apply(definir_radar, axis=1)
+        max_valor = max(df_ex['Saldo'].max(), df_ex['Estoque_Min'].max(), 1.0)
+    else:
+        max_valor = 100.0
+
+    st.markdown("---")
+
+    # --- 3. O EDITOR PADRONIZADO ---
+    ed = st.data_editor(
+        df_ex,
+        use_container_width=True,
+        hide_index=True,
+        column_order=["Status", "Unidade", "Produto", "Saldo", "Estoque_Min"],
+        column_config={
+            "Status": st.column_config.TextColumn("🚨 Radar", width="small", disabled=True),
+            "Unidade": st.column_config.SelectboxColumn("📦 Emb.", options=LISTA_EMBALAGENS, width="medium"),
+            "Produto": st.column_config.TextColumn("📋 Material", disabled=True, width="large"),
+            "Saldo": st.column_config.ProgressColumn("📊 Saldo Atual", format="%.2f", min_value=0, max_value=max_valor, width="medium"),
+            "Estoque_Min": st.column_config.NumberColumn("🎯 Mínimo", format="%.2f", step=0.01, width="small")
+        }
+    )
+
+    if not ed.equals(df_ex):
+        ed_save = ed.drop(columns=['Status']) if 'Status' in ed.columns else ed
+        ed_save['Saldo'] = ed_save['Saldo'].astype(float)
+        ed_save['Estoque_Min'] = ed_save['Estoque_Min'].astype(float)
+        st.session_state["estoque"].update(ed_save)
+        salvar_dados(); st.rerun()
+elif menu == "💰 Vendas & Orçamentos":
+    st.title("💰 Vendas Inteligentes")
+    
+    if not st.session_state.get('clientes_db'): 
+        st.warning("⚠️ Cadastre clientes primeiro."); st.stop()
+    
+    # 1. Seleção de Alvos (Cliente e Vendedor)
+    c1, c2 = st.columns([2, 1])
+    lista_clientes = sorted(list(st.session_state['clientes_db'].keys()))
+    cli = c1.selectbox("Selecione o Cliente", lista_clientes)
+    vend = c2.text_input("Vendedor", st.session_state.get('usuario_nome', 'Sistema'))
+    d_cli = st.session_state['clientes_db'][cli]
+    
+    # 2. Fator de Preço (Tabela do Cliente)
+    try: fator_cliente = float(d_cli.get('Fator', 1.0))
+    except: fator_cliente = 1.0
+    if fator_cliente <= 0: fator_cliente = 1.0
+    
+    # 3. Preparação do Radar (Tabela de Vendas)
+    df_v = st.session_state['estoque'].copy()
+    if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
+    df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
+    df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
+    
+    st.write(f"📊 Tabela do Cliente: **{fator_cliente}x**")
+    
+    # Editor de Vendas
+    ed_v = st.data_editor(
+        df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
+        use_container_width=True, hide_index=True,
+        column_config={
+            "Preco_Base": st.column_config.NumberColumn("Base", format="%.2f", disabled=True),
+            "Preco_Final": st.column_config.NumberColumn("💵 Preço Cliente", format="%.2f"), 
+            "Qtd": st.column_config.NumberColumn("Quantidade", step=1.0)
+        }
+    )
+    
+    # 4. Processamento da Venda
+    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
+    
+    if not itens_sel.empty:
+        total = (itens_sel['Qtd'] * itens_sel['Preco_Final']).sum()
+        st.divider()
+        st.metric("💰 TOTAL DO PEDIDO", f"R$ {total:,.2f}")
+        
+        c_orc, c_ped = st.columns(2)
+        
+        # --- COLUNA 1: ORÇAMENTO (PDF SEM BAIXA) ---
+        with c_orc:
+            if st.button("📄 GERAR ORÇAMENTO (PDF)", use_container_width=True):
+                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
+                pdf = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "ORÇAMENTO")
+                st.download_button("📥 Baixar Orçamento PDF", pdf, f"Orcamento_{cli}.pdf", "application/pdf")
+        
+        # --- COLUNA 2: FINALIZAR VENDA (COM OPÇÃO DE BAIXA) ---
+        with c_ped:
+            # AQUI ESTÁ A OPÇÃO QUE FALTAVA!
+            baixa = st.toggle("🚨 BAIXAR ESTOQUE AUTOMATICAMENTE?", value=True)
+            
+            if st.button("✅ FINALIZAR VENDA AGORA", type="primary", use_container_width=True):
+                
+                # Captura os nomes para o log
+                nomes_dos_itens = itens_sel['Produto'].tolist()
+                nome_final_registro = " + ".join([str(n) for n in nomes_dos_itens])
+                
+                # Execução da Baixa (Só se o toggle estiver ligado)
+                if baixa:
+                    for _, row in itens_sel.iterrows():
+                        mask = st.session_state['estoque']['Cod'].astype(str) == str(row['Cod'])
+                        if not st.session_state['estoque'][mask].empty:
+                            idx = st.session_state['estoque'][mask].index[0]
+                            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+                            st.session_state['estoque'].at[idx, 'Saldo'] = atual - float(row['Qtd'])
+                    
+                    msg_sucesso = f"""### 🚀 VENDA FINALIZADA! \n**Ação:** Estoque BAIXADO.\n**Total:** R$ {total:,.2f}"""
+                else:
+                    msg_sucesso = f"""### 📄 PEDIDO REGISTRADO! \n**Ação:** Estoque MANTIDO (Sem baixa).\n**Total:** R$ {total:,.2f}"""
+                
+                # Grava no Log
+                st.session_state['log_vendas'].append({
+                    'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"), 
+                    'Cliente': cli, 
+                    'Produto': nome_final_registro, 
+                    'Qtd': float(itens_sel['Qtd'].sum()), 
+                    'Vendedor': vend
+                })
+                salvar_dados()
+                st.success(msg_sucesso)
+                
+                # Gera o PDF do Pedido Automaticamente para baixar
+                dados_pdf = itens_sel.rename(columns={'Preco_Final': 'Unitario'}).to_dict('records')
+                pdf_ped = criar_doc_pdf(vend, cli, d_cli, dados_pdf, total, {'plano':'A combinar', 'forma':'Boleto', 'venc':'A combinar'}, "PEDIDO")
+                st.download_button("📥 Baixar Pedido PDF", pdf_ped, f"Pedido_{cli}.pdf", "application/pdf")
+
+elif menu == "👥 Clientes":
+    st.title("👥 Gestão de Clientes")
+
+    # --- 1. CONFIGURAÇÃO E CALLBACKS ---
+    campos = ['form_nome', 'form_cod', 'form_cnpj', 'form_tel', 'form_end', 'form_cid', 'form_uf', 'form_cep', 'form_email']
+    for c in campos:
+        if c not in st.session_state: st.session_state[c] = ""
+    if 'form_fator' not in st.session_state: st.session_state['form_fator'] = 1.0
+    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
+
+    # --- FUNÇÃO VISUAL: O FRASQUINHO PISCANDO (CSS) ---
+    def mostrar_frasquinho_animado():
+        # Cria um container vazio para a animação
+        placeholder = st.empty()
+        # Injeta HTML/CSS para fazer o emoji pular
+        placeholder.markdown("""
+            <div style="display:flex; justify-content:center; align-items:center; flex-direction:column; padding:20px; background-color:#f0f2f6; border-radius:10px; margin-bottom:20px;">
+                <div style="font-size:60px; animation: bounce 1s infinite;">🧪</div>
+                <div style="color:#1e3d59; font-weight:bold; margin-top:10px; font-size:18px;">Misturando os elementos... Aguarde!</div>
+            </div>
+            <style>
+            @keyframes bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-20px); }
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        return placeholder
+
+    # CALLBACKS
+    def limpar_callback():
+        for c in campos: st.session_state[c] = ""
+        st.session_state['form_fator'] = 1.0
+        st.session_state['edit_mode'] = False
+
+    def editar_callback(nome, dados):
+        st.session_state['form_nome'] = str(nome)
+        st.session_state['form_cod'] = str(dados.get('Cod_Cli', ''))
+        st.session_state['form_cnpj'] = str(dados.get('CNPJ', ''))
+        st.session_state['form_tel'] = str(dados.get('Tel', ''))
+        st.session_state['form_end'] = str(dados.get('End', ''))
+        st.session_state['form_cid'] = str(dados.get('Cidade', ''))
+        st.session_state['form_uf'] = str(dados.get('UF', ''))
+        st.session_state['form_cep'] = str(dados.get('CEP', ''))
+        st.session_state['form_email'] = str(dados.get('Email', ''))
+        try: st.session_state['form_fator'] = float(dados.get('Fator', 1.0))
+        except: st.session_state['form_fator'] = 1.0
+        st.session_state['edit_mode'] = True
+        st.toast(f"Editando {nome}...", icon="✏️")
+
+    def salvar_callback():
+        # Chama o Frasquinho
+        animacao = mostrar_frasquinho_animado()
+        
+        # Faz o trabalho pesado
+        nome = st.session_state['form_nome']
+        if nome:
+            st.session_state['clientes_db'][nome] = {
+                'Cod_Cli': st.session_state['form_cod'],
+                'Fator': st.session_state['form_fator'],
+                'CNPJ': st.session_state['form_cnpj'],
+                'Tel': st.session_state['form_tel'],
+                'End': st.session_state['form_end'],
+                'Cidade': st.session_state['form_cid'],
+                'UF': st.session_state['form_uf'],
+                'CEP': st.session_state['form_cep'],
+                'Email': st.session_state['form_email']
+            }
+            salvar_dados()
+            
+            # Remove a animação e avisa
+            animacao.empty()
+            st.toast("Sucesso! Elemento estabilizado.", icon="✅")
+            limpar_callback()
+        else:
+            animacao.empty()
+            st.toast("Erro: O nome é obrigatório.", icon="❌")
+
+    # --- 2. IMPORTAÇÃO PDF ---
+    with st.expander("📂 Importar Dados (PDF)", expanded=False):
+        arq = st.file_uploader("PDF da Licença:", type="pdf")
+        if arq and st.button("🔄 Extrair Dados"):
+            anim = mostrar_frasquinho_animado()
+            d = ler_pdf_antigo(arq)
+            anim.empty() # Tira a animação
+            
+            if d:
+                st.session_state['form_nome'] = str(d.get('Nome', ''))
+                st.session_state['form_cnpj'] = str(d.get('CNPJ', ''))
+                st.session_state['form_end'] = str(d.get('End', ''))
+                st.session_state['form_cid'] = str(d.get('Cidade', ''))
+                st.session_state['form_uf'] = str(d.get('UF', ''))
+                st.session_state['form_cep'] = str(d.get('CEP', ''))
+                st.session_state['form_tel'] = str(d.get('Tel', ''))
+                st.session_state['form_email'] = str(d.get('Email', ''))
+                st.session_state['form_cod'] = str(d.get('Cod_Cli', ''))
+                st.success("✅ Dados extraídos!")
+                st.rerun()
             else:
-                st.warning("Informe uma quantidade maior que zero.")
+                st.error("❌ Falha na leitura.")
+
+    # --- 3. FORMULÁRIO ---
+    titulo = "✏️ Editando Cliente" if st.session_state['edit_mode'] else "➕ Novo Cliente"
+    st.markdown("---")
+    st.subheader(titulo)
+    
+    with st.form("form_cli_principal"):
+        c1, c2 = st.columns([3, 1])
+        c1.text_input("Nome / Razão Social", key="form_nome", disabled=st.session_state['edit_mode'])
+        c2.text_input("Cód. Interno", key="form_cod")
+        
+        c3, c4 = st.columns([1, 2])
+        c3.number_input("Fator de Preço", 0.1, 5.0, step=0.05, key="form_fator")
+        c4.text_input("CNPJ", key="form_cnpj")
+        
+        c5, c6 = st.columns([1, 2])
+        c5.text_input("Telefone", key="form_tel")
+        c6.text_input("E-mail", key="form_email")
+        
+        st.text_input("Endereço", key="form_end")
+        
+        c7, c8, c9 = st.columns([2, 1, 1])
+        c7.text_input("Cidade", key="form_cid")
+        c8.text_input("UF", key="form_uf")
+        c9.text_input("CEP", key="form_cep")
+        
+        st.markdown("###")
+        st.form_submit_button("💾 SALVAR DADOS", type="primary", use_container_width=True, on_click=salvar_callback)
+
+    if st.session_state['edit_mode']:
+        st.button("❌ Cancelar Edição", on_click=limpar_callback)
+
+    # --- 4. LISTA DE CLIENTES ---
+    st.markdown("---")
+    st.subheader("📇 Carteira de Clientes")
+    
+    if st.session_state['clientes_db']:
+        busca = st.text_input("🔍 Buscar:", placeholder="Digite o nome...")
+        lista = sorted(list(st.session_state['clientes_db'].keys()))
+        if busca: lista = [k for k in lista if busca.lower() in k.lower()]
+        
+        for cli in lista:
+            d = st.session_state['clientes_db'][cli]
+            ft = d.get('Fator', 1.0)
+            
+            # Layout Ajustado
+            col_info, col_btn = st.columns([5, 2])
+            with col_info:
+                st.markdown(f"**🏢 {cli}** (Fator: {ft})")
+                st.caption(f"CNPJ: {d.get('CNPJ')} | Tel: {d.get('Tel')}")
+                
+                # --- SOLUÇÃO DEFINITIVA DO EMAIL ---
+                mail = d.get('Email', '')
+                if mail:
+                    # st.code gera uma caixa com botão de copiar nativo
+                    st.code(mail, language="text") 
+                else:
+                    st.caption("Sem e-mail cadastrado")
+
+            with col_btn:
+                b_edit, b_del = st.columns(2)
+                b_edit.button("✏️", key=f"ed_{cli}", on_click=editar_callback, args=(cli, d), help="Editar")
+                
+                if b_del.button("🗑️", key=f"del_{cli}"):
+                    anim = mostrar_frasquinho_animado()
+                    del st.session_state['clientes_db'][cli]
+                    salvar_dados()
+                    anim.empty()
+                    st.rerun()
+            st.divider()
+    else:
+        st.info("Nenhum cliente cadastrado.")
+elif menu == "📥 Entrada de Estoque":
+    st.title("📥 Entrada")
+    opcoes = st.session_state['estoque'].apply(lambda x: f"{x['Cod']} - {x['Produto']}", axis=1)
+    sel = st.selectbox("Produto", opcoes)
+    qtd = st.number_input("Qtd", min_value=0.0)
+    if st.button("Confirmar Entrada"):
+        cod = sel.split(" - ")[0]
+        mask = st.session_state['estoque']['Cod'].astype(str) == str(cod)
+        if not st.session_state['estoque'][mask].empty:
+            idx = st.session_state['estoque'][mask].index[0]
+            atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+            st.session_state['estoque'].at[idx, 'Saldo'] = atual + qtd
+            st.session_state['log_entradas'].append({'Data': obter_horario_br().strftime("%d/%m/%Y"), 'Produto': sel, 'Qtd': qtd, 'User': st.session_state['usuario_nome']})
+            salvar_dados(); st.success("Estoque atualizado!"); st.rerun()
+
 elif menu == "🧪 Laudos":
     st.title("🧪 Gestão de Laudos & Status")
     
@@ -669,7 +999,6 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
-
 
 
 
