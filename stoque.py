@@ -431,51 +431,55 @@ if menu == "📊 Dashboard":
             dv = pd.DataFrame(vendas)
             top = dv.groupby('Produto')['Qtd'].sum().sort_values(ascending=False).head(5)
             st.bar_chart(top, horizontal=True)
-elif menu == "📦 Estoque":
-    st.title("📦 Controle Tático de Estoque")
+elif menu == "📥 Entrada de Estoque":
+    st.title("📥 Entrada de Materiais")
     
-    # --- 1. PADRONIZAÇÃO DE CALIBRE ---
-    if 'Estoque_Min' not in st.session_state['estoque'].columns:
-        st.session_state['estoque']['Estoque_Min'] = 10.0
+    # --- RECONSTRUÇÃO DO RADAR (BUSCA DADOS FRESCOS) ---
+    df_stk = st.session_state['estoque'].copy()
     
-    st.session_state['estoque']['Saldo'] = pd.to_numeric(st.session_state['estoque']['Saldo'], errors='coerce').fillna(0).astype(float)
-    st.session_state['estoque']['Estoque_Min'] = pd.to_numeric(st.session_state['estoque']['Estoque_Min'], errors='coerce').fillna(1.0).astype(float)
+    if df_stk.empty:
+        st.warning("⚠️ O estoque está vazio. Cadastre produtos primeiro.")
+        st.stop()
 
-    LISTA_EMBALAGENS = [
-        "Bombona de 30 kg", "Bombona de 35 kg", "Embalagem 1L", "Embalagem 50 Kg", 
-        "Embalagem de 5 L", "Saco de 20 kg", "Saco de 25 kg", "Bombona de 25 kg"
-    ]
+    # Criamos a lista de opções garantindo que nomes novos apareçam
+    # Usamos o índice para não ter erro se o código for repetido ou vazio
+    df_stk['Opcao'] = df_stk.apply(lambda x: f"{x.get('Cod', 'S/C')} - {x.get('Produto', 'Sem Nome')}", axis=1)
+    lista_opcoes = sorted(df_stk['Opcao'].tolist())
 
-    # Busca e Ferramentas
-    c_busca, c_relat, c_ferramentas = st.columns([3, 1, 1])
-    with c_busca:
-        busca = st.text_input("Filtrar:", placeholder="🔍 Buscar Produto...", label_visibility="collapsed")
-    
-    with c_relat:
-        if st.button("📄 PDF Estoque", use_container_width=True):
-            pdf_bytes = gerar_pdf_estoque(st.session_state['usuario_nome'], st.session_state['estoque'])
-            st.download_button("⬇️ BAIXAR", data=pdf_bytes, file_name="Estoque.pdf", mime="application/pdf")
-    
-    with c_ferramentas:
-        with st.popover("🛠️ FERRAMENTAS", use_container_width=True):
-            # --- SUB-ABA: CADASTRAR ---
-            st.markdown("### ➕ Novo Material")
-            with st.form("add_prod_v4", clear_on_submit=True):
-                emb_n = st.selectbox("Embalagem", LISTA_EMBALAGENS)
-                nome_n = st.text_input("Nome do Produto")
-                c1, c2 = st.columns(2)
-                saldo_n = c1.number_input("Saldo Inicial", min_value=0.0, format="%.2f")
-                min_n = c2.number_input("Estoque Mínimo", min_value=0.0, value=10.0, format="%.2f")
+    with st.form("form_entrada", clear_on_submit=True):
+        sel = st.selectbox("Selecione o Produto para Abastecer:", lista_opcoes)
+        
+        c1, c2 = st.columns(2)
+        qtd_entrada = c1.number_input("Quantidade a Adicionar:", min_value=0.0, format="%.2f", step=1.0)
+        # Mostra quem está operando
+        operador = c2.text_input("Operador:", value=st.session_state['usuario_nome'], disabled=True)
+        
+        if st.form_submit_button("📥 CONFIRMAR ENTRADA NO ESTOQUE"):
+            if qtd_entrada > 0:
+                # Localiza o produto exato pelo nome/codigo
+                cod_alvo = sel.split(" - ")[0]
+                nome_alvo = sel.split(" - ")[1]
                 
-                if st.form_submit_button("Cadastrar no Inventário"):
-                    cod_auto = datetime.now().strftime("%H%M")
-                    novo = {
-                        "Cod": cod_auto, "Produto": nome_n, "Preco_Base": 0.0, 
-                        "Saldo": float(saldo_n), "Estoque_Min": float(min_n), 
-                        "Marca": "GERAL", "Unidade": emb_n
-                    }
-                    st.session_state['estoque'] = pd.concat([st.session_state['estoque'], pd.DataFrame([novo])], ignore_index=True)
-                    salvar_dados(); st.rerun()
+                # Aplica a carga no Saldo
+                mask = (df_stk['Cod'].astype(str) == str(cod_alvo)) & (df_stk['Produto'] == nome_alvo)
+                if not st.session_state['estoque'][mask].empty:
+                    idx = st.session_state['estoque'][mask].index[0]
+                    saldo_antigo = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
+                    st.session_state['estoque'].at[idx, 'Saldo'] = saldo_antigo + qtd_entrada
+                    
+                    # Registra no log para conferência posterior
+                    st.session_state['log_entradas'].append({
+                        'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
+                        'Produto': nome_alvo,
+                        'Qtd': qtd_entrada,
+                        'User': st.session_state['usuario_nome']
+                    })
+                    
+                    salvar_dados()
+                    st.success(f"✅ Carga confirmada! {nome_alvo}: +{qtd_entrada}")
+                    st.rerun()
+            else:
+                st.warning("Informe uma quantidade maior que zero.")
 
             st.markdown("---")
             
@@ -999,6 +1003,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
