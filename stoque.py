@@ -799,56 +799,63 @@ elif menu == "👥 Clientes":
     else:
         st.info("Nenhum cliente cadastrado.")
 elif menu == "📥 Entrada de Estoque":
-    st.title("📥 Entrada de Materiais")
+    st.title("📥 Entrada de Materiais por Embalagem")
     
-    # --- RECONSTRUÇÃO DINÂMICA (Puxa os produtos atualizados) ---
+    # --- RECONSTRUÇÃO TÁTICA (Puxa Produto + Embalagem) ---
     df_stk_ref = st.session_state['estoque'].copy()
     
     if df_stk_ref.empty:
         st.warning("⚠️ O estoque está vazio. Cadastre materiais no menu Estoque primeiro.")
     else:
-        # Criamos a lista de seleção baseada no que REALMENTE existe no estoque agora
-        df_stk_ref['Opcao'] = df_stk_ref.apply(lambda x: f"{str(x.get('Cod', 'S/C'))} - {str(x.get('Produto', 'Sem Nome'))}", axis=1)
-        lista_opcoes = sorted(df_stk_ref['Opcao'].tolist())
+        # Criamos a lista de seleção combinando Nome e Unidade (Embalagem)
+        # Assim você diferencia o que é Saco 25kg de Bombona 30kg
+        df_stk_ref['Opcao_Full'] = df_stk_ref.apply(
+            lambda x: f"{str(x.get('Cod', 'S/C'))} | {str(x.get('Produto', 'Sem Nome'))} ({str(x.get('Unidade', 'S/E'))})", 
+            axis=1
+        )
+        lista_opcoes = sorted(df_stk_ref['Opcao_Full'].tolist())
 
-        with st.form("form_entrada_estoque", clear_on_submit=True):
-            sel = st.selectbox("Selecione o Material:", lista_opcoes)
+        with st.form("form_entrada_precisao", clear_on_submit=True):
+            sel = st.selectbox("Selecione o Produto e a Embalagem Correta:", lista_opcoes)
             
             c1, c2 = st.columns(2)
             qtd_entrada = c1.number_input("Qtd a Adicionar:", min_value=0.0, format="%.2f", step=1.0)
             operador = c2.text_input("Operador:", value=st.session_state['usuario_nome'], disabled=True)
             
-            if st.form_submit_button("📥 CONFIRMAR ENTRADA"):
+            if st.form_submit_button("📥 CONFIRMAR ENTRADA NO ESTOQUE"):
                 if qtd_entrada > 0:
-                    # Extração cirúrgica do Código e Nome
                     try:
-                        partes = sel.split(" - ")
-                        cod_alvo = partes[0]
-                        nome_alvo = partes[1]
+                        # Extrai o código para busca (o que vem antes do '|')
+                        cod_alvo = sel.split(" | ")[0]
+                        # Extrai o resto para garantir o match do nome e embalagem
+                        resto = sel.split(" | ")[1]
+                        nome_alvo = resto.split(" (")[0]
+                        emb_alvo = resto.split(" (")[1].replace(")", "")
                         
-                        # Localiza o índice na memória (session_state)
+                        # Localiza o índice exato comparando Código, Nome e Embalagem
                         mask = (st.session_state['estoque']['Cod'].astype(str) == str(cod_alvo)) & \
-                               (st.session_state['estoque']['Produto'] == nome_alvo)
+                               (st.session_state['estoque']['Produto'] == nome_alvo) & \
+                               (st.session_state['estoque']['Unidade'] == emb_alvo)
                         
                         if not st.session_state['estoque'][mask].empty:
                             idx = st.session_state['estoque'][mask].index[0]
-                            # Soma no Saldo (que é o nome da sua coluna atual)
+                            # Atualiza a coluna 'Saldo' (que é a que usamos agora)
                             saldo_atual = float(st.session_state['estoque'].at[idx, 'Saldo'] or 0)
                             st.session_state['estoque'].at[idx, 'Saldo'] = saldo_atual + qtd_entrada
                             
-                            # Registra no log
+                            # Registra no log com o nome e a embalagem para não ter dúvida
                             st.session_state['log_entradas'].append({
                                 'Data': obter_horario_br().strftime("%d/%m/%Y %H:%M"),
-                                'Produto': nome_alvo,
+                                'Produto': f"{nome_alvo} ({emb_alvo})",
                                 'Qtd': qtd_entrada,
                                 'User': st.session_state['usuario_nome']
                             })
                             
                             salvar_dados()
-                            st.success(f"✅ Sucesso! {nome_alvo} atualizado.")
+                            st.success(f"✅ Sucesso! {nome_alvo} ({emb_alvo}) abastecido.")
                             st.rerun()
                         else:
-                            st.error("❌ Alvo não localizado no banco principal.")
+                            st.error("❌ Alvo não localizado. Verifique se mudou o nome do produto.")
                     except Exception as e:
                         st.error(f"Erro na operação: {e}")
                 else:
@@ -1039,6 +1046,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
