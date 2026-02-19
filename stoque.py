@@ -26,13 +26,35 @@ if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
+# --- CONEXÃO COM GOOGLE SHEETS (MOTOR FLEX: RAILWAY + STREAMLIT CLOUD) ---
 try:
+    # Se ele achar a chave do Railway e não tiver o arquivo do Streamlit, ele fabrica um na hora!
+    if os.getenv("GS_PRIVATE_KEY") and not os.path.exists(".streamlit/secrets.toml"):
+        os.makedirs(".streamlit", exist_ok=True)
+        with open(".streamlit/secrets.toml", "w", encoding="utf-8") as f:
+            f.write('[connections.gsheets]\n')
+            f.write(f'spreadsheet = "{os.getenv("GS_SPREADSHEET")}"\n')
+            f.write(f'type = "{os.getenv("GS_TYPE")}"\n')
+            f.write(f'project_id = "{os.getenv("GS_PROJECT_ID")}"\n')
+            f.write(f'private_key_id = "{os.getenv("GS_PRIVATE_KEY_ID")}"\n')
+            
+            # Limpa qualquer sujeira de quebra de linha que o Railway tenha feito na chave
+            pk = os.getenv("GS_PRIVATE_KEY", "").replace('\n', '\\n')
+            f.write(f'private_key = "{pk}"\n')
+            
+            f.write(f'client_email = "{os.getenv("GS_CLIENT_EMAIL")}"\n')
+            f.write(f'client_id = "{os.getenv("GS_CLIENT_ID")}"\n')
+            f.write(f'auth_uri = "{os.getenv("GS_AUTH_URI")}"\n')
+            f.write(f'token_uri = "{os.getenv("GS_TOKEN_URI")}"\n')
+            f.write(f'auth_provider_x509_cert_url = "{os.getenv("GS_AUTH_PROVIDER_CERT_URL")}"\n')
+            f.write(f'client_x509_cert_url = "{os.getenv("GS_CLIENT_CERT_URL")}"\n')
+            f.write(f'universe_domain = "{os.getenv("GS_UNIVERSE_DOMAIN")}"\n')
+
+    # A ignição original: agora ela funciona nos dois lugares sem choro!
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error(f"Erro Crítico de Conexão: {e}")
+    st.error(f"Erro Crítico de Conexão no Motor Flex: {e}")
     st.stop()
-
 # ==============================================================================
 # 2. FUNÇÕES AUXILIARES (PDF, DATA, ETC)
 # ==============================================================================
@@ -1071,6 +1093,7 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
+
 
 
 
