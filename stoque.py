@@ -11,48 +11,28 @@ from streamlit_gsheets import GSheetsConnection
 import streamlit.components.v1 as components
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA
+# 1. CONFIGURAÇÃO E INICIALIZAÇÃO (A BASE DE TUDO)
 # ==============================================================================
-st.set_page_config(page_title="Sistema de controle Labortec/Metal Química", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="Sistema Integrado v85 - Final", layout="wide", page_icon="🧪")
 
-# ==============================================================================
-# 2. MOTOR FLEX (RAILWAY + STREAMLIT CLOUD)
-# ==============================================================================
+# --- GARANTIA DE GAVETAS (SESSION STATE) ---
+# Isso impede que o sistema tente ler algo que não existe
+if 'dados_carregados' not in st.session_state: st.session_state['dados_carregados'] = False
+if 'estoque' not in st.session_state: st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
+if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
+if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
+if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
+if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
+if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
+if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
+
+# --- CONEXÃO COM GOOGLE SHEETS ---
 try:
-    if os.getenv("GS_PRIVATE_KEY") and not os.path.exists(".streamlit/secrets.toml"):
-        os.makedirs(".streamlit", exist_ok=True)
-        with open(".streamlit/secrets.toml", "w", encoding="utf-8") as f:
-            f.write('[connections.gsheets]\n')
-            f.write(f'spreadsheet = "{os.getenv("GS_SPREADSHEET", "").strip().replace(\'"\', "")}"\n')
-            f.write(f'type = "service_account"\n')
-            f.write(f'project_id = "{os.getenv("GS_PROJECT_ID", "").strip().replace(\'"\', "")}"\n')
-            f.write(f'private_key_id = "{os.getenv("GS_PRIVATE_KEY_ID", "").strip().replace(\'"\', "")}"\n')
-            
-            pk = os.getenv("GS_PRIVATE_KEY", "").strip().replace('"', '').replace('\\n', '\n')
-            f.write(f'private_key = """{pk}"""\n')
-            
-            f.write(f'client_email = "{os.getenv("GS_CLIENT_EMAIL", "").strip().replace(\'"\', "")}"\n')
-            f.write(f'client_id = "{os.getenv("GS_CLIENT_ID", "").strip().replace(\'"\', "")}"\n')
-            f.write(f'auth_uri = "https://accounts.google.com/o/oauth2/auth"\n')
-            f.write(f'token_uri = "https://oauth2.googleapis.com/token"\n')
-            f.write(f'auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"\n')
-            f.write(f'client_x509_cert_url = "{os.getenv("GS_CLIENT_CERT_URL", "").strip().replace(\'"\', "")}"\n')
-
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error(f"Erro Crítico no Sistema Labortec: {e}")
+    st.error(f"Erro Crítico de Conexão: {e}")
     st.stop()
 
-# ==============================================================================
-# 3. INICIALIZAÇÃO DE VARIÁVEIS (PRA NÃO DAR O ERRO KEYERROR)
-# ==============================================================================
-if 'dados_carregados' not in st.session_state:
-    st.session_state['dados_carregados'] = False
-
-# ==============================================================================
-# 4. FUNÇÕES AUXILIARES (A PARTIR DAQUI COMEÇA O SEU CÓDIGO NORMAL)
-# ==============================================================================
-# (Aqui embaixo tem que estar o seu def extrair_dados_cetesb(f): e o resto do site)
 # ==============================================================================
 # 2. FUNÇÕES AUXILIARES (PDF, DATA, ETC)
 # ==============================================================================
@@ -1091,8 +1071,6 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
-
-
 
 
 
