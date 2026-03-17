@@ -18,7 +18,6 @@ st.set_page_config(page_title="Sistema Integrado v85 - Final", layout="wide", pa
 # --- GARANTIA DE GAVETAS (SESSION STATE) ---
 # Isso impede que o sistema tente ler algo que não existe
 if 'estoque' not in st.session_state: st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'Unidade', 'Saldo', 'Preco_Base', 'Estoque_Min'])
-if 'estoque' not in st.session_state: st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Quantidade', 'Preço', 'Categoria'])
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
 if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
