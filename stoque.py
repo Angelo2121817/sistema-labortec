@@ -570,21 +570,42 @@ elif menu == "💰 Vendas & Orçamentos":
     d_cli = st.session_state['clientes_db'][cli]
     
     # 2. Fator de Preço (Tabela do Cliente)
-    try: fator_cliente = float(d_cli.get('Fator', 1.0))
-    except: fator_cliente = 1.0
-    if fator_cliente <= 0: fator_cliente = 1.0
+    try:
+        fator_cliente = float(d_cli.get('Fator', 1.0))
+    except:
+        fator_cliente = 1.0
+    if fator_cliente <= 0:
+        fator_cliente = 1.0
     
     # 3. Preparação do Radar (Tabela de Vendas)
     df_v = st.session_state['estoque'].copy()
-    if 'Qtd' not in df_v.columns: df_v.insert(0, 'Qtd', 0.0)
+
+    # Garante colunas necessárias
+    colunas_desejadas = ['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade',
+                         'Preco_Base', 'Preco_Final', 'Saldo']
+
+    # Cria colunas que não existirem (por padrão, 0 ou string vazia)
+    if 'Qtd' not in df_v.columns:
+        df_v.insert(0, 'Qtd', 0.0)
+    if 'NCM' not in df_v.columns:
+        df_v['NCM'] = ""  # ou algum valor padrão se você quiser
+    if 'Preco_Base' not in df_v.columns:
+        df_v['Preco_Base'] = 0.0
+    if 'Saldo' not in df_v.columns:
+        df_v['Saldo'] = 0.0
+
+    # Trata preços
     df_v['Preco_Base'] = pd.to_numeric(df_v['Preco_Base'], errors='coerce').fillna(0.0)
     df_v['Preco_Final'] = df_v['Preco_Base'] * fator_cliente
     
     st.write(f"📊 Tabela do Cliente: **{fator_cliente}x**")
     
+    # Garante que só seleciona colunas que realmente existem
+    colunas_para_editar = [c for c in colunas_desejadas if c in df_v.columns]
+
     # Editor de Vendas
     ed_v = st.data_editor(
-        df_v[['Qtd', 'Produto', 'Cod', 'Marca', 'NCM', 'Unidade', 'Preco_Base', 'Preco_Final', 'Saldo']], 
+        df_v[colunas_para_editar],
         use_container_width=True, hide_index=True,
         column_config={
             "Preco_Base": st.column_config.NumberColumn("Base", format="%.2f", disabled=True),
@@ -594,8 +615,11 @@ elif menu == "💰 Vendas & Orçamentos":
     )
     
     # 4. Processamento da Venda
-    itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
-    
+    if 'Qtd' in ed_v.columns:
+        itens_sel = ed_v[ed_v['Qtd'] > 0].copy()
+    else:
+        itens_sel = pd.DataFrame()
+
     if not itens_sel.empty:
         total = (itens_sel['Qtd'] * itens_sel['Preco_Final']).sum()
         st.divider()
@@ -1070,7 +1094,6 @@ elif menu == "🛠️ Admin / Backup":
         if st.button("Atualizar Mural"):
             st.session_state['aviso_geral'] = mural
             salvar_dados(); st.rerun()
-
 
 
 
