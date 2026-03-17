@@ -32,20 +32,6 @@ except Exception as e:
     st.error(f"Erro Crítico de Conexão: {e}")
     st.stop()
 
-# Debug seguro: ajuda a identificar qual planilha o app está usando.
-# O streamlit_gsheets guarda o alvo em variáveis internas `_spreadsheet`/`_worksheet`.
-try:
-    _spreadsheet = getattr(getattr(conn, "client", None), "_spreadsheet", None)
-    _worksheet_default = getattr(getattr(conn, "client", None), "_worksheet", None)
-    if _spreadsheet:
-        st.sidebar.caption(f"Google Sheets `spreadsheet`: {_spreadsheet}")
-    if _worksheet_default:
-        st.sidebar.caption(f"Google Sheets `worksheet default`: {_worksheet_default}")
-    if not _spreadsheet and not _worksheet_default:
-        st.sidebar.caption("Google Sheets: sem infos internas de spreadsheet/worksheet no ambiente atual.")
-except Exception:
-    st.sidebar.caption("Google Sheets debug indisponível (ambiente/segredos).")
-
 # ==============================================================================
 # 2. FUNÇÕES AUXILIARES (PDF, DATA, ETC)
 # ==============================================================================
