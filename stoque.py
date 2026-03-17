@@ -17,6 +17,7 @@ st.set_page_config(page_title="Sistema Integrado v85 - Final", layout="wide", pa
 
 # --- GARANTIA DE GAVETAS (SESSION STATE) ---
 # Isso impede que o sistema tente ler algo que não existe
+if 'dados_carregados' not in st.session_state: st.session_state['dados_carregados'] = False
 if 'estoque' not in st.session_state: st.session_state['estoque'] = pd.DataFrame(columns=['Cod', 'Produto', 'Marca', 'Unidade', 'Saldo', 'Preco_Base', 'Estoque_Min'])
 if 'clientes_db' not in st.session_state: st.session_state['clientes_db'] = {}
 if 'log_vendas' not in st.session_state: st.session_state['log_vendas'] = []
@@ -24,7 +25,6 @@ if 'log_entradas' not in st.session_state: st.session_state['log_entradas'] = []
 if 'log_laudos' not in st.session_state: st.session_state['log_laudos'] = []
 if 'aviso_geral' not in st.session_state: st.session_state['aviso_geral'] = ""
 if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
-
 # --- CONEXÃO COM GOOGLE SHEETS ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
