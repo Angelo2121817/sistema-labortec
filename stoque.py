@@ -32,6 +32,14 @@ except Exception as e:
     st.error(f"Erro Crítico de Conexão: {e}")
     st.stop()
 
+# Debug seguro: ajuda a identificar qual planilha o app está usando.
+try:
+    _sid = getattr(conn, "spreadsheet_id", None) or getattr(conn, "_spreadsheet_id", None)
+    if _sid:
+        st.sidebar.caption(f"Google Sheets `spreadsheet_id`: {_sid}")
+except Exception:
+    pass
+
 # ==============================================================================
 # 2. FUNÇÕES AUXILIARES (PDF, DATA, ETC)
 # ==============================================================================
@@ -197,13 +205,31 @@ def carregar_dados():
 
 def salvar_dados():
     try:
-        conn.update(worksheet="Estoque", data=st.session_state["estoque"])
+        df_estoque = st.session_state.get("estoque")
+        # Proteção: não sobrescreve o Google Sheets com DataFrame vazio.
+        if isinstance(df_estoque, pd.DataFrame) and not df_estoque.empty:
+            conn.update(worksheet="Estoque", data=df_estoque)
+        else:
+            st.warning("⚠️ Estoque vazio - não foi sobrescrito na aba `Estoque` (prevenção de perda de dados).")
+
         if st.session_state.get("clientes_db"):
             df_clis = pd.DataFrame.from_dict(st.session_state["clientes_db"], orient="index").reset_index().rename(columns={"index": "Nome"})
-            conn.update(worksheet="Clientes", data=df_clis)
-        conn.update(worksheet="Log_Vendas", data=pd.DataFrame(st.session_state.get("log_vendas", [])))
-        conn.update(worksheet="Log_Entradas", data=pd.DataFrame(st.session_state.get("log_entradas", [])))
-        conn.update(worksheet="Log_Laudos", data=pd.DataFrame(st.session_state.get("log_laudos", [])))
+            if not df_clis.empty:
+                conn.update(worksheet="Clientes", data=df_clis)
+
+        # Logs: evita apagar histórico caso a lista esteja vazia no momento.
+        log_vendas = st.session_state.get("log_vendas", [])
+        if isinstance(log_vendas, list) and len(log_vendas) > 0:
+            conn.update(worksheet="Log_Vendas", data=pd.DataFrame(log_vendas))
+
+        log_entradas = st.session_state.get("log_entradas", [])
+        if isinstance(log_entradas, list) and len(log_entradas) > 0:
+            conn.update(worksheet="Log_Entradas", data=pd.DataFrame(log_entradas))
+
+        log_laudos = st.session_state.get("log_laudos", [])
+        if isinstance(log_laudos, list) and len(log_laudos) > 0:
+            conn.update(worksheet="Log_Laudos", data=pd.DataFrame(log_laudos))
+
         df_aviso = pd.DataFrame({"Mensagem": [str(st.session_state.get('aviso_geral', ""))]})
         conn.update(worksheet="Avisos", data=df_aviso)
         st.toast("✅ Dados Sincronizados!", icon="☁️")
