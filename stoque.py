@@ -326,7 +326,11 @@ def gerar_pdf_estoque(usuario, df_estoque):
     pdf.ln(15); y = pdf.get_y(); pdf.line(60, y, 150, y)
     pdf.set_font("Arial", "", 8); pdf.set_xy(60, y + 2)
     pdf.cell(90, 4, "Responsável pela Conferência", 0, 1, "C")
-    return pdf.output(dest="S").encode("latin-1")
+    # Compatibilidade com diferentes versões do FPDF (algumas retornam str, outras bytes)
+    pdf_bytes = pdf.output(dest="S")
+    if isinstance(pdf_bytes, bytes):
+        return pdf_bytes
+    return pdf_bytes.encode("latin-1")
 
 # ==============================================================================
 # 7. MENU E NAVEGAÇÃO
